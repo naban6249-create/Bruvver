@@ -1,0 +1,34 @@
+# Core Framework
+fastapi
+uvicorn[standard]
+
+# Database
+sqlalchemy
+alembic
+
+# Authentication & Security
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+
+# Scheduling & Automation
+apscheduler
+
+# Google Sheets Integration
+gspread
+google-auth
+google-auth-oauthlib
+
+# Email
+emails
+email-validator
+
+# Utilities
+python-dotenv
+pydantic
+pydantic-settings
+
+# Development
+pytest
+pytest-asyncio
+httpx
