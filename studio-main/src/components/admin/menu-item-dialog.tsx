@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { MenuItem, Ingredient } from '@/lib/types';
 import Image from 'next/image';
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { PlusCircle, Trash2, Upload } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface MenuItemDialogProps {
@@ -27,12 +27,12 @@ interface MenuItemDialogProps {
   showIngredients?: boolean;
 }
 
-export function MenuItemDialog({ 
-  isOpen, 
-  setIsOpen, 
-  onSave, 
-  item, 
-  showIngredients = true 
+export function MenuItemDialog({
+  isOpen,
+  setIsOpen,
+  onSave,
+  item,
+  showIngredients = true
 }: MenuItemDialogProps) {
   const [name, setName] = useState('');
   const [price, setPrice] = useState(0);
@@ -41,9 +41,8 @@ export function MenuItemDialog({
   const [isAvailable, setIsAvailable] = useState(true);
   const [imageUrl, setImageUrl] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState('');
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [imageError, setImageError] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (item) {
@@ -52,8 +51,10 @@ export function MenuItemDialog({
       setDescription(item.description || '');
       setCategory(item.category || 'hot');
       setIsAvailable(item.is_available);
-      setImageUrl(item.imageUrl || '');   // keep existing image URL
+      setImageUrl(item.imageUrl || '');
       setIngredients(item.ingredients || []);
+      setImagePreview(item.imageUrl || '');
+      setImageFile(null);
     } else {
       // Reset for new item
       setName('');
@@ -63,10 +64,27 @@ export function MenuItemDialog({
       setIsAvailable(true);
       setImageUrl('');
       setIngredients([]);
+      setImagePreview('');
+      setImageFile(null);
     }
-    setImageFile(null);
-    setImageError(false);
   }, [item, isOpen]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImageFile(file);
+      // Create preview URL
+      const previewUrl = URL.createObjectURL(file);
+      setImagePreview(previewUrl);
+      setImageUrl(''); // Clear URL input when file is selected
+    }
+  };
+
+  const handleUrlChange = (url: string) => {
+    setImageUrl(url);
+    setImagePreview(url);
+    setImageFile(null); // Clear file when URL is entered
+  };
 
   const handleSave = () => {
     const newItem: MenuItem & { imageFile?: File } = {
@@ -77,24 +95,14 @@ export function MenuItemDialog({
       category,
       is_available: isAvailable,
       ingredients,
-      imageUrl, // existing image (if no new file chosen)
-      imageFile: imageFile || undefined, // attach file if new selected
+      imageUrl: imageFile ? '' : imageUrl, // Don't pass URL if file is selected
     };
-    onSave(newItem);
-  };
-  
-  const handleImageClick = () => {
-    fileInputRef.current?.click();
-  };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      const previewUrl = URL.createObjectURL(file);
-      setImageUrl(previewUrl);
-      setImageError(false);
+    if (imageFile) {
+      newItem.imageFile = imageFile;
     }
+
+    onSave(newItem);
   };
 
   const handleIngredientChange = (index: number, field: keyof Ingredient, value: string | number) => {
@@ -134,30 +142,30 @@ export function MenuItemDialog({
             {item ? 'Edit Menu Item' : 'Add Menu Item'}
           </DialogTitle>
           <DialogDescription>
-            {item ? 'Make changes to the item details.' : 'Add a new item to your menu.'} 
+            {item ? 'Make changes to the item details.' : 'Add a new item to your menu.'}
             Click save when you're done.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="grid gap-4 py-4">
           {/* Name + Price */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">Name *</Label>
-              <Input 
-                id="name" 
-                value={name} 
+              <Input
+                id="name"
+                value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="e.g., Cappuccino"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="price">Price *</Label>
-              <Input 
-                id="price" 
-                type="number" 
+              <Input
+                id="price"
+                type="number"
                 step="0.01"
-                value={price} 
+                value={price}
                 onChange={e => setPrice(parseFloat(e.target.value) || 0)}
                 placeholder="0.00"
               />
@@ -167,9 +175,9 @@ export function MenuItemDialog({
           {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
-            <Textarea 
-              id="description" 
-              value={description} 
+            <Textarea
+              id="description"
+              value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="Brief description..."
               rows={3}
@@ -194,8 +202,8 @@ export function MenuItemDialog({
               </Select>
             </div>
             <div className="flex items-center space-x-2 pt-8">
-              <Checkbox 
-                id="available" 
+              <Checkbox
+                id="available"
                 checked={isAvailable}
                 onCheckedChange={(checked) => setIsAvailable(checked as boolean)}
               />
@@ -203,31 +211,60 @@ export function MenuItemDialog({
             </div>
           </div>
 
-          {/* Image Upload */}
-          <div className="space-y-2">
+          {/* Image Upload Section */}
+          <div className="space-y-4">
             <Label>Image</Label>
-            <div className="w-full cursor-pointer" onClick={handleImageClick}>
-              <Image
-                src={imageError || !imageUrl ? 
-                  'https://placehold.co/300x200/EEE/31343C?text=Click+to+upload' : 
-                  imageUrl
-                }
-                alt="Click to upload"
-                width={300}
-                height={200}
-                className="rounded-md object-cover aspect-video mx-auto border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors"
-                onError={() => setImageError(true)}
-                onLoad={() => setImageError(false)}
-                unoptimized
+            
+            {/* File Upload */}
+            <div className="space-y-2">
+              <Label htmlFor="imageFile" className="text-sm text-muted-foreground">
+                Upload Image File
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="imageFile"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="flex-1"
+                />
+                <Upload className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
+
+            {/* OR URL Input */}
+            <div className="space-y-2">
+              <Label htmlFor="imageUrl" className="text-sm text-muted-foreground">
+                Or Enter Image URL
+              </Label>
+              <Input
+                id="imageUrl"
+                value={imageUrl}
+                onChange={e => handleUrlChange(e.target.value)}
+                placeholder="e.g., https://example.com/image.jpg"
+                disabled={!!imageFile}
               />
             </div>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={handleFileChange}
-              className="hidden"
-              accept="image/*"
-            />
+
+            {/* Image Preview */}
+            {imagePreview && (
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Preview</Label>
+                <div className="relative w-32 h-24 border rounded-md overflow-hidden bg-muted">
+                  <Image
+                    src={imagePreview}
+                    alt="Preview"
+                    fill
+                    sizes="128px"
+                    className="object-cover"
+                    onError={() => {
+                      setImagePreview('');
+                      setImageUrl('');
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Ingredients */}
@@ -266,9 +303,9 @@ export function MenuItemDialog({
                         <SelectItem value="pumps">pumps</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => removeIngredient(index)}
                       type="button"
                     >
@@ -276,9 +313,9 @@ export function MenuItemDialog({
                     </Button>
                   </div>
                 ))}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={addIngredient}
                   type="button"
                 >
@@ -294,7 +331,7 @@ export function MenuItemDialog({
           <Button variant="outline" onClick={() => setIsOpen(false)}>
             Cancel
           </Button>
-          <Button 
+          <Button
             onClick={handleSave}
             disabled={!name.trim() || price <= 0}
           >

@@ -24,14 +24,14 @@ class IngredientResponse(IngredientBase):
     class Config:
         from_attributes = True
 
-# Menu Item Schemas
+# --- Menu Item Schemas (Corrected for consistency) ---
 class MenuItemBase(BaseModel):
     name: str
     price: float
     description: Optional[str] = None
-    image_url: Optional[str] = None
+    image_url: Optional[str] = None  # Use snake_case consistently
     category: Optional[str] = None
-    is_available: Optional[bool] = True
+    is_available: bool = True # Changed to non-optional for consistency
 
 class MenuItemCreate(MenuItemBase):
     ingredients: List[IngredientCreate] = []
@@ -40,7 +40,7 @@ class MenuItemUpdate(BaseModel):
     name: Optional[str] = None
     price: Optional[float] = None
     description: Optional[str] = None
-    image_url: Optional[str] = None
+    image_url: Optional[str] = None # Use snake_case consistently
     category: Optional[str] = None
     is_available: Optional[bool] = None
     ingredients: Optional[List[IngredientCreate]] = None

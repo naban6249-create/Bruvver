@@ -13,11 +13,11 @@ export function MenuCard({ item }: MenuCardProps) {
       <CardHeader className="p-0">
         <div className="aspect-video relative">
           <Image
-            src={item.imageUrl || 'https://placehold.co/600x400/EEE/31343C?text=No+Image'}
+            src={item.imageUrl || '/images/Screenshot-2025-09-02-072706.png'}
             alt={item.name}
             fill
-            className="object-cover"
-            data-ai-hint="coffee drink"
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           />
         </div>
         <div className="p-6 pb-2">

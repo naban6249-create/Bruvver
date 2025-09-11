@@ -5,11 +5,11 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*',
+        // Using 127.0.0.1 is slightly more explicit for local services
+        destination: 'http://127.0.0.1:8000/api/:path*',
       },
     ]
   },
-  /* config options here */
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -17,22 +17,23 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   images: {
-  dangerouslyAllowSVG: true,
-  remotePatterns: [
-    {
-      protocol: 'https',
-      hostname: 'placehold.co',
-      port: '',
-      pathname: '/**',
-    },
-    {
-      protocol: 'https',
-      hostname: 'picsum.photos',
-      port: '',
-      pathname: '/**',
-    },
-  ],
-},
+    dangerouslyAllowSVG: true,
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'placehold.co',
+      },
+      {
+        protocol: 'https',
+        hostname: 'picsum.photos',
+      },
+      // This new entry is the critical fix
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+      },
+    ],
+  },
 };
 
 export default nextConfig;

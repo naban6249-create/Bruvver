@@ -39,12 +39,11 @@ import { useToast } from "@/hooks/use-toast";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 async function getAuthHeaders() {
-  const token = localStorage.getItem('auth_token');
+  const token = localStorage.getItem('authToken');
   return {
     'Authorization': token ? `Bearer ${token}` : '',
   };
 }
-
 async function getMenuItems(): Promise<MenuItem[]> {
   const response = await fetch(`${API_BASE_URL}/api/menu?available_only=false`);
   if (!response.ok) throw new Error('Failed to fetch menu items');

@@ -1,0 +1,249 @@
+2025-09-04 11:41:50,348 - main - INFO - Starting Coffee Command Center API...
+2025-09-04 11:41:50,351 - main - INFO - Database tables created/verified
+2025-09-04 11:41:50,366 - main - INFO - Sample data initialized
+2025-09-04 11:41:50,367 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-09-04 11:41:50,367 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-09-04 11:41:50,368 - apscheduler.scheduler - INFO - Added job "Export daily sales to Google Sheets" to job store "default"
+2025-09-04 11:41:50,369 - apscheduler.scheduler - INFO - Added job "Daily reset and maintenance" to job store "default"
+2025-09-04 11:41:50,369 - apscheduler.scheduler - INFO - Scheduler started
+2025-09-04 11:41:50,369 - automation - INFO - Background scheduler started successfully
+2025-09-04 11:41:50,369 - main - INFO - Automation services started
+2025-09-04 11:42:29,359 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:42:29,364 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:42:29,374 - main - INFO - Response: 200 - 0.02s
+2025-09-04 11:42:38,643 - main - INFO - Request: PUT http://localhost:8000/api/menu/1
+2025-09-04 11:42:38,651 - main - INFO - Response: 401 - 0.01s
+2025-09-04 11:44:59,668 - main - INFO - Received signal 2, initiating graceful shutdown...
+2025-09-04 11:48:41,721 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:48:41,724 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:48:41,731 - main - INFO - Response: 200 - 0.01s
+2025-09-04 11:48:48,755 - main - INFO - Request: GET http://localhost:8000/api/menu?available_only=false
+2025-09-04 11:48:48,763 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:48:48,774 - main - INFO - Response: 200 - 0.02s
+2025-09-04 11:48:48,778 - main - INFO - Request: GET http://localhost:8000/api/menu?available_only=false
+2025-09-04 11:48:48,781 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:48:48,789 - main - INFO - Response: 200 - 0.01s
+2025-09-04 11:49:00,157 - main - INFO - Request: OPTIONS http://localhost:8000/api/menu/1
+2025-09-04 11:49:00,158 - main - INFO - Response: 200 - 0.00s
+2025-09-04 11:49:00,164 - main - INFO - Request: PUT http://localhost:8000/api/menu/1
+2025-09-04 11:49:00,170 - main - INFO - Response: 401 - 0.01s
+2025-09-04 11:49:08,564 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:49:08,568 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:49:08,578 - main - INFO - Response: 200 - 0.01s
+2025-09-04 11:49:09,103 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:49:09,107 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:49:09,115 - main - INFO - Response: 200 - 0.01s
+2025-09-04 11:49:09,886 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:49:09,891 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:49:09,899 - main - INFO - Response: 200 - 0.01s
+2025-09-04 11:49:10,483 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:49:10,487 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:49:10,497 - main - INFO - Response: 200 - 0.01s
+2025-09-04 11:49:10,979 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:49:10,983 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:49:10,994 - main - INFO - Response: 200 - 0.02s
+2025-09-04 11:49:11,519 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:49:11,524 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:49:11,533 - main - INFO - Response: 200 - 0.01s
+2025-09-04 11:49:12,102 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:49:12,108 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:49:12,115 - main - INFO - Response: 200 - 0.01s
+2025-09-04 11:49:12,638 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:49:12,641 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:49:12,652 - main - INFO - Response: 200 - 0.01s
+2025-09-04 11:49:13,194 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:49:13,198 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:49:13,209 - main - INFO - Response: 200 - 0.01s
+2025-09-04 11:49:13,715 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:49:13,719 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:49:13,732 - main - INFO - Response: 200 - 0.02s
+2025-09-04 11:52:48,053 - main - INFO - Request: GET http://localhost:8000/api/menu/1
+2025-09-04 11:52:48,059 - main - INFO - Retrieved menu item: Classic Espre
+2025-09-04 11:52:48,061 - main - INFO - Response: 200 - 0.01s
+2025-09-04 11:52:48,115 - main - INFO - Request: GET http://localhost:8000/favicon.ico
+2025-09-04 11:52:48,116 - main - INFO - Response: 404 - 0.00s
+2025-09-04 11:57:35,079 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 11:57:35,082 - main - INFO - Retrieved 6 menu items
+2025-09-04 11:57:35,086 - main - INFO - Response: 200 - 0.01s
+2025-09-04 11:57:48,686 - main - INFO - Request: PUT http://localhost:8000/api/menu/1
+2025-09-04 11:57:48,694 - main - INFO - Response: 401 - 0.01s
+2025-09-04 12:03:59,729 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:03:59,735 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:03:59,750 - main - INFO - Response: 200 - 0.02s
+2025-09-04 12:04:03,993 - main - INFO - Request: GET http://localhost:8000/api/menu?available_only=false
+2025-09-04 12:04:03,997 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:04:04,011 - main - INFO - Response: 200 - 0.02s
+2025-09-04 12:04:04,016 - main - INFO - Request: GET http://localhost:8000/api/menu?available_only=false
+2025-09-04 12:04:04,021 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:04:04,032 - main - INFO - Response: 200 - 0.02s
+2025-09-04 12:04:07,998 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:04:08,004 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:04:08,020 - main - INFO - Response: 200 - 0.02s
+2025-09-04 12:04:08,826 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:04:08,833 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:04:08,850 - main - INFO - Response: 200 - 0.02s
+2025-09-04 12:04:12,200 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:04:12,205 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:04:12,221 - main - INFO - Response: 200 - 0.02s
+2025-09-04 12:04:13,010 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:04:13,016 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:04:13,031 - main - INFO - Response: 200 - 0.02s
+2025-09-04 12:04:35,270 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:04:35,274 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:04:35,279 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:04:44,090 - main - INFO - Request: PUT http://localhost:8000/api/menu/1
+2025-09-04 12:04:44,097 - main - INFO - Response: 401 - 0.01s
+2025-09-04 12:10:32,330 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:10:32,333 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:10:32,337 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:10:35,968 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:10:35,971 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:10:35,976 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:11:26,029 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:11:26,031 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:11:26,037 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:15:17,940 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:15:17,946 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:15:17,952 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:16:34,541 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:16:34,543 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:16:34,551 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:20:40,892 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:20:40,898 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:40,902 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:20:46,511 - main - INFO - Request: GET http://localhost:8000/api/menu?available_only=false
+2025-09-04 12:20:46,515 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:46,521 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:20:46,525 - main - INFO - Request: GET http://localhost:8000/api/menu?available_only=false
+2025-09-04 12:20:46,527 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:46,533 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:20:48,276 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:20:48,280 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:48,285 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:20:48,677 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:20:48,681 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:48,687 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:20:50,639 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:20:50,641 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:50,646 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:20:51,039 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:20:51,044 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:51,051 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:20:51,522 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:20:51,529 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:51,539 - main - INFO - Response: 200 - 0.02s
+2025-09-04 12:20:51,971 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:20:51,975 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:51,986 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:20:52,367 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:20:52,370 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:52,376 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:20:52,745 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:20:52,747 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:52,752 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:20:55,824 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:20:55,827 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:55,834 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:20:56,223 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:20:56,226 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:20:56,234 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:21:52,482 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:21:52,485 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:21:52,498 - main - INFO - Response: 200 - 0.02s
+2025-09-04 12:24:08,911 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:24:08,914 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:24:08,917 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:22,229 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:25:22,231 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:22,235 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:40,839 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:25:40,843 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:40,850 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:48,587 - main - INFO - Request: GET http://localhost:8000/api/menu?available_only=false
+2025-09-04 12:25:48,591 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:48,598 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:48,602 - main - INFO - Request: GET http://localhost:8000/api/menu?available_only=false
+2025-09-04 12:25:48,606 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:48,613 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:54,718 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:25:54,721 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:54,917 - main - INFO - Response: 200 - 0.20s
+2025-09-04 12:25:55,282 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:25:55,285 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:55,292 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:56,638 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:25:56,642 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:56,646 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:57,025 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:25:57,028 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:57,033 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:57,450 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:25:57,454 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:57,460 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:57,905 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:25:57,909 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:57,915 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:58,365 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:25:58,368 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:58,372 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:58,850 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:25:58,852 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:58,859 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:59,303 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:25:59,307 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:59,314 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:25:59,733 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:25:59,737 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:25:59,744 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:28:28,148 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:28:28,154 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:28:28,162 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:34:06,961 - main - INFO - Request: PUT http://localhost:8000/api/menu/1
+2025-09-04 12:34:06,969 - main - INFO - Response: 401 - 0.01s
+2025-09-04 12:37:18,184 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:37:18,190 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:37:18,196 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:38:05,624 - main - INFO - Request: PUT http://localhost:8000/api/menu/1
+2025-09-04 12:38:05,633 - main - INFO - Response: 401 - 0.01s
+2025-09-04 12:52:59,008 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:52:59,011 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:52:59,014 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:55:14,853 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 12:55:14,855 - main - INFO - Retrieved 6 menu items
+2025-09-04 12:55:14,859 - main - INFO - Response: 200 - 0.01s
+2025-09-04 12:59:57,170 - main - INFO - Request: PUT http://localhost:8000/api/menu/1
+2025-09-04 12:59:57,173 - main - INFO - Response: 401 - 0.00s
+2025-09-04 13:10:54,555 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 13:10:54,558 - main - INFO - Retrieved 6 menu items
+2025-09-04 13:10:54,562 - main - INFO - Response: 200 - 0.01s
+2025-09-04 13:11:09,782 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 13:11:09,785 - main - INFO - Retrieved 6 menu items
+2025-09-04 13:11:09,794 - main - INFO - Response: 200 - 0.01s
+2025-09-04 13:11:22,355 - main - INFO - Request: PUT http://localhost:8000/api/menu/1
+2025-09-04 13:11:22,359 - main - INFO - Response: 401 - 0.00s
+2025-09-04 13:20:26,512 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 13:20:26,516 - main - INFO - Retrieved 6 menu items
+2025-09-04 13:20:26,520 - main - INFO - Response: 200 - 0.01s
+2025-09-04 13:20:39,178 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 13:20:39,181 - main - INFO - Retrieved 6 menu items
+2025-09-04 13:20:39,186 - main - INFO - Response: 200 - 0.01s
+2025-09-04 13:20:47,250 - main - INFO - Request: PUT http://localhost:8000/api/menu/1
+2025-09-04 13:20:47,257 - main - INFO - Response: 401 - 0.01s
+2025-09-04 13:27:16,898 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 13:27:16,900 - main - INFO - Retrieved 6 menu items
+2025-09-04 13:27:16,915 - main - INFO - Response: 200 - 0.02s
+2025-09-04 13:28:00,401 - main - INFO - Request: PUT http://localhost:8000/api/menu/1
+2025-09-04 13:28:00,404 - main - INFO - Response: 401 - 0.00s
+2025-09-04 13:28:45,953 - main - INFO - Request: PUT http://localhost:8000/api/menu/1
+2025-09-04 13:28:45,956 - main - INFO - Response: 401 - 0.00s
+2025-09-04 13:36:20,639 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 13:36:20,642 - main - INFO - Retrieved 6 menu items
+2025-09-04 13:36:20,646 - main - INFO - Response: 200 - 0.01s
+2025-09-04 13:37:03,250 - main - INFO - Request: GET http://localhost:8000/api/menu
+2025-09-04 13:37:03,252 - main - INFO - Retrieved 6 menu items
+2025-09-04 13:37:03,256 - main - INFO - Response: 200 - 0.01s
+2025-09-04 13:37:10,884 - main - INFO - Request: PUT http://localhost:8000/api/menu/1
+2025-09-04 13:37:10,887 - main - INFO - Response: 401 - 0.00s
+2025-09-04 13:39:48,579 - main - INFO - Received signal 2, initiating graceful shutdown...
+2025-09-04 13:40:00,086 - main - INFO - Received signal 2, initiating graceful shutdown...
+2025-09-04 13:40:19,055 - main - INFO - Received signal 2, initiating graceful shutdown...

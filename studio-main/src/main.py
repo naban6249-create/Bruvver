@@ -8,6 +8,11 @@ from typing import List, Optional
 import uvicorn
 import os
 from dotenv import load_dotenv
+from fastapi import File, UploadFile, Form
+import shutil
+import json
+
+os.makedirs("static/images", exist_ok=True)
 
 # Import our modules
 from database import engine, get_database
@@ -234,7 +239,13 @@ async def get_menu_item(item_id: str, db: Session = Depends(get_database)):
 
 @app.post("/api/menu", response_model=MenuItemResponse)
 async def create_menu_item(
-    item: MenuItemCreate, 
+    name: str = Form(...),
+    price: float = Form(...),
+    description: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
+    is_available: bool = Form(True),
+    ingredients: str = Form("[]"), # Receive ingredients as a JSON string
+    image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
@@ -242,29 +253,36 @@ async def create_menu_item(
     # Generate new ID
     max_id = db.query(func.max(MenuItem.id)).scalar() or "0"
     new_id = str(int(max_id) + 1)
-    
+
+    image_path = None
+    if image:
+        image_path = f"static/images/{new_id}_{image.filename}"
+        with open(image_path, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+
     db_item = MenuItem(
         id=new_id,
-        name=item.name,
-        price=item.price,
-        description=item.description,
-        category=item.category,
-        image_url=item.image_url,
-        is_available=item.is_available
+        name=name,
+        price=price,
+        description=description,
+        category=category,
+        image_url=image_path, # Save the path to the database
+        is_available=is_available
     )
     db.add(db_item)
     db.flush()
-    
+
     # Add ingredients
-    for ingredient in item.ingredients:
+    ingredients_list = json.loads(ingredients)
+    for ingredient in ingredients_list:
         db_ingredient = Ingredient(
             menu_item_id=new_id,
-            name=ingredient.name,
-            quantity=ingredient.quantity,
-            unit=ingredient.unit
+            name=ingredient['name'],
+            quantity=ingredient['quantity'],
+            unit=ingredient['unit']
         )
         db.add(db_ingredient)
-    
+
     db.commit()
     db.refresh(db_item)
     return db_item
@@ -281,7 +299,6 @@ async def update_menu_item_api(
     if db_item is None:
         raise HTTPException(status_code=404, detail="Menu item not found")
     return db_item
-
 @app.delete("/api/menu/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_menu_item_api(
     item_id: str,

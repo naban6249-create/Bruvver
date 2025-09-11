@@ -32,7 +32,9 @@ export function LoginForm() {
         description: "Please select a branch.",
         variant: "destructive",
       });
+      
       return;
+
     }
 
     const email = (e.currentTarget.elements.namedItem('email') as HTMLInputElement).value;
