@@ -250,13 +250,13 @@ export function MenuItemDialog({
             {imagePreview && (
               <div className="space-y-2">
                 <Label className="text-sm text-muted-foreground">Preview</Label>
-                <div className="relative w-32 h-24 border rounded-md overflow-hidden bg-muted">
+                <div className="relative w-full h-48 border rounded-md overflow-hidden bg-muted">
                   <Image
                     src={imagePreview}
                     alt="Preview"
                     fill
-                    sizes="128px"
-                    className="object-cover"
+                    sizes="300px"
+                    className="object-contain"
                     onError={() => {
                       setImagePreview('');
                       setImageUrl('');

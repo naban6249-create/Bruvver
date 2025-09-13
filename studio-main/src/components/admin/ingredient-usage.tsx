@@ -1,179 +1,154 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import Image from 'next/image';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Plus, Minus, Pencil } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Plus, Minus, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { INGREDIENTS_DATA } from '@/lib/data';
-import { IngredientDialog } from './ingredient-dialog';
-import { getMenuItems } from '@/lib/menu-service';
-import { getDailySales } from '@/lib/sales-service';
+import { IngredientDialog } from "./ingredient-dialog";
 
-// --- Local types (do not clash with API types)
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_SERVER_URL || "http://localhost:8000";
+
+// Types
 interface Ingredient {
+  id: number;
   name: string;
+  unit: string;
   quantity: number;
-  unit: 'g' | 'ml' | 'shots' | 'pumps';
-}
-
-interface IngredientMetadata {
-  id?: string;
-  name: string;
-  unit: 'g' | 'ml' | 'shots' | 'pumps';
-  imageUrl?: string;
   description?: string;
   category?: string;
   supplier?: string;
-  costPerUnit?: number;
-  minimumThreshold?: number;
+  cost_per_unit?: number;
+  minimum_threshold?: number;
+  image_url?: string;
+  menu_item_id?: string;
+  updatedAt?: string | number;
 }
-
-interface IngredientTotal extends IngredientMetadata {
-  totalQuantity: number;
-  originalName: string;
-}
-
-interface MenuItem {
-  id: string;
-  name: string;
-  price: number;
-  description?: string;
-  category?: string;
-  imageUrl?: string;
-  is_available: boolean;
-  ingredients: Ingredient[];
-}
-
-// Shape returned by API (be flexible + normalize)
-type RawDailySale =
-  | { id?: number | string; menu_item_id: string | number; quantity: number; sale_date?: string; revenue?: number }
-  | { id?: number | string; itemId: string | number; quantity: number; date?: string };
-
-// Our normalized shape used in calculations
-type NormalizedSale = { itemId: string; quantity: number };
 
 export function IngredientUsage() {
-  const [usage, setUsage] = useState<IngredientTotal[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [selectedIngredient, setSelectedIngredient] = useState<IngredientTotal | null>(null);
+  const [selectedIngredient, setSelectedIngredient] =
+    useState<Ingredient | null>(null);
   const { toast } = useToast();
 
-  const calculateUsage = useCallback(async () => {
+  // Normalize image URLs with cache busting
+  const getNormalizedImageUrl = (url?: string, updatedAt?: string | number) => {
+    if (!url) return "https://placehold.co/64x64/EEE/31343C?text=No+Image";
+    
+    let fullUrl = url;
+    if (!url.startsWith("http")) {
+      fullUrl = `${API_BASE}${url}`;
+    }
+    
+    // Add cache busting parameter
+    const separator = fullUrl.includes('?') ? '&' : '?';
+    const timestamp = updatedAt || Date.now();
+    return `${fullUrl}${separator}t=${timestamp}`;
+  };
+
+  // Fetch ingredients from backend
+  const fetchIngredients = useCallback(async () => {
     try {
-      const [menuItems, rawDailySales] = await Promise.all([
-        getMenuItems(),
-        getDailySales() as Promise<RawDailySale[]>,
-      ]);
-
-      // Normalize sales to { itemId, quantity }
-      const dailySales: NormalizedSale[] = (rawDailySales || [])
-        .map((s) => {
-          const itemId =
-            (s as any).itemId ??
-            (s as any).menu_item_id ??
-            undefined;
-          const quantity = Number((s as any).quantity ?? 0);
-          return itemId != null ? { itemId: String(itemId), quantity } : null;
-        })
-        .filter(Boolean) as NormalizedSale[];
-
-      // Accumulate ingredient usage
-      const ingredientTotals: Record<string, { totalQuantity: number; unit: Ingredient['unit'] }> = {};
-
-      dailySales.forEach((sale) => {
-        const menuItem = (menuItems as MenuItem[]).find((item) => item.id === sale.itemId);
-        if (menuItem) {
-          menuItem.ingredients.forEach((ingredient) => {
-            const key = `${ingredient.name}-${ingredient.unit}`;
-            if (!ingredientTotals[key]) {
-              ingredientTotals[key] = { totalQuantity: 0, unit: ingredient.unit };
-            }
-            ingredientTotals[key].totalQuantity += sale.quantity * ingredient.quantity;
-          });
-        }
+      const res = await fetch(`${API_BASE}/api/ingredients`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+        },
       });
+      if (!res.ok) throw new Error("Failed to fetch ingredients");
+      const data = await res.json();
 
-      const usageData: IngredientTotal[] = (INGREDIENTS_DATA as IngredientMetadata[]).map((ingredientMeta) => {
-        const key = `${ingredientMeta.name}-${ingredientMeta.unit}`;
-        const totalQuantity = ingredientTotals[key]?.totalQuantity ?? 0;
-        return {
-          ...ingredientMeta,
-          totalQuantity,
-          originalName: ingredientMeta.name,
-        };
-      });
+      const enriched: Ingredient[] = data.map((ing: any) => ({
+        ...ing,
+        updatedAt: ing.updated_at || Date.now(),
+      }));
 
-      // Prioritize Water and Milk
-      usageData.sort((a, b) => {
-        if (a.name === 'Water') return -1;
-        if (b.name === 'Water') return 1;
-        if (a.name === 'Milk') return -1;
-        if (b.name === 'Milk') return 1;
-        return 0;
-      });
-
-      setUsage(usageData);
+      setIngredients(enriched);
     } catch (error) {
-      console.error("Failed to calculate ingredient usage", error);
+      console.error("Error loading ingredients", error);
       toast({
         title: "Error",
-        description: "Could not calculate ingredient usage.",
+        description: "Could not load ingredient data.",
         variant: "destructive",
       });
     }
   }, [toast]);
 
   useEffect(() => {
-    calculateUsage();
-  }, [calculateUsage]);
+    fetchIngredients();
+  }, [fetchIngredients]);
 
-  const handleQuantityChange = (ingredientName: string, newQuantity: number) => {
+  // Handle temporary quantity adjustment
+  const handleQuantityChange = (id: number, newQuantity: number) => {
     if (newQuantity < 0) return;
-
-    setUsage((prevUsage) =>
-      prevUsage.map((item) =>
-        item.name === ingredientName ? { ...item, totalQuantity: newQuantity } : item
+    setIngredients((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, quantity: newQuantity } : item
       )
     );
-
     toast({
       title: "Quantity Updated",
-      description: `Usage for ${ingredientName} updated.`,
+      description: `Usage updated locally for session.`,
     });
   };
 
-  const handleEditItem = (ingredient: IngredientTotal) => {
+  // Open edit dialog
+  const handleEditItem = (ingredient: Ingredient) => {
     setSelectedIngredient(ingredient);
     setIsEditDialogOpen(true);
   };
 
-  const handleSaveItem = (updatedIngredient: IngredientTotal) => {
-    setUsage((prevUsage) =>
-      prevUsage.map((item) =>
-        item.originalName === updatedIngredient.originalName ? { ...item, ...updatedIngredient } : item
-      )
-    );
-    toast({ title: "Success", description: `${updatedIngredient.name} details updated.` });
-    setIsEditDialogOpen(false);
-    setSelectedIngredient(null);
+  // Save ingredient with optimistic updates
+  const handleSaveItem = async (updatedIngredient: Ingredient) => {
+    try {
+      // The dialog handles the API call internally, so we just need to refresh
+      // Add a small delay to ensure the backend update is complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Refresh data from backend to get the latest state
+      await fetchIngredients();
+      
+      toast({
+        title: "Success",
+        description: `${updatedIngredient.name} updated successfully.`,
+      });
+    } catch (error) {
+      console.error("Error in handleSaveItem", error);
+      toast({
+        title: "Error",
+        description: "Could not refresh ingredient data.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEditDialogOpen(false);
+      setSelectedIngredient(null);
+    }
   };
 
-  const formatQuantity = (item: IngredientTotal) => {
-    if ((item.name === 'Water' || item.name === 'Milk') && item.unit === 'ml') {
-      const liters = item.totalQuantity / 1000;
-      return `${liters.toFixed(2)} L`;
+  const formatQuantity = (item: Ingredient) => {
+    if (item.unit === "ml" && item.quantity >= 1000) {
+      return `${(item.quantity / 1000).toFixed(2)} L`;
     }
-    return `${item.totalQuantity.toLocaleString()} ${item.unit}`;
-  };
-
-  const getStepValue = (item: IngredientTotal) => {
-    if ((item.name === 'Water' || item.name === 'Milk') && item.unit === 'ml') {
-      return 1000; // 1000ml step
+    if (item.unit === "g" && item.quantity >= 1000) {
+      return `${(item.quantity / 1000).toFixed(2)} kg`;
     }
-    return 1;
+    return `${item.quantity} ${item.unit}`;
   };
 
   return (
@@ -182,7 +157,8 @@ export function IngredientUsage() {
         <CardHeader>
           <CardTitle className="font-headline">Daily Ingredient Usage</CardTitle>
           <CardDescription>
-            A summary of the total amount of each ingredient used today based on sales.
+            Based on today's sales. You can edit ingredient details and persist
+            them.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -191,23 +167,26 @@ export function IngredientUsage() {
               <TableRow>
                 <TableHead className="w-[100px]">Image</TableHead>
                 <TableHead>Ingredient</TableHead>
-                <TableHead className="text-right">Total Quantity Used</TableHead>
+                <TableHead className="text-right">Total Quantity</TableHead>
                 <TableHead className="w-[100px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {usage.length > 0 ? (
-                usage.map((item) => (
-                  <TableRow key={`${item.originalName}-${item.unit}`}>
+              {ingredients.length > 0 ? (
+                ingredients.map((item) => (
+                  <TableRow key={item.id}>
                     <TableCell>
                       <Image
                         alt={item.name}
-                        className="aspect-square rounded-md object-cover"
-                        height="64"
-                        src={item.imageUrl || 'https://placehold.co/64x64/EEE/31343C?text=No+Image'}
-                        width="64"
-                        data-ai-hint="ingredient"
+                        className="rounded-md object-cover"
+                        height={64}
+                        width={64}
+                        src={getNormalizedImageUrl(item.image_url, item.updatedAt)}
                         unoptimized
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = "https://placehold.co/64x64/EEE/31343C?text=No+Image";
+                        }}
                       />
                     </TableCell>
                     <TableCell className="font-medium">{item.name}</TableCell>
@@ -218,19 +197,21 @@ export function IngredientUsage() {
                           size="icon"
                           className="h-8 w-8"
                           onClick={() =>
-                            handleQuantityChange(item.name, item.totalQuantity - getStepValue(item))
+                            handleQuantityChange(item.id, item.quantity - 1)
                           }
-                          disabled={item.totalQuantity === 0}
+                          disabled={!item.quantity}
                         >
                           <Minus className="h-4 w-4" />
                         </Button>
-                        <span className="text-center w-24 font-medium">{formatQuantity(item)}</span>
+                        <span className="text-center w-16 font-medium">
+                          {formatQuantity(item)}
+                        </span>
                         <Button
                           variant="outline"
                           size="icon"
                           className="h-8 w-8"
                           onClick={() =>
-                            handleQuantityChange(item.name, item.totalQuantity + getStepValue(item))
+                            handleQuantityChange(item.id, item.quantity + 1)
                           }
                         >
                           <Plus className="h-4 w-4" />
@@ -238,7 +219,11 @@ export function IngredientUsage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => handleEditItem(item)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditItem(item)}
+                      >
                         <Pencil className="mr-2 h-4 w-4" /> Edit
                       </Button>
                     </TableCell>
@@ -246,8 +231,8 @@ export function IngredientUsage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center">
-                    No sales data available to calculate usage.
+                  <TableCell colSpan={4} className="text-center py-8">
+                    No ingredient data available.
                   </TableCell>
                 </TableRow>
               )}
@@ -259,8 +244,8 @@ export function IngredientUsage() {
       <IngredientDialog
         isOpen={isEditDialogOpen}
         setIsOpen={setIsEditDialogOpen}
-        onSave={handleSaveItem}
         ingredient={selectedIngredient}
+        onSave={handleSaveItem}
       />
     </>
   );

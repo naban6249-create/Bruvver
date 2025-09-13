@@ -1,4 +1,3 @@
-// Updated menu-management.tsx
 "use client";
 
 import * as React from "react";
@@ -34,76 +33,11 @@ import type { MenuItem } from "@/lib/types";
 import { MenuItemDialog } from "./menu-item-dialog";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { useToast } from "@/hooks/use-toast";
+// Import the centralized API functions
+import { getMenuItems, addMenuItem, updateMenuItem, deleteMenuItem } from "@/lib/menu-service";
 
-// API service functions
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-
-async function getAuthHeaders() {
-  const token = localStorage.getItem('authToken');
-  return {
-    'Authorization': token ? `Bearer ${token}` : '',
-  };
-}
-async function getMenuItems(): Promise<MenuItem[]> {
-  const response = await fetch(`${API_BASE_URL}/api/menu?available_only=false`);
-  if (!response.ok) throw new Error('Failed to fetch menu items');
-  return response.json();
-}
-
-async function addMenuItem(item: MenuItem & { imageFile?: File }): Promise<MenuItem> {
-  const formData = new FormData();
-  formData.append('name', item.name);
-  formData.append('price', item.price.toString());
-  formData.append('description', item.description || '');
-  formData.append('category', item.category || '');
-  formData.append('is_available', item.is_available.toString());
-  formData.append('ingredients', JSON.stringify(item.ingredients || []));
-  
-  if (item.imageFile) {
-    formData.append('image', item.imageFile);
-  }
-
-  const response = await fetch(`${API_BASE_URL}/api/menu`, {
-    method: 'POST',
-    headers: await getAuthHeaders(),
-    body: formData,
-  });
-  
-  if (!response.ok) throw new Error('Failed to add menu item');
-  return response.json();
-}
-
-async function updateMenuItem(item: MenuItem & { imageFile?: File }): Promise<MenuItem> {
-  const formData = new FormData();
-  formData.append('name', item.name);
-  formData.append('price', item.price.toString());
-  formData.append('description', item.description || '');
-  formData.append('category', item.category || '');
-  formData.append('is_available', item.is_available.toString());
-  formData.append('ingredients', JSON.stringify(item.ingredients || []));
-  
-  if (item.imageFile) {
-    formData.append('image', item.imageFile);
-  }
-
-  const response = await fetch(`${API_BASE_URL}/api/menu/${item.id}`, {
-    method: 'PUT',
-    headers: await getAuthHeaders(),
-    body: formData,
-  });
-  
-  if (!response.ok) throw new Error('Failed to update menu item');
-  return response.json();
-}
-
-async function deleteMenuItem(itemId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/menu/${itemId}`, {
-    method: 'DELETE',
-    headers: await getAuthHeaders(),
-  });
-  
-  if (!response.ok) throw new Error('Failed to delete menu item');
-}
+// Define the base URL for displaying images, same as in daily-sales-breakdown.tsx
+const IMAGE_SERVER_BASE_URL = process.env.NEXT_PUBLIC_API_SERVER_URL || 'http://localhost:8000';
 
 export function MenuManagement() {
   const [items, setItems] = React.useState<MenuItem[]>([]);
@@ -121,16 +55,27 @@ export function MenuManagement() {
   const fetchMenuItems = React.useCallback(async () => {
     try {
       setLoading(true);
-      const menuItems = await getMenuItems();
+      const menuItemsFromApi = await getMenuItems();
       
-      // Transform backend data to frontend format
-      const transformedItems = menuItems.map((item) => ({
-        ...item,
-        imageUrl: item.image_path ? `${API_BASE_URL}${item.image_path}` : undefined,
-      }));
+      // [THE FIX] Apply the same smart URL logic here
+      const transformedItems = menuItemsFromApi.map((item: any) => {
+        let finalImageUrl;
+        if (item.image_url) { // Read from snake_case from the API
+            if (item.image_url.startsWith('http')) {
+                finalImageUrl = item.image_url;
+            } else {
+                finalImageUrl = `${IMAGE_SERVER_BASE_URL}${item.image_url}`;
+            }
+        }
+        return {
+            ...item,
+            imageUrl: finalImageUrl, // Create the camelCase property for the component
+        };
+      });
       
       setItems(transformedItems);
     } catch (error) {
+      console.error("Failed to fetch menu items:", error);
       toast({
         title: "Error",
         description: "Could not load menu items.",
@@ -145,20 +90,15 @@ export function MenuManagement() {
   React.useEffect(() => {
     let filtered = items;
 
-    // Search filter
     if (searchTerm) {
       filtered = filtered.filter(item =>
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.description?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-
-    // Category filter
     if (categoryFilter !== 'all') {
       filtered = filtered.filter(item => item.category === categoryFilter);
     }
-
-    // Availability filter
     if (availabilityFilter !== 'all') {
       filtered = filtered.filter(item => 
         availabilityFilter === 'available' ? item.is_available : !item.is_available
@@ -189,12 +129,12 @@ export function MenuManagement() {
 
   const toggleItemAvailability = async (item: MenuItem) => {
     try {
-      const updatedItem = { ...item, is_available: !item.is_available };
-      await updateMenuItem(updatedItem);
+      const payload = { ...item, is_available: !item.is_available };
+      await updateMenuItem(payload);
       await fetchMenuItems();
       toast({ 
         title: "Success", 
-        description: `Item ${updatedItem.is_available ? 'enabled' : 'disabled'}.` 
+        description: `Item ${payload.is_available ? 'enabled' : 'disabled'}.` 
       });
     } catch (error) {
       toast({
@@ -225,8 +165,12 @@ export function MenuManagement() {
 
   const handleSaveItem = async (item: MenuItem & { imageFile?: File }) => {
     const isNew = !item.id;
-
     try {
+      // Before sending to API, ensure imageUrl is a relative path if it exists
+      if (item.imageUrl) {
+        item.imageUrl = item.imageUrl.replace(IMAGE_SERVER_BASE_URL, '');
+      }
+      
       if (isNew) {
         await addMenuItem(item);
       } else {
@@ -238,6 +182,7 @@ export function MenuManagement() {
         description: `Menu item ${isNew ? "added" : "updated"}.`,
       });
     } catch (error) {
+      console.error("Failed to save item:", error);
       toast({
         title: "Error",
         description: `Could not save menu item.`,
@@ -252,7 +197,7 @@ export function MenuManagement() {
 
   const categories = React.useMemo(() => {
     const uniqueCategories = [...new Set(items.map(item => item.category).filter(Boolean))];
-    return uniqueCategories;
+    return uniqueCategories as string[];
   }, [items]);
 
   if (loading) {
@@ -285,7 +230,6 @@ export function MenuManagement() {
           </div>
         </CardHeader>
         <CardContent>
-          {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <Input
               placeholder="Search items..."
@@ -339,13 +283,13 @@ export function MenuManagement() {
                 {filteredItems.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="hidden sm:table-cell">
+                      {/* [THE FIX] Remove the unoptimized prop here as well */}
                       <Image
                         alt={item.name}
                         className="aspect-square rounded-md object-cover"
                         height="64"
                         width="64"
                         src={item.imageUrl || "https://placehold.co/64x64/EEE/31343C?text=No+Image"}
-                        unoptimized
                       />
                     </TableCell>
                     <TableCell>
@@ -358,7 +302,7 @@ export function MenuManagement() {
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <Badge variant="outline">
-                        {item.category?.charAt(0).toUpperCase() + item.category?.slice(1)}
+                        {item.category?.charAt(0).toUpperCase() + (item.category?.slice(1) ?? '')}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-medium">

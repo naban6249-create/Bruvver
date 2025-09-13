@@ -84,72 +84,63 @@ export async function getMenuItems(): Promise<MenuItem[]> {
   return handleResponse(response);
 }
 
+// ### CORRECTED VERSION ###
 // Add a new menu item (with optional file upload)
 export async function addMenuItem(item: Omit<MenuItem, 'id'> & { imageFile?: File }): Promise<MenuItem> {
-  const { imageFile, ...itemData } = item;
-  
-  if (imageFile) {
-    // Handle file upload with FormData
+    const { imageFile, ...itemData } = item;
+
+    // Always use FormData because the backend endpoint expects it
     const formData = new FormData();
     formData.append('name', itemData.name);
     formData.append('price', itemData.price.toString());
     formData.append('description', itemData.description || '');
     formData.append('category', itemData.category || '');
-    formData.append('is_available', itemData.is_available.toString());
+    formData.append('is_available', String(itemData.is_available));
     formData.append('ingredients', JSON.stringify(itemData.ingredients || []));
-    formData.append('image', imageFile);
+
+    // Only append the image file if it exists
+    if (imageFile) {
+        formData.append('image', imageFile);
+    }
 
     const headers = await getFormDataAuthHeaders();
     const response = await fetch(`${API_BASE_URL}/menu`, {
-      method: 'POST',
-      headers,
-      body: formData,
+        method: 'POST',
+        headers,
+        body: formData,
     });
     return handleResponse(response);
-  } else {
-    // Handle JSON request (no file upload)
-    const headers = await getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/menu`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(itemData),
-    });
-    return handleResponse(response);
-  }
 }
 
+// ### CORRECTED VERSION ###
 // Update existing menu item (with optional file upload)
 export async function updateMenuItem(item: MenuItem & { imageFile?: File }): Promise<MenuItem> {
-  const { imageFile, ...itemData } = item;
-  
-  if (imageFile) {
-    // Handle file upload with FormData
+    const { imageFile, ...itemData } = item;
+
+    // Always use FormData because the backend endpoint expects it
     const formData = new FormData();
     formData.append('name', itemData.name);
     formData.append('price', itemData.price.toString());
     formData.append('description', itemData.description || '');
     formData.append('category', itemData.category || '');
-    formData.append('is_available', itemData.is_available.toString());
+    formData.append('is_available', String(itemData.is_available));
     formData.append('ingredients', JSON.stringify(itemData.ingredients || []));
-    formData.append('image', imageFile);
+
+    // If a new file is being uploaded, add it to the form data.
+    // Otherwise, send the existing image_url so the backend knows not to delete it.
+    if (imageFile) {
+        formData.append('image', imageFile);
+    } else {
+        formData.append('image_url', itemData.imageUrl || '');
+    }
 
     const headers = await getFormDataAuthHeaders();
     const response = await fetch(`${API_BASE_URL}/menu/${itemData.id}`, {
-      method: 'PUT',
-      headers,
-      body: formData,
+        method: 'PUT',
+        headers,
+        body: formData,
     });
     return handleResponse(response);
-  } else {
-    // Handle JSON request (no file upload)
-    const headers = await getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/menu/${itemData.id}`, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify(itemData),
-    });
-    return handleResponse(response);
-  }
 }
 
 // Delete a menu item by id

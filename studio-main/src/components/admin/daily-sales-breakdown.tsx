@@ -12,6 +12,7 @@ import { MenuItemDialog } from "./menu-item-dialog";
 import { getMenuItems, updateMenuItem } from "@/lib/menu-service";
 import { getDailySales, updateDailySale } from "@/lib/sales-service";
 
+const IMAGE_SERVER_BASE_URL = process.env.NEXT_PUBLIC_API_SERVER_URL || 'http://localhost:8000';
 
 interface SaleWithDetails extends MenuItem {
     quantitySold: number;
@@ -40,12 +41,26 @@ export function DailySalesBreakdown() {
         try {
             const [menuItems, dailySales] = await Promise.all([getMenuItems(), getDailySales()]);
             
-            const itemsWithSales = menuItems.map(item => {
+            const itemsWithSales = menuItems.map((item: any) => {
                 const sale = dailySales.find(s => s.itemId === item.id);
                 const quantitySold = sale ? sale.quantity : 0;
+                
+                // [THE FINAL FIX] This logic now handles both local and external URLs correctly.
+                let finalImageUrl;
+                if (item.image_url) {
+                    if (item.image_url.startsWith('http')) {
+                        // If it's already a full URL (like picsum.photos), use it directly.
+                        finalImageUrl = item.image_url;
+                    } else {
+                        // If it's a local path (like /static/...), prepend our server URL.
+                        finalImageUrl = `${IMAGE_SERVER_BASE_URL}${item.image_url}`;
+                    }
+                }
+
                 return {
                     ...item,
                     quantitySold,
+                    imageUrl: finalImageUrl,
                 }
             })
             setSalesDetails(itemsWithSales);
@@ -95,7 +110,7 @@ export function DailySalesBreakdown() {
         setIsEditDialogOpen(true);
     };
 
-    const handleSaveItem = async (item: MenuItem) => {
+    const handleSaveItem = async (item: MenuItem & { imageFile?: File }) => {
         try {
             await updateMenuItem(item);
             await fetchSalesSummary();
@@ -145,7 +160,6 @@ export function DailySalesBreakdown() {
                                             height="64"
                                             src={item.imageUrl || 'https://placehold.co/64x64/EEE/31343C?text=No+Image'}
                                             width="64"
-                                            data-ai-hint="coffee drink"
                                         />
                                     </TableCell>
                                     <TableCell className="font-medium">{item.name}</TableCell>

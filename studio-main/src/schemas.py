@@ -8,6 +8,7 @@ class IngredientBase(BaseModel):
     name: str
     quantity: float
     unit: str
+    image_url: Optional[str] = None
 
 class IngredientCreate(IngredientBase):
     pass
@@ -16,6 +17,7 @@ class IngredientUpdate(BaseModel):
     name: Optional[str] = None
     quantity: Optional[float] = None
     unit: Optional[str] = None
+    image_url: Optional[str] = None
 
 class IngredientResponse(IngredientBase):
     id: int
