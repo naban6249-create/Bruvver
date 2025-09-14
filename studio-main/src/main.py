@@ -1,7 +1,7 @@
-# main.py - Enhanced version with complete functionality
+# main.py - Final corrected version
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles # <-- [THE FIX] IMPORT THIS
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from datetime import datetime, date, timedelta
@@ -64,8 +64,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# [THE FIX] This line tells FastAPI to serve any files requested under "/static"
-# from the "static" folder in your project. This is what makes images work.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
@@ -172,7 +170,8 @@ async def initialize_sample_data():
                         menu_item_id=item_data["id"],
                         name=ingredient_data["name"],
                         quantity=ingredient_data["quantity"],
-                        unit=ingredient_data["unit"]
+                        unit=ingredient_data["unit"],
+                        image_url=None  # [THE FIX] Explicitly set image_url
                     )
                     db.add(db_ingredient)
 
@@ -390,7 +389,8 @@ async def create_menu_item(
             menu_item_id=new_id,
             name=ingredient['name'],
             quantity=ingredient['quantity'],
-            unit=ingredient['unit']
+            unit=ingredient['unit'],
+            image_url=ingredient.get('image_url')
         )
         db.add(db_ingredient)
 
@@ -405,7 +405,7 @@ async def update_menu_item_api(
     price: float = Form(...),
     description: Optional[str] = Form(None),
     category: Optional[str] = Form(None),
-    is_available: bool = Form(True),
+    is_available: str = Form("True"),
     ingredients: str = Form("[]"),
     image: Optional[UploadFile] = File(None),
     image_url: Optional[str] = Form(None),
@@ -436,7 +436,7 @@ async def update_menu_item_api(
         db_item.price = price
         db_item.description = description
         db_item.category = category
-        db_item.is_available = is_available
+        db_item.is_available = is_available.lower() in ['true', '1', 't', 'y', 'yes']
         db_item.image_url = image_path
 
         # Handle ingredients: delete old, add new
@@ -448,7 +448,8 @@ async def update_menu_item_api(
                 menu_item_id=item_id,
                 name=ingredient_data.get("name"),
                 quantity=ingredient_data.get("quantity"),
-                unit=ingredient_data.get("unit")
+                unit=ingredient_data.get("unit"),
+                image_url=ingredient_data.get("image_url") # [THE FIX]
             )
             db.add(db_ingredient)
 
@@ -889,7 +890,25 @@ async def update_ingredient(
         logger.error(f"Error updating ingredient {ingredient_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to update ingredient: {str(e)}")
 
+# ADDED: Delete Ingredient Endpoint
+@app.delete("/api/ingredients/{ingredient_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_ingredient(
+    ingredient_id: int,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Delete a specific ingredient by its ID (Admin only)"""
+    db_ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not db_ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    db.delete(db_ingredient)
+    db.commit()
+    return
+
+
 # Make sure your upload endpoint exists and is working (this should already be in main.py)
+UPLOAD_DIR = "static/images"
 @app.post("/api/upload-image")
 async def upload_image(file: UploadFile = File(...)):
     try:
@@ -960,25 +979,6 @@ async def get_categories(db: Session = Depends(get_database)):
         MenuItem.is_available == True
     ).distinct().all()
     return [cat[0] for cat in categories if cat[0]]
-UPLOAD_DIR = "static/images"
-
-@app.post("/api/upload-image")
-async def upload_image(file: UploadFile = File(...)):
-    try:
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-        ext = os.path.splitext(file.filename)[1]
-        filename = f"{uuid.uuid4().hex}{ext}"
-        file_path = os.path.join(UPLOAD_DIR, filename)
-
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        # Return the static path that frontend can use
-        file_url = f"/static/images/{filename}"
-        return {"url": file_url}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { MenuCard } from '@/components/menu-card';
 import { Coffee } from 'lucide-react';
-import type { MenuItem } from '@/lib/types';
 import { getMenuItems } from '@/lib/menu-service';
+import { MainPageMenu } from '@/components/main-page-menu'; // Import the new component
 
 export default async function Home() {
   const menuItems = await getMenuItems();
@@ -44,11 +43,8 @@ export default async function Home() {
         </section>
 
         <section className="w-full py-12 bg-muted/40">
-          <div className="container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 px-4 md:px-6">
-            {menuItems.map((item) => (
-              <MenuCard key={item.id} item={item} />
-            ))}
-          </div>
+          {/* Use the new interactive component here */}
+          <MainPageMenu initialItems={menuItems} />
         </section>
       </main>
       <footer className="flex flex-col gap-2 sm:flex-row py-6 w-full shrink-0 items-center px-4 md:px-6 border-t">

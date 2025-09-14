@@ -53,13 +53,13 @@ export function LoginForm() {
       }
 
       const { access_token } = await response.json();
-      localStorage.setItem('authToken', access_token);
-      Cookies.set("authToken", access_token, {
-        expires: 1, // 1 day
+      localStorage.setItem('token', access_token); // <--- CHANGE THIS KEY
+      Cookies.set("token", access_token, {        // <--- (Recommended) Also change the cookie key for consistency
+        expires: 1, 
         sameSite: "Strict",
         secure: process.env.NODE_ENV === "production",
         path: "/",
-      })
+      });
 
       toast({
         title: "Success",

@@ -1,5 +1,6 @@
 // Updated types.ts
 export interface Ingredient {
+  id: number;
   name: string;
   quantity: number;
   unit: 'g' | 'ml' | 'shots' | 'pumps';

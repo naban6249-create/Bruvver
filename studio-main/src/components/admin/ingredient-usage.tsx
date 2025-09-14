@@ -2,91 +2,42 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Plus, Minus, Pencil } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Pencil, PlusCircle, Trash2, Plus, Minus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { IngredientDialog } from "./ingredient-dialog";
+import { UnifiedAuth } from "@/lib/unified-auth";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_SERVER_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_SERVER_URL || "http://localhost:8000";
 
-// Types
 interface Ingredient {
   id: number;
   name: string;
   unit: string;
   quantity: number;
-  description?: string;
-  category?: string;
-  supplier?: string;
-  cost_per_unit?: number;
-  minimum_threshold?: number;
   image_url?: string;
-  menu_item_id?: string;
   updatedAt?: string | number;
 }
 
 export function IngredientUsage() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [selectedIngredient, setSelectedIngredient] =
-    useState<Ingredient | null>(null);
+  const [selectedIngredient, setSelectedIngredient] = useState<Ingredient | null>(null);
+  const [ingredientToDelete, setIngredientToDelete] = useState<Ingredient | null>(null);
   const { toast } = useToast();
 
-  // Normalize image URLs with cache busting
-  const getNormalizedImageUrl = (url?: string, updatedAt?: string | number) => {
-    if (!url) return "https://placehold.co/64x64/EEE/31343C?text=No+Image";
-    
-    let fullUrl = url;
-    if (!url.startsWith("http")) {
-      fullUrl = `${API_BASE}${url}`;
-    }
-    
-    // Add cache busting parameter
-    const separator = fullUrl.includes('?') ? '&' : '?';
-    const timestamp = updatedAt || Date.now();
-    return `${fullUrl}${separator}t=${timestamp}`;
-  };
-
-  // Fetch ingredients from backend
   const fetchIngredients = useCallback(async () => {
+    if (!UnifiedAuth.isAuthenticated()) return;
     try {
-      const res = await fetch(`${API_BASE}/api/ingredients`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
-      });
-      if (!res.ok) throw new Error("Failed to fetch ingredients");
-      const data = await res.json();
-
-      const enriched: Ingredient[] = data.map((ing: any) => ({
-        ...ing,
-        updatedAt: ing.updated_at || Date.now(),
-      }));
-
-      setIngredients(enriched);
+      const response = await UnifiedAuth.authenticatedFetch(`${API_BASE}/api/ingredients`);
+      if (!response.ok) throw new Error("Failed to fetch ingredients");
+      const data = await response.json();
+      setIngredients(data.map((ing: any) => ({ ...ing, updatedAt: ing.updated_at || Date.now() })));
     } catch (error) {
-      console.error("Error loading ingredients", error);
-      toast({
-        title: "Error",
-        description: "Could not load ingredient data.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Could not load ingredient data.", variant: "destructive" });
     }
   }, [toast]);
 
@@ -94,72 +45,86 @@ export function IngredientUsage() {
     fetchIngredients();
   }, [fetchIngredients]);
 
-  // Handle temporary quantity adjustment
-  const handleQuantityChange = (id: number, newQuantity: number) => {
-    if (newQuantity < 0) return;
-    setIngredients((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, quantity: newQuantity } : item
-      )
+  const handleQuantityChange = async (ingredient: Ingredient, amount: number) => {
+    const originalIngredients = [...ingredients];
+
+    const currentBaseQuantity = ingredient.unit === 'L' ? ingredient.quantity * 1000 : ingredient.quantity;
+    const step = 10; // Increment by 10g
+    const newBaseQuantity = Math.max(0, currentBaseQuantity + (amount * step));
+
+    const newUnit = newBaseQuantity >= 1000 ? 'L' : 'g';
+    const newDisplayQuantity = newUnit === 'L' ? newBaseQuantity / 1000 : newBaseQuantity;
+
+    setIngredients(prev =>
+      prev.map(ing => ing.id === ingredient.id ? { ...ing, quantity: newDisplayQuantity, unit: newUnit } : ing)
     );
-    toast({
-      title: "Quantity Updated",
-      description: `Usage updated locally for session.`,
-    });
+
+    try {
+      const response = await UnifiedAuth.authenticatedFetch(`${API_BASE}/api/ingredients/${ingredient.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity: newDisplayQuantity, unit: newUnit }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update quantity.');
+
+      const savedIngredient = await response.json();
+      setIngredients(prev => prev.map(ing => ing.id === ingredient.id ? { ...ing, ...savedIngredient, updatedAt: Date.now() } : ing));
+    } catch (error) {
+      toast({ title: "Error", description: "Could not update quantity.", variant: "destructive" });
+      setIngredients(originalIngredients);
+    }
   };
 
-  // Open edit dialog
+  const handleConfirmDelete = async () => {
+    if (!ingredientToDelete) return;
+    try {
+      await UnifiedAuth.authenticatedFetch(`${API_BASE}/api/ingredients/${ingredientToDelete.id}`, { method: 'DELETE' });
+      setIngredients(prev => prev.filter(ing => ing.id !== ingredientToDelete.id));
+      toast({ title: "Success", description: "Ingredient deleted." });
+    } catch (error) {
+      toast({ title: "Error", description: "Could not delete ingredient.", variant: "destructive" });
+    } finally {
+      setIngredientToDelete(null);
+    }
+  };
+
   const handleEditItem = (ingredient: Ingredient) => {
     setSelectedIngredient(ingredient);
     setIsEditDialogOpen(true);
   };
 
-  // Save ingredient with optimistic updates
-  const handleSaveItem = async (updatedIngredient: Ingredient) => {
-    try {
-      // The dialog handles the API call internally, so we just need to refresh
-      // Add a small delay to ensure the backend update is complete
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Refresh data from backend to get the latest state
-      await fetchIngredients();
-      
-      toast({
-        title: "Success",
-        description: `${updatedIngredient.name} updated successfully.`,
-      });
-    } catch (error) {
-      console.error("Error in handleSaveItem", error);
-      toast({
-        title: "Error",
-        description: "Could not refresh ingredient data.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsEditDialogOpen(false);
-      setSelectedIngredient(null);
-    }
+  const handleAddItem = () => {
+    setSelectedIngredient(null);
+    setIsEditDialogOpen(true);
   };
 
-  const formatQuantity = (item: Ingredient) => {
-    if (item.unit === "ml" && item.quantity >= 1000) {
-      return `${(item.quantity / 1000).toFixed(2)} L`;
-    }
-    if (item.unit === "g" && item.quantity >= 1000) {
-      return `${(item.quantity / 1000).toFixed(2)} kg`;
-    }
-    return `${item.quantity} ${item.unit}`;
+  const handleSaveItem = async () => {
+    await fetchIngredients();
+    setIsEditDialogOpen(false);
+  };
+
+  const getNormalizedImageUrl = (url?: string, updatedAt?: string | number) => {
+    if (!url) return "https://placehold.co/64x64/EEE/31343C?text=No+Image";
+    let fullUrl = url.startsWith("http") ? url : `${API_BASE}${url}`;
+    const separator = fullUrl.includes('?') ? '&' : '?';
+    return `${fullUrl}${separator}t=${updatedAt || Date.now()}`;
   };
 
   return (
     <>
       <Card className="mt-8">
-        <CardHeader>
-          <CardTitle className="font-headline">Daily Ingredient Usage</CardTitle>
-          <CardDescription>
-            Based on today's sales. You can edit ingredient details and persist
-            them.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="font-headline">Ingredient Inventory</CardTitle>
+            <CardDescription>
+              Quickly adjust quantities or edit ingredient details.
+            </CardDescription>
+          </div>
+          <Button onClick={handleAddItem}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Add Ingredient
+          </Button>
         </CardHeader>
         <CardContent>
           <Table>
@@ -167,79 +132,68 @@ export function IngredientUsage() {
               <TableRow>
                 <TableHead className="w-[100px]">Image</TableHead>
                 <TableHead>Ingredient</TableHead>
-                <TableHead className="text-right">Total Quantity</TableHead>
-                <TableHead className="w-[100px] text-right">Actions</TableHead>
+                <TableHead className="text-right w-[220px]">Quantity</TableHead>
+                <TableHead className="w-[200px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {ingredients.length > 0 ? (
-                ingredients.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>
-                      <Image
-                        alt={item.name}
-                        className="rounded-md object-cover"
-                        height={64}
-                        width={64}
-                        src={getNormalizedImageUrl(item.image_url, item.updatedAt)}
-                        unoptimized
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = "https://placehold.co/64x64/EEE/31343C?text=No+Image";
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">{item.name}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() =>
-                            handleQuantityChange(item.id, item.quantity - 1)
-                          }
-                          disabled={!item.quantity}
-                        >
-                          <Minus className="h-4 w-4" />
-                        </Button>
-                        <span className="text-center w-16 font-medium">
-                          {formatQuantity(item)}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() =>
-                            handleQuantityChange(item.id, item.quantity + 1)
-                          }
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEditItem(item)}
-                      >
+              {ingredients.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <Image
+                      alt={item.name}
+                      className="rounded-md object-cover aspect-square"
+                      height={64}
+                      width={64}
+                      src={getNormalizedImageUrl(item.image_url, item.updatedAt)}
+                    />
+                  </TableCell>
+                  <TableCell className="font-medium">{item.name}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleQuantityChange(item, -1)}>
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <span className="font-mono w-20 text-center text-sm">
+                        {Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(3)} {item.unit}
+                      </span>
+                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleQuantityChange(item, 1)}>
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex gap-2 justify-end">
+                      <Button variant="outline" size="sm" onClick={() => handleEditItem(item)}>
                         <Pencil className="mr-2 h-4 w-4" /> Edit
                       </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8">
-                    No ingredient data available.
+                      <Button variant="destructive" size="sm" onClick={() => setIngredientToDelete(item)}>
+                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
-              )}
+              ))}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!ingredientToDelete} onOpenChange={() => setIngredientToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              ingredient "{ingredientToDelete?.name}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete}>Continue</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <IngredientDialog
         isOpen={isEditDialogOpen}

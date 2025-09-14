@@ -30,6 +30,7 @@ class Ingredient(Base):
     name = Column(String, nullable=False)
     quantity = Column(Float, nullable=False)
     unit = Column(String, nullable=False)  # g, ml, shots, pumps
+    image_url = Column(String, nullable=True) # This line is crucial
     
     # Relationships
     menu_item = relationship("MenuItem", back_populates="ingredients")

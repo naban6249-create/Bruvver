@@ -14,6 +14,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Plus, Minus } from "lucide-react";
 
 interface IngredientDialogProps {
   isOpen: boolean;
@@ -31,218 +32,164 @@ export function IngredientDialog({
   ingredient,
 }: IngredientDialogProps) {
   const [name, setName] = useState("");
-  const [quantity, setQuantity] = useState<number | string>(0);
+  const [quantity, setQuantity] = useState<number | string>("");
   const [imageUrl, setImageUrl] = useState("");
-  const [imageError, setImageError] = useState(false);
   const [imagePreview, setImagePreview] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-
-  const isLiquidInMl =
-    ingredient?.unit === "ml" &&
-    (ingredient?.name === "Water" || ingredient?.name === "Milk");
+  const isEditMode = ingredient && ingredient.id;
 
   useEffect(() => {
-    if (ingredient) {
+    const defaultImage = "https://placehold.co/64x64/EEE/31343C?text=No+Image";
+    if (isOpen && isEditMode) {
       setName(ingredient.name);
-      // Handle image URL - use a default if null
-      const defaultImage = "https://placehold.co/64x64/EEE/31343C?text=No+Image";
-      const currentImageUrl = ingredient.image_url || defaultImage;
-      setImageUrl(currentImageUrl);
-      setImagePreview(currentImageUrl);
-      
-      if (isLiquidInMl) {
-        setQuantity(((ingredient.quantity || 0) / 1000).toFixed(2));
-      } else {
-        setQuantity(ingredient.quantity || 0);
+      const fullImageUrl = ingredient.image_url && !ingredient.image_url.startsWith('http')
+        ? `${API_BASE}${ingredient.image_url}`
+        : ingredient.image_url || defaultImage;
+      setImageUrl(fullImageUrl);
+      setImagePreview(fullImageUrl);
+
+      // If any old data was in 'g', convert it to 'L' for editing.
+      let currentQuantity = ingredient.quantity || 0;
+      if (ingredient.unit === 'g') {
+        currentQuantity = currentQuantity / 1000;
       }
-    } else {
+      setQuantity(currentQuantity);
+
+    } else if (isOpen && !isEditMode) {
       setName("");
-      const defaultImage = "https://placehold.co/64x64/EEE/31343C?text=Click";
+      setQuantity("");
       setImageUrl(defaultImage);
       setImagePreview(defaultImage);
-      setQuantity(0);
     }
-    setImageError(false);
-  }, [ingredient, isOpen, isLiquidInMl]);
+  }, [ingredient, isOpen, isEditMode]);
 
-  const handleSave = async () => {
-    if (!ingredient) return;
-
-    let finalQuantity = Number(quantity);
-    if (isLiquidInMl) finalQuantity = finalQuantity * 1000;
-
-    try {
-      const res = await fetch(`${API_BASE}/api/ingredients/${ingredient.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
-        body: JSON.stringify({
-          name,
-          quantity: finalQuantity,
-          unit: ingredient.unit,
-          image_url: imageUrl, // Include the updated image URL
-        }),
-      });
-
-      if (!res.ok) throw new Error("Failed to update ingredient");
-
-      const updated = await res.json();
-      onSave(updated);
-      toast({
-        title: "Ingredient Updated",
-        description: `${updated.name} saved successfully.`,
-      });
-      setIsOpen(false);
-    } catch (error) {
-      console.error("Error updating ingredient", error);
-      toast({
-        title: "Error",
-        description: "Could not update ingredient.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleImageClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const uploadImageToServer = async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await fetch(`${API_BASE}/api/upload-image`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-      },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to upload image');
-    }
-
-    const result = await response.json();
-    return result.url; // Returns something like "/static/images/filename.jpg"
+  const getAuthToken = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem("token");
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid File",
-        description: "Please select an image file.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Validate file size (5MB limit)
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File Too Large",
-        description: "Please select an image smaller than 5MB.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsUploading(true);
+    setImagePreview(URL.createObjectURL(file));
+    const token = getAuthToken();
+    if (!token) {
+      toast({ title: "Authentication Error", variant: "destructive" });
+      setIsUploading(false);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
 
     try {
-      // Show immediate preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setImagePreview(result);
-        setImageError(false);
-      };
-      reader.readAsDataURL(file);
-
-      // Upload to server
-      const uploadedUrl = await uploadImageToServer(file);
-      const fullUrl = uploadedUrl.startsWith('http') ? uploadedUrl : `${API_BASE}${uploadedUrl}`;
-      
-      setImageUrl(fullUrl);
-      
-      toast({
-        title: "Image Uploaded",
-        description: "Image uploaded successfully. Click Save to apply changes.",
+      const response = await fetch(`${API_BASE}/api/upload-image`, {
+        method: 'POST',
+        headers: { "Authorization": `Bearer ${token}` },
+        body: formData,
       });
+      if (!response.ok) throw new Error("Upload failed");
+      const result = await response.json();
+      setImageUrl(result.url);
+      toast({ title: "Image Uploaded", description: "Click 'Save changes' to apply." });
     } catch (error) {
-      console.error("Error uploading image:", error);
-      toast({
-        title: "Upload Failed",
-        description: "Failed to upload image. Please try again.",
-        variant: "destructive",
-      });
-      // Revert preview on error
-      setImagePreview(imageUrl);
+      toast({ title: "Upload Failed", variant: "destructive" });
+      setImagePreview(ingredient?.image_url || '');
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleSave = async () => {
+    const token = getAuthToken();
+    if (!token) {
+      toast({ title: "Authentication Error", variant: "destructive" });
+      return;
+    }
+
+    const payload = {
+      name,
+      quantity: Number(quantity),
+      unit: 'L', // Always save the unit as Liters
+      image_url: imageUrl.startsWith(API_BASE) ? imageUrl.substring(API_BASE.length) : imageUrl,
+    };
+
+    const url = isEditMode ? `${API_BASE}/api/ingredients/${ingredient.id}` : `${API_BASE}/api/ingredients`;
+    const method = isEditMode ? "PATCH" : "POST";
+
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error(`Failed to ${isEditMode ? 'update' : 'create'} ingredient`);
+
+      const savedData = await res.json();
+      onSave(savedData);
+      setIsOpen(false);
+      toast({ title: "Success", description: `Ingredient ${isEditMode ? 'updated' : 'created'} successfully.` });
+    } catch (error) {
+      toast({ title: "Error", description: "Could not save ingredient.", variant: "destructive" });
+    }
+  };
+
+  const handleImageClick = () => fileInputRef.current?.click();
+
+  const handleStep = (amount: number) => {
+    const currentQty = Number(quantity) || 0;
+    const newQty = Math.max(0, currentQty + amount);
+    setQuantity(parseFloat(newQty.toFixed(3)));
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="font-headline">Edit Ingredient</DialogTitle>
-          <DialogDescription>
-            Update the details for this ingredient. Changes are saved to the database.
-          </DialogDescription>
+          <DialogTitle className="font-headline">{isEditMode ? "Edit Ingredient" : "Add New Ingredient"}</DialogTitle>
+          <DialogDescription>Manage the ingredient's details. All quantities are in Liters (L).</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-6 py-4">
           <div className="space-y-2">
             <Label htmlFor="name">Ingredient Name</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="quantity">
-              Total Quantity Used ({isLiquidInMl ? "L" : ingredient?.unit})
-            </Label>
-            <Input
-              id="quantity"
-              type="number"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-            />
+            <Label htmlFor="quantity">Quantity (Liters)</Label>
+            <div className="flex items-center">
+              <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => handleStep(-0.1)}><Minus className="h-4 w-4" /></Button>
+              <Input
+                id="quantity"
+                type="number"
+                step="0.1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                className="text-center rounded-none border-l-0 border-r-0"
+              />
+              <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => handleStep(0.1)}><Plus className="h-4 w-4" /></Button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label>Image</Label>
-            <div 
-              className="w-full cursor-pointer relative" 
-              onClick={handleImageClick}
-            >
+            <div className="w-24 h-24 cursor-pointer relative group rounded-md" onClick={handleImageClick}>
               <Image
-                src={
-                  imageError
-                    ? "https://placehold.co/64x64/EEE/31343C?text=Click"
-                    : imagePreview
-                }
-                alt="Click to upload"
-                width={64}
-                height={64}
-                className="rounded-md object-cover aspect-square"
-                onError={() => setImageError(true)}
-                onLoad={() => setImageError(false)}
-                unoptimized
+                src={imagePreview}
+                alt="Ingredient"
+                fill
+                className="rounded-md object-cover"
+                onError={() => setImagePreview("https://placehold.co/64x64/EEE/31343C?text=No+Image")}
               />
+              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 flex items-center justify-center transition-all duration-300 rounded-md">
+                <p className="text-white text-xs text-center opacity-0 group-hover:opacity-100">Change</p>
+              </div>
               {isUploading && (
-                <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-md">
-                  <div className="text-white text-xs">Uploading...</div>
+                <div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center rounded-md">
+                  <p className="text-white text-xs">Uploading...</p>
                 </div>
               )}
             </div>
@@ -254,17 +201,12 @@ export function IngredientDialog({
               accept="image/*"
               disabled={isUploading}
             />
-            <p className="text-xs text-muted-foreground">
-              Click image to upload. Max 5MB. Supports JPG, PNG, GIF.
-            </p>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setIsOpen(false)}>
-            Cancel
-          </Button>
+          <Button variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
           <Button onClick={handleSave} disabled={isUploading}>
-            {isUploading ? "Uploading..." : "Save changes"}
+            {isUploading ? "Uploading..." : "Save Changes"}
           </Button>
         </DialogFooter>
       </DialogContent>
