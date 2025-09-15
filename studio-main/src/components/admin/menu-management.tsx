@@ -306,7 +306,7 @@ export function MenuManagement() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      ${item.price.toFixed(2)}
+                      ₹{item.price.toFixed(0)}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <div className="flex flex-wrap gap-1 max-w-48">

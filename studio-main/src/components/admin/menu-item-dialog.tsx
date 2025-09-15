@@ -51,9 +51,9 @@ export function MenuItemDialog({
       setDescription(item.description || '');
       setCategory(item.category || 'hot');
       setIsAvailable(item.is_available);
-      setImageUrl(item.imageUrl || item.imageUrl || '');
+      setImageUrl(item.imageUrl || '');
       setIngredients(item.ingredients || []);
-      setImagePreview(item.imageUrl || item.imageUrl || '');
+      setImagePreview(item.imageUrl || '');
       setImageFile(null);
     } else {
       // Reset for new item
@@ -73,67 +73,52 @@ export function MenuItemDialog({
     const file = e.target.files?.[0];
     if (file) {
       setImageFile(file);
+      // Create preview URL
       const previewUrl = URL.createObjectURL(file);
       setImagePreview(previewUrl);
-      setImageUrl(''); 
+      setImageUrl(''); // Clear URL input when file is selected
     }
   };
 
   const handleUrlChange = (url: string) => {
     setImageUrl(url);
     setImagePreview(url);
-    setImageFile(null);
+    setImageFile(null); // Clear file when URL is entered
   };
 
   const handleSave = () => {
-    const newItemData: Omit<MenuItem, 'id' | 'image_url'> = {
+    const newItem: MenuItem & { imageFile?: File } = {
+      id: item?.id || '',
       name,
       price,
       description,
       category,
       is_available: isAvailable,
-      // Filter out ingredients without a name before saving
-      ingredients: ingredients.filter(ing => ing.name.trim() !== ''),
-      imageUrl: imageFile ? '' : imageUrl,
+      ingredients,
+      imageUrl: imageFile ? '' : imageUrl, // Don't pass URL if file is selected
     };
-  
-    const finalItem: MenuItem & { imageFile?: File } = {
-      ...newItemData,
-      id: item?.id || '', // Use existing ID or empty for new item
-      imageUrl: newItemData.imageUrl || null,
-    };
-  
+
     if (imageFile) {
-      finalItem.imageFile = imageFile;
+      newItem.imageFile = imageFile;
     }
-  
-    onSave(finalItem);
+
+    onSave(newItem);
   };
 
   const handleIngredientChange = (index: number, field: keyof Ingredient, value: string | number) => {
     const newIngredients = [...ingredients];
-    const ingredientToUpdate = { ...newIngredients[index] };
-
     if (field === 'quantity') {
-        ingredientToUpdate[field] = Number(value) || 0;
+      newIngredients[index][field] = Number(value);
+    } else if (field === 'unit') {
+      newIngredients[index][field] = value as Ingredient['unit'];
     } else {
-        (ingredientToUpdate[field] as any) = value;
+      newIngredients[index][field] = value as string;
     }
-    
-    newIngredients[index] = ingredientToUpdate;
     setIngredients(newIngredients);
   };
 
   const addIngredient = () => {
-    // [THE FIX] Create a new ingredient object without an ID.
-    // We add a temporary client-side key for React's rendering purposes.
-    const newIngredient: Ingredient = { 
-        id: undefined, // Explicitly undefined as it's not from the DB
-        name: '', 
-        quantity: 0, 
-        unit: 'g' 
-    };
-    setIngredients([...ingredients, newIngredient]);
+    setIngredients([...ingredients, { name: '', quantity: 0, unit: 'g' }]);
   };
 
   const removeIngredient = (index: number) => {
@@ -158,25 +143,48 @@ export function MenuItemDialog({
           </DialogTitle>
           <DialogDescription>
             {item ? 'Make changes to the item details.' : 'Add a new item to your menu.'}
-            Click save when you are done.
+            Click save when you're done.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
+          {/* Name + Price */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">Name *</Label>
-              <Input id="name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Cappuccino" />
+              <Input
+                id="name"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="e.g., Cappuccino"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="price">Price *</Label>
-              <Input id="price" type="number" step="0.01" value={price} onChange={e => setPrice(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+              <Input
+                id="price"
+                type="number"
+                step="0.01"
+                value={price}
+                onChange={e => setPrice(parseFloat(e.target.value) || 0)}
+                placeholder="0.00"
+              />
             </div>
           </div>
+
+          {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
-            <Textarea id="description" value={description} onChange={e => setDescription(e.target.value)} placeholder="Brief description..." rows={3} />
+            <Textarea
+              id="description"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Brief description..."
+              rows={3}
+            />
           </div>
+
+          {/* Category + Availability */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="category">Category</Label>
@@ -185,47 +193,109 @@ export function MenuItemDialog({
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map(cat => <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>)}
+                  {categories.map(cat => (
+                    <SelectItem key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="flex items-center space-x-2 pt-8">
-              <Checkbox id="available" checked={isAvailable} onCheckedChange={(checked) => setIsAvailable(checked as boolean)} />
+              <Checkbox
+                id="available"
+                checked={isAvailable}
+                onCheckedChange={(checked) => setIsAvailable(checked as boolean)}
+              />
               <Label htmlFor="available">Available</Label>
             </div>
           </div>
+
+          {/* Image Upload Section */}
           <div className="space-y-4">
             <Label>Image</Label>
+            
+            {/* File Upload */}
             <div className="space-y-2">
-              <Label htmlFor="imageFile" className="text-sm text-muted-foreground">Upload Image File</Label>
+              <Label htmlFor="imageFile" className="text-sm text-muted-foreground">
+                Upload Image File
+              </Label>
               <div className="flex items-center gap-2">
-                <Input id="imageFile" type="file" accept="image/*" onChange={handleFileChange} className="flex-1" />
+                <Input
+                  id="imageFile"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="flex-1"
+                />
                 <Upload className="h-4 w-4 text-muted-foreground" />
               </div>
             </div>
+
+            {/* OR URL Input */}
             <div className="space-y-2">
-              <Label htmlFor="imageUrl" className="text-sm text-muted-foreground">Or Enter Image URL</Label>
-              <Input id="imageUrl" value={imageUrl} onChange={e => handleUrlChange(e.target.value)} placeholder="https://example.com/image.jpg" disabled={!!imageFile} />
+              <Label htmlFor="imageUrl" className="text-sm text-muted-foreground">
+                Or Enter Image URL
+              </Label>
+              <Input
+                id="imageUrl"
+                value={imageUrl}
+                onChange={e => handleUrlChange(e.target.value)}
+                placeholder="e.g., https://example.com/image.jpg"
+                disabled={!!imageFile}
+              />
             </div>
+
+            {/* Image Preview */}
             {imagePreview && (
               <div className="space-y-2">
                 <Label className="text-sm text-muted-foreground">Preview</Label>
                 <div className="relative w-full h-48 border rounded-md overflow-hidden bg-muted">
-                  <Image src={imagePreview} alt="Preview" fill sizes="300px" className="object-contain" onError={() => { setImagePreview(''); setImageUrl(''); }} />
+                  <Image
+                    src={imagePreview}
+                    alt="Preview"
+                    fill
+                    sizes="300px"
+                    className="object-contain"
+                    onError={() => {
+                      setImagePreview('');
+                      setImageUrl('');
+                    }}
+                  />
                 </div>
               </div>
             )}
           </div>
+
+          {/* Ingredients */}
           {showIngredients && (
             <div className="space-y-2">
               <Label>Ingredients</Label>
-              <div className="space-y-2 max-h-40 overflow-y-auto p-1">
+              <div className="space-y-2 max-h-40 overflow-y-auto">
                 {ingredients.map((ing, index) => (
-                  <div key={ing.id || `new-${index}`} className="flex items-center gap-2">
-                    <Input placeholder="Ingredient name" value={ing.name} onChange={(e) => handleIngredientChange(index, 'name', e.target.value)} className="flex-1" />
-                    <Input type="number" placeholder="Qty" value={ing.quantity} onChange={(e) => handleIngredientChange(index, 'quantity', e.target.value)} className="w-20" min="0" step="0.1" />
-                    <Select value={ing.unit} onValueChange={(value) => handleIngredientChange(index, 'unit', value)}>
-                      <SelectTrigger className="w-24"><SelectValue placeholder="Unit" /></SelectTrigger>
+                  <div key={index} className="flex items-center gap-2">
+                    <Input
+                      placeholder="Ingredient name"
+                      value={ing.name}
+                      onChange={(e) => handleIngredientChange(index, 'name', e.target.value)}
+                      className="flex-1"
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Qty"
+                      value={ing.quantity}
+                      onChange={(e) => handleIngredientChange(index, 'quantity', e.target.value)}
+                      className="w-20"
+                      min="0"
+                      step="0.1"
+                    />
+                    <Select
+                      value={ing.unit}
+                      onValueChange={(value) => handleIngredientChange(index, 'unit', value)}
+                    >
+                      <SelectTrigger className="w-24">
+                        <SelectValue placeholder="Unit" />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="g">g</SelectItem>
                         <SelectItem value="ml">ml</SelectItem>
@@ -233,12 +303,22 @@ export function MenuItemDialog({
                         <SelectItem value="pumps">pumps</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button variant="ghost" size="icon" onClick={() => removeIngredient(index)} type="button">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeIngredient(index)}
+                      type="button"
+                    >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
                 ))}
-                <Button variant="outline" size="sm" onClick={addIngredient} type="button">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={addIngredient}
+                  type="button"
+                >
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add Ingredient
                 </Button>
@@ -248,8 +328,13 @@ export function MenuItemDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
-          <Button onClick={handleSave} disabled={!name.trim() || price <= 0}>
+          <Button variant="outline" onClick={() => setIsOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!name.trim() || price <= 0}
+          >
             {item ? 'Update Item' : 'Add Item'}
           </Button>
         </DialogFooter>

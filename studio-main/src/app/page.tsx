@@ -1,11 +1,55 @@
+'use client';
+
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Coffee } from 'lucide-react';
+import { MenuCard } from '@/components/menu-card';
+import { Coffee, Loader2 } from 'lucide-react';
+import type { MenuItem } from '@/lib/types';
 import { getMenuItems } from '@/lib/menu-service';
-import { MainPageMenu } from '@/components/main-page-menu'; // Import the new component
+import { useEffect, useState } from 'react';
 
-export default async function Home() {
-  const menuItems = await getMenuItems();
+const IMAGE_SERVER_BASE_URL = process.env.NEXT_PUBLIC_API_SERVER_URL || 'http://localhost:8000';
+
+export default function Home() {
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchMenuItems = async () => {
+      try {
+        setLoading(true);
+        const items = await getMenuItems();
+        
+        // Apply the same image URL transformation as in menu-management.tsx
+        const transformedItems = items.map((item: any) => {
+          let finalImageUrl;
+          if (item.image_url) {
+            if (item.image_url.startsWith('http')) {
+              finalImageUrl = item.image_url;
+            } else {
+              finalImageUrl = `${IMAGE_SERVER_BASE_URL}${item.image_url}`;
+            }
+          }
+          return {
+            ...item,
+            imageUrl: finalImageUrl,
+          };
+        });
+        
+        // Filter to show only available items on the public page
+        const availableItems = transformedItems.filter((item: MenuItem) => item.is_available);
+        setMenuItems(availableItems);
+      } catch (err) {
+        console.error('Failed to fetch menu items:', err);
+        setError('Failed to load menu items');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMenuItems();
+  }, []);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -43,8 +87,34 @@ export default async function Home() {
         </section>
 
         <section className="w-full py-12 bg-muted/40">
-          {/* Use the new interactive component here */}
-          <MainPageMenu initialItems={menuItems} />
+          <div className="container px-4 md:px-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin mr-2" />
+                <span>Loading our delicious menu...</span>
+              </div>
+            ) : error ? (
+              <div className="text-center py-12">
+                <p className="text-destructive mb-4">{error}</p>
+                <Button 
+                  onClick={() => window.location.reload()} 
+                  variant="outline"
+                >
+                  Try Again
+                </Button>
+              </div>
+            ) : menuItems.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">No menu items available at the moment.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {menuItems.map((item) => (
+                  <MenuCard key={item.id} item={item} />
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       </main>
       <footer className="flex flex-col gap-2 sm:flex-row py-6 w-full shrink-0 items-center px-4 md:px-6 border-t">
