@@ -8,11 +8,17 @@ import { MenuManagement } from "./menu-management";
 import { Sheet, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DailySalesBreakdown } from "./daily-sales-breakdown";
-import { IngredientUsage } from "./ingredient-usage";
+// [THE FIX] Import the new, powerful DailyExpenses component
+import { DailyExpenses } from "./daily-expenses"; 
 import { resetDailySales } from "@/lib/sales-service";
 
 export function DashboardClient() {
     const { toast } = useToast();
+
+    // [THE FIX] Placeholder data for the new component.
+    // You will need to replace these with the actual logged-in user's role and selected branch.
+    const userRole = "admin"; // Example: "admin" or "staff"
+    const selectedBranchId = 1; // Example: 1 for the main branch
 
     const handleEndOfDay = async () => {
         toast({
@@ -26,8 +32,7 @@ export function DashboardClient() {
                 title: "End of Day Complete!",
                 description: "Daily sales have been reset.",
             });
-            // Optionally, refresh the data in the components
-             window.location.reload();
+            window.location.reload();
         } catch (error) {
             console.error("End of day process failed:", error);
             toast({
@@ -38,14 +43,14 @@ export function DashboardClient() {
         }
     };
 
-
     return (
         <Tabs defaultValue="dashboard">
             <div className="flex items-center">
                 <TabsList>
                     <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                     <TabsTrigger value="menu">Menu Management</TabsTrigger>
-                    <TabsTrigger value="ingredients">Ingredient Usage</TabsTrigger>
+                    {/* [THE FIX] Updated tab trigger to match the new component */}
+                    <TabsTrigger value="expenses">Daily Expenses</TabsTrigger>
                     <TabsTrigger value="reports">Reports</TabsTrigger>
                 </TabsList>
                 <div className="ml-auto flex items-center gap-2">
@@ -86,12 +91,13 @@ export function DashboardClient() {
             <TabsContent value="menu">
                 <MenuManagement />
             </TabsContent>
-            <TabsContent value="ingredients">
-                <IngredientUsage />
+            {/* [THE FIX] Updated tab content to use the new component and pass the required props */}
+            <TabsContent value="expenses">
+                <DailyExpenses selectedBranchId={selectedBranchId} userRole={userRole} />
             </TabsContent>
             <TabsContent value="reports">
                 <SalesSummary />
             </TabsContent>
         </Tabs>
-    )
+    );
 }

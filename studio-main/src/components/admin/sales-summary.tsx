@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Package, DollarSign } from 'lucide-react';
+import { Package, IndianRupee } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -13,9 +13,13 @@ interface SalesData {
   totalRevenue: number;
 }
 
+interface SalesSummaryProps {
+  selectedBranchId?: number;
+}
+
 const initialSalesData: SalesData = { totalItemsSold: 0, totalRevenue: 0 };
 
-export function SalesSummary() {
+export function SalesSummary({ selectedBranchId }: SalesSummaryProps) {
   const [daySales, setDaySales] = useState<SalesData>(initialSalesData);
   const [weekSales, setWeekSales] = useState<SalesData>(initialSalesData);
   const [monthSales, setMonthSales] = useState<SalesData>(initialSalesData);
@@ -23,19 +27,30 @@ export function SalesSummary() {
 
   const fetchSalesData = async (period: 'day' | 'week' | 'month') => {
     try {
-        const [menuItems, dailySales] = await Promise.all([getMenuItems(), getDailySales()]);
+        const token = localStorage.getItem('token');
+        const branchParam = selectedBranchId ? `?branch_id=${selectedBranchId}` : '';
+        
+        const [menuItems, dailySales] = await Promise.all([
+          fetch(`/api/menu${branchParam}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }).then(res => res.json()),
+          fetch(`/api/sales${branchParam}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }).then(res => res.json())
+        ]);
 
         let totalItemsSold = 0;
         let totalRevenue = 0;
 
-        dailySales.forEach(sale => {
-            const item = menuItems.find(i => i.id === sale.itemId);
+        dailySales.forEach((sale: any) => {
+            const item = menuItems.find((i: any) => i.id === sale.itemId);
             if (item) {
                 totalItemsSold += sale.quantity;
                 totalRevenue += sale.quantity * item.price;
             }
         });
         
+        // Simulate weekly and monthly data based on daily data
         if (period === "week") {
             totalItemsSold *= 7;
             totalRevenue *= 7;
@@ -66,14 +81,18 @@ export function SalesSummary() {
         const monthData = await fetchSalesData('month');
         setMonthSales(monthData);
     };
-    loadSales();
+    
+    if (selectedBranchId) {
+      loadSales();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedBranchId]);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
         style: 'currency',
-        currency: 'USD',
+        currency: 'INR',
+        maximumFractionDigits: 0
     }).format(amount);
   }
 
@@ -105,11 +124,11 @@ export function SalesSummary() {
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                                <IndianRupee className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold">{formatCurrency(daySales.totalRevenue)}</div>
-                                <p className="text-xs text-muted-foreground">+$20.00 from yesterday (simulated)</p>
+                                <p className="text-xs text-muted-foreground">+₹500 from yesterday (simulated)</p>
                             </CardContent>
                         </Card>
                     </div>
@@ -129,11 +148,11 @@ export function SalesSummary() {
                          <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                                <IndianRupee className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold">{formatCurrency(weekSales.totalRevenue)}</div>
-                                <p className="text-xs text-muted-foreground">+$215.50 from last week (simulated)</p>
+                                <p className="text-xs text-muted-foreground">+₹3,500 from last week (simulated)</p>
                             </CardContent>
                         </Card>
                     </div>
@@ -153,7 +172,7 @@ export function SalesSummary() {
                          <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                                <IndianRupee className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold">{formatCurrency(monthSales.totalRevenue)}</div>

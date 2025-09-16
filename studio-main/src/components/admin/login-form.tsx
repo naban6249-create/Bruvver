@@ -13,32 +13,33 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowRight } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import Cookies from "js-cookie";
 
-
 export function LoginForm() {
   const router = useRouter();
-  const [branch, setBranch] = useState("");
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!branch) {
+  const handleLogin = async () => {
+    setIsLoading(true);
+
+    const emailInput = document.getElementById('email') as HTMLInputElement;
+    const passwordInput = document.getElementById('password') as HTMLInputElement;
+    
+    const email = emailInput?.value;
+    const password = passwordInput?.value;
+
+    if (!email || !password) {
       toast({
         title: "Error",
-        description: "Please select a branch.",
+        description: "Please fill in all fields.",
         variant: "destructive",
       });
-      
+      setIsLoading(false);
       return;
-
     }
-
-    const email = (e.currentTarget.elements.namedItem('email') as HTMLInputElement).value;
-    const password = (e.currentTarget.elements.namedItem('password') as HTMLInputElement).value;
 
     try {
       const response = await fetch('/api/auth/login', {
@@ -52,9 +53,13 @@ export function LoginForm() {
         throw new Error(errorData.detail || 'Login failed. Please check your credentials.');
       }
 
-      const { access_token } = await response.json();
-      localStorage.setItem('token', access_token); // <--- CHANGE THIS KEY
-      Cookies.set("token", access_token, {        // <--- (Recommended) Also change the cookie key for consistency
+      const { access_token, user } = await response.json();
+      
+      // Store token and user info
+      localStorage.setItem('token', access_token);
+      localStorage.setItem('user', JSON.stringify(user));
+      
+      Cookies.set("token", access_token, {
         expires: 1, 
         sameSite: "Strict",
         secure: process.env.NODE_ENV === "production",
@@ -63,10 +68,15 @@ export function LoginForm() {
 
       toast({
         title: "Success",
-        description: "Login successful! Redirecting...",
+        description: `Welcome ${user.full_name || user.username}! Redirecting...`,
       });
 
-      router.push("/admin/dashboard");
+      // Redirect based on user role
+      if (user.role === "admin") {
+        router.push("/admin/dashboard");
+      } else {
+        router.push("/worker/dashboard"); // Different dashboard for workers
+      }
     } catch (error) {
       console.error(error);
       toast({
@@ -74,48 +84,54 @@ export function LoginForm() {
         description: (error as Error).message,
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <Card className="w-full max-w-sm">
-        <form onSubmit={handleLogin}>
-            <CardHeader>
-                <CardTitle className="text-2xl font-headline">Admin Login</CardTitle>
-                <CardDescription>
-                Enter your credentials and select a branch to access the dashboard.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-                <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="m@example.com" defaultValue="admin@test.com" required />
-                </div>
-                <div className="grid gap-2">
-                <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" defaultValue="testpassword" required />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="branch">Branch</Label>
-                   <Select onValueChange={setBranch} required>
-                    <SelectTrigger id="branch">
-                      <SelectValue placeholder="Select a branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="coimbatore">Coimbatore</SelectItem>
-                      <SelectItem value="bangalore">Bangalore</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-            </CardContent>
-            <CardFooter>
-                <Button className="w-full" type="submit">
-                    Sign in
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-            </CardFooter>
-      </form>
-    </Card>
+        <CardHeader>
+          <CardTitle className="text-2xl font-headline">Login</CardTitle>
+          <CardDescription>
+            Enter your credentials to access the system.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="email">Email</Label>
+            <Input 
+              id="email" 
+              type="email" 
+              placeholder="your.email@example.com" 
+              defaultValue="admin@test.com" 
+              required 
+              disabled={isLoading}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="password">Password</Label>
+            <Input 
+              id="password" 
+              type="password" 
+              defaultValue="testpassword" 
+              required 
+              disabled={isLoading}
+            />
+          </div>
+        </CardContent>
+        <CardFooter>
+          <Button className="w-full" onClick={handleLogin} disabled={isLoading}>
+            {isLoading ? (
+              "Signing in..."
+            ) : (
+              <>
+                Sign in
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        </CardFooter>
+      </Card>
   );
 }
-

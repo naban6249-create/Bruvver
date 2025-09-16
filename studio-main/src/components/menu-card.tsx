@@ -11,6 +11,14 @@ export function MenuCard({ item }: MenuCardProps) {
   const imageUrl = item.imageUrl || 
     (item.image_path ? `http://127.0.0.1:8000${item.image_path}` : '/images/Screenshot-2025-09-02-072706.png');
   
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    }).format(price);
+  };
+  
   return (
     <Card className="flex flex-col overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group">
       <CardHeader className="p-0">
@@ -29,7 +37,7 @@ export function MenuCard({ item }: MenuCardProps) {
           {/* Price badge overlay */}
           <div className="absolute top-2 right-2">
             <Badge className="bg-primary text-primary-foreground font-semibold text-sm">
-              ${item.price.toFixed(2)}
+              {formatPrice(item.price)}
             </Badge>
           </div>
           {/* Category badge */}
@@ -74,7 +82,7 @@ export function MenuCard({ item }: MenuCardProps) {
       <CardFooter className="px-6 pt-0">
         <div className="w-full flex justify-between items-center">
           <div className="text-lg font-semibold text-primary">
-            ₹{item.price.toFixed(0)}
+            {formatPrice(item.price)}
           </div>
           <div className="text-sm text-muted-foreground">
             {item.is_available ? (

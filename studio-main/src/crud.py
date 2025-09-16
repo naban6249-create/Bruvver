@@ -4,7 +4,7 @@ from sqlalchemy import func, and_, or_
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 
-from models import MenuItem, Ingredient, DailySale, Admin, Order, OrderItem, Inventory, StockMovement
+from models import MenuItem, Ingredient, DailySale, Admin, Order, OrderItem, Inventory
 from schemas import (
     MenuItemCreate, MenuItemUpdate, DailySaleCreate, OrderCreate, InventoryCreate, AdminCreate
 )
