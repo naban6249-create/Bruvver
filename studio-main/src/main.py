@@ -37,8 +37,9 @@ from schemas import (
     DashboardSummary, IngredientResponse, IngredientUpdate,
     BranchResponse, BranchCreate, BranchUpdate,
     DailyExpenseResponse, DailyExpenseCreate, DailyExpenseUpdate,
-    ExpenseCategoryResponse
+    ExpenseCategoryResponse, QuickExpenseCreate
 )
+from sqlalchemy import func, and_
 
 from auth import (
     authenticate_user, create_access_token, get_current_active_user,
@@ -335,6 +336,70 @@ async def create_expense(
     db.commit()
     db.refresh(db_expense)
     return db_expense
+@app.post("/api/expenses/quick-add", response_model=DailyExpenseResponse)
+async def quick_add_expense(
+    expense_data: QuickExpenseCreate,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """
+    A simplified endpoint for workers to add common expenses
+    like milk or water. It automatically looks up the cost
+    from inventory and assigns a category.
+    """
+    logger.info(f"Quick expense add received for item: {expense_data.item_name}")
+    
+    # 1. Find the inventory item to get its cost
+    # We assume an inventory item exists with the same name (e.g., "Milk")
+    inventory_item = db.query(InventoryModel).filter(
+        func.lower(InventoryModel.item_name) == func.lower(expense_data.item_name),
+        InventoryModel.branch_id == expense_data.branch_id
+    ).first()
+    
+    unit_cost = 0.0
+    if inventory_item and inventory_item.cost_per_unit:
+        unit_cost = inventory_item.cost_per_unit
+    else:
+        logger.warning(f"No inventory item or cost found for '{expense_data.item_name}'. Defaulting cost to 0.")
+
+    # 2. Determine category based on item name
+    category_name = "Other"
+    if "milk" in expense_data.item_name.lower():
+        category_name = "Dairy"
+    elif "water" in expense_data.item_name.lower():
+        category_name = "Utilities"
+        
+    category_obj = db.query(ExpenseCategory).filter(ExpenseCategory.name == category_name).first()
+
+    # 3. Create the full DailyExpense object
+    total_amount = unit_cost * expense_data.quantity
+    
+    db_expense = DailyExpense(
+        item_name=expense_data.item_name,
+        quantity=expense_data.quantity,
+        unit=expense_data.unit,
+        unit_cost=unit_cost,
+        total_amount=total_amount,
+        branch_id=expense_data.branch_id,
+        category=category_name,
+        category_id=category_obj.id if category_obj else None,
+        expense_date=expense_data.expense_date or datetime.utcnow(),
+        created_by=current_user.id
+    )
+    
+    db.add(db_expense)
+    
+    # 4. Optional: Update inventory stock (deduct what was used)
+    if inventory_item:
+        inventory_item.current_stock = (inventory_item.current_stock or 0) - expense_data.quantity
+        inventory_item.updated_at = datetime.utcnow()
+        db.add(inventory_item)
+    
+    db.commit()
+    db.refresh(db_expense)
+    
+    logger.info(f"Successfully created quick expense ID: {db_expense.id}")
+    return db_expense
 
 @app.put("/api/expenses/{expense_id}", response_model=DailyExpenseResponse)
 async def update_expense(
@@ -441,21 +506,30 @@ async def get_expense_categories(
 # ENHANCED AUTH (login returning user data)
 # -------------------------
 @app.post("/api/auth/login", response_model=Token)
-async def login_admin_enhanced(credentials: AdminLogin, db: Session = Depends(get_database)):
-    """Admin/Worker login with JWT token and role-based routing"""
-    admin = authenticate_user(db, credentials.username, credentials.password)
+async def login_admin_enhanced(
+    form_data: AdminLogin,
+    db: Session = Depends(get_database)
+):
+    """
+    Enhanced login endpoint that provides a JWT token.
+    It returns the token and full admin details upon successful authentication.
+    """
+    logger.info(f"Login attempt for user: {form_data.username}")
+    admin = authenticate_user(
+        db,
+        username=form_data.username,
+        password=form_data.password
+    )
     if not admin:
+        logger.warning(f"Failed login for user: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    # Update last login
-    admin.last_login = datetime.utcnow()
-    db.commit()
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(data={"sub": admin.username}, expires_delta=access_token_expires)
-    # Include user details
+
+    # Create the user data payload for the token
+    # This must match the schemas.AdminResponse model
     user_data = {
         "id": admin.id,
         "username": admin.username,
@@ -463,13 +537,20 @@ async def login_admin_enhanced(credentials: AdminLogin, db: Session = Depends(ge
         "full_name": admin.full_name,
         "role": admin.role.value if hasattr(admin.role, 'value') else getattr(admin, 'role', 'admin'),
         "branch_id": getattr(admin, 'branch_id', None),
-        "is_active": admin.is_active
+        "is_active": admin.is_active,
+        "is_superuser": admin.is_superuser,  # <-- FIX: ADDED THIS LINE
+        "created_at": admin.created_at      # <-- FIX: ADDED THIS LINE
     }
-    if hasattr(admin, 'branch_id') and admin.branch_id:
-        branch = db.query(Branch).filter(Branch.id == admin.branch_id).first()
-        if branch:
-            user_data["branch"] = {"id": branch.id, "name": branch.name, "location": branch.location}
-    return {"access_token": access_token, "token_type": "bearer", "user": user_data}
+
+    # Create the access token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": admin.username, "role": user_data["role"]},
+        expires_delta=access_token_expires
+    )
+
+    logger.info(f"Successful login for user: {admin.username}")
+    return Token(access_token=access_token, token_type="bearer", user=user_data)
 
 # -------------------------
 # IMAGE UPLOAD (validated)

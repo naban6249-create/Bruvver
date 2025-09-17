@@ -1,3 +1,4 @@
+// src/components/admin/worker_dashboard.tsx
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -7,15 +8,17 @@ import { Button } from "@/components/ui/button";
 import { 
   Package, 
   IndianRupee, 
-  Receipt, 
   TrendingUp, 
   Calendar,
   User,
-  LogOut
+  LogOut,
+  Building
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { DailyExpenses } from './daily-expenses';
+// --- MODIFICATION ---
+// We REMOVE the old DailyExpenses and import the new one
+import { SimpleExpenseTracker } from '../../../components/admin/simple-expense-tracker';
 
 interface User {
   id: number;
@@ -23,11 +26,11 @@ interface User {
   full_name: string;
   role: string;
   branch_id: number;
-  branch: {
+  branch?: {
     id: number;
     name: string;
     location: string;
-  };
+  } | null;
 }
 
 interface SalesData {
@@ -74,18 +77,41 @@ export function WorkerDashboard() {
 
       const user = JSON.parse(userStr);
       
-      // Verify user is worker
       if (user.role !== 'worker') {
         router.push('/admin/dashboard');
         return;
       }
 
-      setCurrentUser(user);
+      // If branch data is missing, fetch it from the API
+      if (!user.branch && user.branch_id) {
+        await fetchUserWithBranch(token);
+      } else {
+        setCurrentUser(user);
+      }
     } catch (error) {
       console.error('Error initializing dashboard:', error);
       router.push('/login');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchUserWithBranch = async (token: string) => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setCurrentUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+      } else {
+        throw new Error('Failed to fetch user data');
+      }
+    } catch (error) {
+      console.error('Error fetching user with branch:', error);
+      router.push('/login');
     }
   };
 
@@ -151,6 +177,13 @@ export function WorkerDashboard() {
   if (!currentUser) {
     return null;
   }
+  
+  const getBranchName = () => {
+    if (currentUser?.branch?.name) {
+      return currentUser.branch.name;
+    }
+    return `Branch ${currentUser?.branch_id || 'Unknown'}`;
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -160,11 +193,10 @@ export function WorkerDashboard() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
               <h1 className="text-2xl font-bold text-gray-900">Worker Dashboard</h1>
-              {currentUser.branch && (
-                <Badge variant="secondary" className="text-sm">
-                  {currentUser.branch.name}
-                </Badge>
-              )}
+              <Badge variant="secondary" className="text-sm">
+                <Building className="h-4 w-4 mr-2"/>
+                {getBranchName()}
+              </Badge>
             </div>
             
             <div className="flex items-center space-x-4">
@@ -276,61 +308,18 @@ export function WorkerDashboard() {
             </Card>
           </div>
 
-          {/* Daily Expenses Section */}
+          {/* --- MODIFICATION --- */}
+          {/* Daily Expenses Section - NOW USES THE NEW COMPONENT */}
           {currentUser.branch_id && (
             <div className="mb-8">
-              <DailyExpenses 
-                selectedBranchId={currentUser.branch_id} 
-                userRole={currentUser.role}
+              <SimpleExpenseTracker 
+                branchId={currentUser.branch_id} 
               />
             </div>
           )}
 
-          {/* Quick Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card>
-              <CardContent className="p-6 text-center">
-                <Receipt className="h-8 w-8 mx-auto mb-2 text-blue-600" />
-                <p className="text-sm font-medium text-gray-600">Branch</p>
-                <p className="text-lg font-semibold">{currentUser.branch.name}</p>
-                {currentUser.branch.location && (
-                  <p className="text-xs text-gray-500">{currentUser.branch.location}</p>
-                )}
-              </CardContent>
-            </Card>
+          {/* REMOVED Quick Stats and Help Section */}
 
-            <Card>
-              <CardContent className="p-6 text-center">
-                <User className="h-8 w-8 mx-auto mb-2 text-green-600" />
-                <p className="text-sm font-medium text-gray-600">Role</p>
-                <p className="text-lg font-semibold capitalize">{currentUser.role}</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6 text-center">
-                <Calendar className="h-8 w-8 mx-auto mb-2 text-purple-600" />
-                <p className="text-sm font-medium text-gray-600">Today's Date</p>
-                <p className="text-lg font-semibold">
-                  {new Date().toLocaleDateString('en-IN')}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Help Section */}
-          <Card className="mt-8 bg-blue-50 border-blue-200">
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-blue-900 mb-2">Worker Instructions</h3>
-              <ul className="text-sm text-blue-800 space-y-1">
-                <li>• Record all daily expenses for your branch</li>
-                <li>• Monitor sales performance throughout the day</li>
-                <li>• Use the date selector to view historical data</li>
-                <li>• Contact your manager for any issues or questions</li>
-                <li>• Ensure all receipts are properly documented</li>
-              </ul>
-            </CardContent>
-          </Card>
         </div>
       </main>
     </div>

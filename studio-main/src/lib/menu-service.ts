@@ -18,6 +18,7 @@ async function getAuthToken(): Promise<string | null> {
   try {
     const cookieStore = await cookies();
     const token =
+      cookieStore.get('token')?.value || // <-- ADD THIS LINE
       cookieStore.get('authToken')?.value ||
       cookieStore.get('access_token')?.value ||
       cookieStore.get('jwt')?.value;

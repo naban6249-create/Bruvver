@@ -20,7 +20,7 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # -----------------------
@@ -120,6 +120,12 @@ class DailyExpenseResponse(DailyExpenseBase):
 
     class Config:
         from_attributes = True
+class QuickExpenseCreate(BaseModel):
+    item_name: str
+    quantity: float
+    unit: str
+    branch_id: int
+    expense_date: Optional[datetime] = None
 
 
 # -----------------------
