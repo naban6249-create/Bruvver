@@ -10,8 +10,8 @@ import os
 from dotenv import load_dotenv
 
 from database import get_database
-from models import Admin
-from schemas import TokenData, Token, AdminResponse
+from models import Admin, UserBranchPermission
+from schemas import TokenData, Token, AdminResponse, PermissionLevel
 
 load_dotenv()
 
@@ -88,3 +88,26 @@ async def get_current_active_user(current_user: Admin = Depends(get_current_user
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+async def check_branch_permission(
+    branch_id: int,
+    required_permission: PermissionLevel = PermissionLevel.VIEW_ONLY,
+    current_user: Admin = Depends(get_current_active_user),
+    db: Session = Depends(get_database)
+):
+    """Check if user has required permission for specific branch"""
+    if current_user.role == "admin":
+        return True  # Admins have access to all branches
+    
+    permission = db.query(UserBranchPermission).filter(
+        UserBranchPermission.user_id == current_user.id,
+        UserBranchPermission.branch_id == branch_id
+    ).first()
+    
+    if not permission:
+        raise HTTPException(status_code=403, detail="No access to this branch")
+    
+    if required_permission == PermissionLevel.FULL_ACCESS and permission.permission_level != PermissionLevel.FULL_ACCESS:
+        raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
+    
+    return True

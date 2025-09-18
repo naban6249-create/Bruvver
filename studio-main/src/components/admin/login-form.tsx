@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,77 +13,73 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowRight } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import Cookies from "js-cookie";
+import { useAuth } from "@/lib/auth-context";
+import { loginUser } from "@/lib/auth-service";
+
+type Role = "admin" | "worker";
 
 export function LoginForm() {
   const router = useRouter();
+  const { setUser } = useAuth();
   const { toast } = useToast();
+  
+  const [role, setRole] = useState<Role>("admin");
+  const [email, setEmail] = useState("admin@test.com");
+  const [password, setPassword] = useState("admin123");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async () => {
+  const handleRoleChange = (selectedRole: Role) => {
+    setRole(selectedRole);
+    if (selectedRole === "admin") {
+      setEmail("admin@test.com");
+      setPassword("admin123");
+    } else {
+      setEmail("worker_cbe@test.com");
+      setPassword("worker123");
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setIsLoading(true);
 
-    const emailInput = document.getElementById('email') as HTMLInputElement;
-    const passwordInput = document.getElementById('password') as HTMLInputElement;
-    
-    const email = emailInput?.value;
-    const password = passwordInput?.value;
-
-    if (!email || !password) {
-      toast({
-        title: "Error",
-        description: "Please fill in all fields.",
-        variant: "destructive",
-      });
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: email, password: password }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Login failed. Please check your credentials.');
+      const userData = await loginUser(email, password);
+      
+      if (!userData) {
+        toast({
+          title: "Login Failed",
+          description: "Invalid email or password",
+          variant: "destructive"
+        });
+        return;
       }
 
-      const { access_token, user } = await response.json();
-      
-      // Store token and user info
-      localStorage.setItem('token', access_token);
-      localStorage.setItem('user', JSON.stringify(user));
-      
-      Cookies.set("token", access_token, {
-        expires: 1, 
-        sameSite: "Strict",
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
-      });
+      // Store user in context
+      setUser(userData);
+
+      // Redirect based on role
+      if (userData.role === 'admin') {
+        router.push('/admin/dashboard?role=admin');
+      } else {
+        // For workers, redirect to dashboard - branch selection will be handled by AdminHeader
+        router.push('/admin/dashboard?role=worker');
+      }
 
       toast({
-        title: "Success",
-        description: `Welcome ${user.full_name || user.username}! Redirecting...`,
+        title: "Login Successful",
+        description: `Welcome back, ${userData.full_name}!`
       });
 
-      // Redirect based on user role
-      if (user.role === "admin") {
-        router.push("/admin/dashboard");
-      } else {
-        router.push("/worker/dashboard"); // Different dashboard for workers
-      }
     } catch (error) {
-      console.error(error);
+      console.error('Login error:', error);
       toast({
         title: "Login Error",
-        description: (error as Error).message,
-        variant: "destructive",
+        description: "An error occurred during login. Please try again.",
+        variant: "destructive"
       });
     } finally {
       setIsLoading(false);
@@ -91,39 +88,68 @@ export function LoginForm() {
 
   return (
     <Card className="w-full max-w-sm">
+      <form onSubmit={handleLogin}>
         <CardHeader>
           <CardTitle className="text-2xl font-headline">Login</CardTitle>
           <CardDescription>
-            Enter your credentials to access the system.
+            Enter your credentials to access the dashboard.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="role">Role</Label>
+            <Select onValueChange={handleRoleChange} defaultValue={role}>
+              <SelectTrigger id="role">
+                <SelectValue placeholder="Select a role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="worker">Worker</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid gap-2">
             <Label htmlFor="email">Email</Label>
             <Input 
               id="email" 
               type="email" 
-              placeholder="your.email@example.com" 
-              defaultValue="admin@test.com" 
+              placeholder="m@example.com" 
+              value={email} 
+              onChange={e => setEmail(e.target.value)} 
               required 
               disabled={isLoading}
             />
           </div>
+          
           <div className="grid gap-2">
             <Label htmlFor="password">Password</Label>
             <Input 
               id="password" 
               type="password" 
-              defaultValue="testpassword" 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
               required 
               disabled={isLoading}
             />
           </div>
+
+          {role === "worker" && (
+            <div className="text-sm text-muted-foreground bg-blue-50 p-3 rounded">
+              <strong>Demo Credentials:</strong><br />
+              Coimbatore Worker: worker_cbe@test.com / worker123<br />
+              Bangalore Worker: worker_bgl@test.com / worker123
+            </div>
+          )}
         </CardContent>
+        
         <CardFooter>
-          <Button className="w-full" onClick={handleLogin} disabled={isLoading}>
+          <Button className="w-full" type="submit" disabled={isLoading}>
             {isLoading ? (
-              "Signing in..."
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Signing in...
+              </>
             ) : (
               <>
                 Sign in
@@ -132,6 +158,7 @@ export function LoginForm() {
             )}
           </Button>
         </CardFooter>
-      </Card>
+      </form>
+    </Card>
   );
 }

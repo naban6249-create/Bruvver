@@ -25,7 +25,7 @@ os.makedirs("static/images", exist_ok=True)
 from database import engine, get_database
 from models import (
     Base, MenuItem, Ingredient, DailySale, Admin, Order, OrderItem, Inventory,
-    Branch, DailyExpense, ExpenseCategory
+    Branch, DailyExpense, ExpenseCategory, UserBranchPermission, PermissionLevel
 )
 from schemas import (
     UserRole,  # 👈 FIX: import from schemas, not models
@@ -351,9 +351,9 @@ async def quick_add_expense(
     
     # 1. Find the inventory item to get its cost
     # We assume an inventory item exists with the same name (e.g., "Milk")
-    inventory_item = db.query(InventoryModel).filter(
-        func.lower(InventoryModel.item_name) == func.lower(expense_data.item_name),
-        InventoryModel.branch_id == expense_data.branch_id
+    inventory_item = db.query(Inventory).filter(
+        func.lower(Inventory.item_name) == func.lower(expense_data.item_name),
+        Inventory.branch_id == expense_data.branch_id
     ).first()
     
     unit_cost = 0.0
@@ -510,46 +510,35 @@ async def login_admin_enhanced(
     form_data: AdminLogin,
     db: Session = Depends(get_database)
 ):
-    """
-    Enhanced login endpoint that provides a JWT token.
-    It returns the token and full admin details upon successful authentication.
-    """
-    logger.info(f"Login attempt for user: {form_data.username}")
-    admin = authenticate_user(
-        db,
-        username=form_data.username,
-        password=form_data.password
-    )
+    admin = authenticate_user(db, username=form_data.username, password=form_data.password)
     if not admin:
-        logger.warning(f"Failed login for user: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Create the user data payload for the token
-    # This must match the schemas.AdminResponse model
+    # Load branch permissions
+    permissions = db.query(UserBranchPermission).filter(UserBranchPermission.user_id == admin.id).all()
+    
     user_data = {
         "id": admin.id,
         "username": admin.username,
         "email": admin.email,
         "full_name": admin.full_name,
-        "role": admin.role.value if hasattr(admin.role, 'value') else getattr(admin, 'role', 'admin'),
-        "branch_id": getattr(admin, 'branch_id', None),
+        "role": admin.role,
         "is_active": admin.is_active,
-        "is_superuser": admin.is_superuser,  # <-- FIX: ADDED THIS LINE
-        "created_at": admin.created_at      # <-- FIX: ADDED THIS LINE
+        "is_superuser": admin.is_superuser,
+        "created_at": admin.created_at,
+        "branch_permissions": permissions
     }
 
-    # Create the access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": admin.username, "role": user_data["role"]},
         expires_delta=access_token_expires
     )
 
-    logger.info(f"Successful login for user: {admin.username}")
     return Token(access_token=access_token, token_type="bearer", user=user_data)
 
 # -------------------------
@@ -687,7 +676,76 @@ async def delete_ingredient(
     db.delete(db_ingredient)
     db.commit()
     return
+# -------------------------
+# PERMISSION MANAGEMENT
+# -------------------------
+@app.get("/api/admin/user-permissions", response_model=List[UserPermissionSummary])
+async def get_all_user_permissions(
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    users = db.query(Admin).filter(Admin.role == "worker").all()
+    result = []
+    for user in users:
+        permissions = db.query(UserBranchPermission).filter(UserBranchPermission.user_id == user.id).all()
+        result.append(UserPermissionSummary(
+            user_id=user.id,
+            username=user.username,
+            full_name=user.full_name,
+            branches=permissions
+        ))
+    return result
 
+@app.post("/api/admin/assign-branch-permission")
+async def assign_branch_permission(
+    permission_data: UserBranchPermissionCreate,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Check if permission already exists
+    existing = db.query(UserBranchPermission).filter(
+        UserBranchPermission.user_id == permission_data.user_id,
+        UserBranchPermission.branch_id == permission_data.branch_id
+    ).first()
+    
+    if existing:
+        existing.permission_level = permission_data.permission_level
+        existing.updated_at = datetime.utcnow()
+        db.commit()
+        return existing
+    
+    new_permission = UserBranchPermission(**permission_data.dict())
+    db.add(new_permission)
+    db.commit()
+    db.refresh(new_permission)
+    return new_permission
+
+@app.delete("/api/admin/revoke-branch-permission/{user_id}/{branch_id}")
+async def revoke_branch_permission(
+    user_id: int,
+    branch_id: int,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    permission = db.query(UserBranchPermission).filter(
+        UserBranchPermission.user_id == user_id,
+        UserBranchPermission.branch_id == branch_id
+    ).first()
+    
+    if permission:
+        db.delete(permission)
+        db.commit()
+    
+    return {"message": "Permission revoked"}
 # -------------------------
 # MENU (CRUD with branch support)
 # -------------------------

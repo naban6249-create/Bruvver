@@ -1,8 +1,13 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, Text, Enum as SQLEnum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from database import Base
+import enum
 
+# Permission levels enum
+class PermissionLevel(enum.Enum):
+    VIEW_ONLY = "view_only"
+    FULL_ACCESS = "full_access"
 
 class Branch(Base):
     __tablename__ = "branches"
@@ -17,13 +22,13 @@ class Branch(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    admins = relationship("Admin", back_populates="branch", cascade="all, delete-orphan")
+    # Updated relationships - removed cascade delete for admins
+    user_permissions = relationship("UserBranchPermission", back_populates="branch", cascade="all, delete-orphan")
     menu_items = relationship("MenuItem", back_populates="branch", cascade="all, delete-orphan")
     sales = relationship("DailySale", back_populates="branch", cascade="all, delete-orphan")
     expenses = relationship("DailyExpense", back_populates="branch", cascade="all, delete-orphan")
     inventory = relationship("Inventory", back_populates="branch", cascade="all, delete-orphan")
     reports = relationship("DailyReport", back_populates="branch", cascade="all, delete-orphan")
-
 
 class Admin(Base):
     __tablename__ = "admins"
@@ -34,15 +39,33 @@ class Admin(Base):
     full_name = Column(String, nullable=False)
     password_hash = Column(String, nullable=False)
     role = Column(String, default="worker")  # "admin" or "worker"
-    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
-
+    # Removed branch_id - workers can now be assigned to multiple branches
+    
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
 
-    branch = relationship("Branch", back_populates="admins")
+    # New relationship for branch permissions
+    branch_permissions = relationship("UserBranchPermission", back_populates="user", cascade="all, delete-orphan")
 
+# NEW: Junction table for user-branch permissions
+class UserBranchPermission(Base):
+    __tablename__ = "user_branch_permissions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("admins.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    permission_level = Column(SQLEnum(PermissionLevel), nullable=False, default=PermissionLevel.VIEW_ONLY)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("Admin", back_populates="branch_permissions")
+    branch = relationship("Branch", back_populates="user_permissions")
+    
+    # Ensure unique user-branch combinations
+    __table_args__ = (UniqueConstraint('user_id', 'branch_id', name='unique_user_branch'),)
 
 class MenuItem(Base):
     __tablename__ = "menu_items"
@@ -62,7 +85,6 @@ class MenuItem(Base):
     branch = relationship("Branch", back_populates="menu_items")
     ingredients = relationship("Ingredient", back_populates="menu_item", cascade="all, delete-orphan")
 
-
 class Ingredient(Base):
     __tablename__ = "ingredients"
 
@@ -74,7 +96,6 @@ class Ingredient(Base):
     image_url = Column(String, nullable=True)
 
     menu_item = relationship("MenuItem", back_populates="ingredients")
-
 
 class Order(Base):
     __tablename__ = "orders"
@@ -92,7 +113,6 @@ class Order(Base):
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     branch = relationship("Branch")
 
-
 class OrderItem(Base):
     __tablename__ = "order_items"
 
@@ -107,7 +127,6 @@ class OrderItem(Base):
     order = relationship("Order", back_populates="items")
     menu_item = relationship("MenuItem")
 
-
 class DailySale(Base):
     __tablename__ = "daily_sales"
 
@@ -121,10 +140,6 @@ class DailySale(Base):
     branch = relationship("Branch", back_populates="sales")
     menu_item = relationship("MenuItem")
 
-
-# ---------------------------
-# NEW EXPENSE CATEGORY MODEL
-# ---------------------------
 class ExpenseCategory(Base):
     __tablename__ = "expense_categories"
 
@@ -136,14 +151,13 @@ class ExpenseCategory(Base):
 
     expenses = relationship("DailyExpense", back_populates="category_rel", cascade="all, delete")
 
-
 class DailyExpense(Base):
     __tablename__ = "daily_expenses"
 
     id = Column(Integer, primary_key=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"))
     category_id = Column(Integer, ForeignKey("expense_categories.id"), nullable=True)
-    category = Column(String, nullable=False)  # keeps text for flexibility
+    category = Column(String, nullable=False)
     item_name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     quantity = Column(Float, nullable=True)
@@ -159,7 +173,6 @@ class DailyExpense(Base):
     branch = relationship("Branch", back_populates="expenses")
     creator = relationship("Admin")
     category_rel = relationship("ExpenseCategory", back_populates="expenses")
-
 
 class Inventory(Base):
     __tablename__ = "inventory"
@@ -177,7 +190,6 @@ class Inventory(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     branch = relationship("Branch", back_populates="inventory")
-
 
 class DailyReport(Base):
     __tablename__ = "daily_reports"

@@ -4,7 +4,8 @@ import logging
 from datetime import datetime
 from sqlalchemy.orm import Session
 from database import engine, get_database, Base
-from models import Admin, Branch, MenuItem, Ingredient, ExpenseCategory
+# --- FIX: Import the new permission models ---
+from models import Admin, Branch, MenuItem, ExpenseCategory, UserBranchPermission, PermissionLevel
 from schemas import UserRole
 from auth import get_password_hash
 
@@ -17,105 +18,96 @@ logger = logging.getLogger(__name__)
 
 def init_db(db: Session):
     """
-    Initializes the database with sample data, including new branches and workers.
+    Initializes the database with sample data, including new branches and workers with permissions.
     """
     try:
-        # Check if branches already exist to avoid duplicates
+        # Create sample branches
         if db.query(Branch).count() == 0:
             logger.info("Creating sample branches...")
-            
-            # --- FIX: Changed branches to your new locations ---
             branch_cbe = Branch(name="Coimbatore", location="Gandhipuram")
             branch_bgl = Branch(name="Bangalore", location="Indiranagar")
-            branch_main = Branch(name="Main Branch (Admin)", location="Downtown")
-            
-            db.add_all([branch_cbe, branch_bgl, branch_main])
+            db.add_all([branch_cbe, branch_bgl])
             db.commit()
-            
-            # Refresh to get IDs
             db.refresh(branch_cbe)
             db.refresh(branch_bgl)
-            db.refresh(branch_main)
-            
             logger.info("Sample branches created.")
         else:
             logger.info("Branches already exist, skipping creation.")
-            # Load existing branches to link to new users
             branch_cbe = db.query(Branch).filter(Branch.name == "Coimbatore").first()
             branch_bgl = db.query(Branch).filter(Branch.name == "Bangalore").first()
-            
-            if not branch_cbe:
-                logger.warning("Could not find 'Coimbatore' branch, using first available branch.")
-                branch_cbe = db.query(Branch).first()
-            if not branch_bgl:
-                logger.warning("Could not find 'Bangalore' branch, using second available branch.")
-                branch_bgl = db.query(Branch).offset(1).first() or branch_cbe
 
-
-        # Check if admin already exists
+        # Create default admin user
         if db.query(Admin).filter(Admin.username == "admin@test.com").count() == 0:
             logger.info("Creating default admin user...")
             admin_user = Admin(
-                username="admin@test.com",
-                email="admin@test.com",
-                full_name="Default Admin",
-                password_hash=get_password_hash("admin123"),
-                role=UserRole.ADMIN, # Use Enum
-                is_active=True,
-                is_superuser=True,
-                branch_id=branch_cbe.id  # Admin defaults to Coimbatore
+                username="admin@test.com", email="admin@test.com", full_name="Default Admin",
+                password_hash=get_password_hash("admin123"), role=UserRole.ADMIN,
+                is_active=True, is_superuser=True, branch_id=branch_cbe.id
             )
             db.add(admin_user)
-            logger.info("Default admin user created.")
+            db.flush() # Flush to get the admin_user.id
+            
+            # --- Admin gets full access to both branches ---
+            admin_perm_cbe = UserBranchPermission(user_id=admin_user.id, branch_id=branch_cbe.id, permission_level=PermissionLevel.FULL_ACCESS)
+            admin_perm_bgl = UserBranchPermission(user_id=admin_user.id, branch_id=branch_bgl.id, permission_level=PermissionLevel.FULL_ACCESS)
+            db.add_all([admin_perm_cbe, admin_perm_bgl])
+
+            logger.info("Default admin user and permissions created.")
         else:
             logger.info("Admin user already exists, skipping.")
 
-        # --- FIX: Added new worker accounts for your branches ---
-        
-        # Coimbatore Worker
+        # --- FIX: Integrated your new worker creation logic ---
+        # Coimbatore Worker with permissions
         if db.query(Admin).filter(Admin.username == "worker_cbe@test.com").count() == 0:
-            logger.info("Creating Coimbatore worker...")
+            logger.info("Creating Coimbatore worker with permissions...")
             worker_cbe = Admin(
-                username="worker_cbe@test.com",
-                email="worker_cbe@test.com",
-                full_name="Coimbatore Worker",
-                password_hash=get_password_hash("worker123"),
-                role=UserRole.WORKER, # Use Enum
-                is_active=True,
-                branch_id=branch_cbe.id # Link to Coimbatore branch
+                username="worker_cbe@test.com", email="worker_cbe@test.com",
+                full_name="Coimbatore Worker", password_hash=get_password_hash("worker123"),
+                role=UserRole.WORKER, is_active=True, branch_id=branch_cbe.id
             )
             db.add(worker_cbe)
-            logger.info("Coimbatore worker created.")
+            db.flush() # Use flush to get the worker's ID before committing
+            
+            # Add permission for Coimbatore branch
+            permission = UserBranchPermission(
+                user_id=worker_cbe.id,
+                branch_id=branch_cbe.id,
+                permission_level=PermissionLevel.FULL_ACCESS
+            )
+            db.add(permission)
+            logger.info("Coimbatore worker and permissions created.")
         else:
             logger.info("Coimbatore worker already exists, skipping.")
 
-        # Bangalore Worker
+        # Bangalore Worker with permissions
         if db.query(Admin).filter(Admin.username == "worker_bgl@test.com").count() == 0:
-            logger.info("Creating Bangalore worker...")
+            logger.info("Creating Bangalore worker with permissions...")
             worker_bgl = Admin(
-                username="worker_bgl@test.com",
-                email="worker_bgl@test.com",
-                full_name="Bangalore Worker",
-                password_hash=get_password_hash("worker123"),
-                role=UserRole.WORKER, # Use Enum
-                is_active=True,
-                branch_id=branch_bgl.id # Link to Bangalore branch
+                username="worker_bgl@test.com", email="worker_bgl@test.com",
+                full_name="Bangalore Worker", password_hash=get_password_hash("worker123"),
+                role=UserRole.WORKER, is_active=True, branch_id=branch_bgl.id
             )
             db.add(worker_bgl)
-            logger.info("Bangalore worker created.")
+            db.flush()
+            
+            # Add permission for Bangalore branch
+            permission_bgl = UserBranchPermission(
+                user_id=worker_bgl.id,
+                branch_id=branch_bgl.id,
+                permission_level=PermissionLevel.FULL_ACCESS
+            )
+            db.add(permission_bgl)
+            logger.info("Bangalore worker and permissions created.")
         else:
             logger.info("Bangalore worker already exists, skipping.")
-            
-        # Add sample menu items if they don't exist
+
+        # Create sample menu items
         if db.query(MenuItem).count() == 0:
             logger.info("Creating sample menu items...")
             items_data = [
                 {"name": "Espresso", "price": 120, "category": "Coffee", "branch_id": branch_cbe.id},
                 {"name": "Cappuccino", "price": 150, "category": "Coffee", "branch_id": branch_cbe.id},
                 {"name": "Filter Coffee", "price": 100, "category": "Coffee", "branch_id": branch_bgl.id},
-                {"name": "Croissant", "price": 130, "category": "Pastry", "branch_id": branch_bgl.id},
-                {"name": "Samosa", "price": 50, "category": "Snacks", "branch_id": branch_cbe.id},
-                {"name": "Tea", "price": 80, "category": "Beverage", "branch_id": branch_bgl.id},
             ]
             for item in items_data:
                 db.add(MenuItem(**item))
@@ -123,17 +115,13 @@ def init_db(db: Session):
         else:
             logger.info("Menu items already exist, skipping.")
 
-        # Add sample expense categories
+        # Create sample expense categories
         if db.query(ExpenseCategory).count() == 0:
             logger.info("Creating sample expense categories...")
             categories = [
                 ExpenseCategory(name="Dairy", description="Milk, Cream, etc."),
                 ExpenseCategory(name="Coffee Beans", description="Raw coffee beans"),
                 ExpenseCategory(name="Utilities", description="Electricity, Water, Gas bills"),
-                ExpenseCategory(name="Rent", description="Monthly shop rent"),
-                ExpenseCategory(name="Staff Salary", description="Monthly payroll"),
-                ExpenseCategory(name="Maintenance", description="Repairs and cleaning"),
-                ExpenseCategory(name="Other", description="Miscellaneous expenses"),
             ]
             db.add_all(categories)
             logger.info("Sample expense categories created.")
@@ -157,22 +145,18 @@ def reset_and_init_database():
     """
     logger.info("--- Starting Database Reset & Initialization ---")
     
-    # 1. Delete the existing database file if it exists
     if os.path.exists(DB_FILE):
         try:
-            # Attempt to close any active sessions before removing
-            # This is a bit of a safeguard, but manual closure is better
             engine.dispose() 
             os.remove(DB_FILE)
             logger.info(f"✅ Successfully deleted old database file: {DB_FILE}")
         except OSError as e:
             logger.error(f"❌ Error deleting database file: {e}")
-            logger.error("Please check file permissions and close any programs (like DBeaver, VSCode SQLite explorer) using the database.")
+            logger.error("Please check file permissions and close any programs using the database.")
             return
     else:
-        logger.info("ℹ️  No old database file found to delete.")
+        logger.info("ℹ️ No old database file found to delete.")
 
-    # 2. Create new tables based on the models
     try:
         logger.info("⌛ Creating new tables...")
         Base.metadata.create_all(bind=engine)
@@ -181,7 +165,6 @@ def reset_and_init_database():
         logger.exception(f"❌ Error creating new tables: {e}")
         return
         
-    # 3. Initialize with sample data
     logger.info("⌛ Initializing database with sample data...")
     db = next(get_database())
     init_db(db)
