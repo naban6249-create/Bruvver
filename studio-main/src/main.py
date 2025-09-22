@@ -1,17 +1,19 @@
 # main.py - Complete merged version with multi-branch, expenses, worker APIs, enhanced auth & upload
-from fastapi import FastAPI, HTTPException, Depends, status, File, UploadFile, Form
+from fastapi import FastAPI, HTTPException, Depends, status, File, UploadFile, Form, Body, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, text
 from datetime import datetime, date, timedelta
 from typing import List, Optional
+from pydantic import BaseModel
 import uvicorn
 import os
 from dotenv import load_dotenv
 import shutil
 import json
 import logging
+from apscheduler.schedulers.background import BackgroundScheduler
 import uuid
 
 # Set up detailed logging
@@ -31,13 +33,16 @@ from schemas import (
     UserRole,  # 👈 FIX: import from schemas, not models
     MenuItemUpdate, MenuItemResponse,
     DailySaleCreate, DailySaleResponse, SalesSummary,
-    AdminCreate, AdminLogin, AdminResponse, Token,
+    AdminCreate, AdminLogin, AdminResponse, AdminUpdate, Token,
     OrderCreate, OrderResponse, OrderUpdate,
     InventoryCreate, InventoryResponse, InventoryUpdate,
     DashboardSummary, IngredientResponse, IngredientUpdate,
     BranchResponse, BranchCreate, BranchUpdate,
     DailyExpenseResponse, DailyExpenseCreate, DailyExpenseUpdate,
-    ExpenseCategoryResponse, QuickExpenseCreate
+    ExpenseCategoryResponse, QuickExpenseCreate,
+    UserPermissionSummary, UserBranchPermissionCreate,  # ✅ This was missing!
+    UserBranchPermissionResponse,  # ✅ Add this too
+    UserBranchPermissionBase,# Added UserPermissionSummary
 )
 from sqlalchemy import func, and_
 
@@ -46,6 +51,7 @@ from auth import (
     get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from automation import start_automation, stop_automation, manual_export_sales, manual_reset
+from sheets_exporter import export_day
 
 # Load environment variables
 load_dotenv()
@@ -84,6 +90,16 @@ async def startup_event():
         start_automation()
     except Exception:
         logger.exception("Failed to start automation service on startup.")
+    # Start daily export scheduler (runs at 00:05 local time, exports yesterday)
+    try:
+        start_daily_export_scheduler()
+    except Exception:
+        logger.exception("Failed to start daily export scheduler")
+    # Best-effort catch-up run on startup (idempotent export clears date rows first)
+    try:
+        export_yesterday_job()
+    except Exception:
+        logger.exception("Failed to perform catch-up export on startup")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -92,6 +108,75 @@ async def shutdown_event():
         stop_automation()
     except Exception:
         logger.exception("Failed to stop automation service on shutdown.")
+    try:
+        if 'daily_export_scheduler' in globals():
+            daily_export_scheduler.shutdown(wait=False)
+    except Exception:
+        logger.exception("Failed to shutdown daily export scheduler")
+
+# -------------------------
+# GOOGLE SHEETS DAILY EXPORT
+# -------------------------
+# Scheduler is started on app startup. Exports "yesterday" so a full day is captured.
+daily_export_scheduler: Optional[BackgroundScheduler] = None
+
+def export_yesterday_job():
+    db = next(get_database())
+    try:
+        yday = date.today() - timedelta(days=1)
+        export_day(db, yday, branch_id=None)
+        logger.info(f"Exported daily sales/expenses for {yday} to Google Sheets")
+    except Exception:
+        logger.exception("Daily export job failed")
+    finally:
+        db.close()
+
+def start_daily_export_scheduler():
+    global daily_export_scheduler
+    if daily_export_scheduler and daily_export_scheduler.running:
+        return
+    tz = os.getenv("TZ", "Asia/Kolkata")
+    # Coalesce: if multiple runs pile up while down, run once
+    # misfire_grace_time: allow late executions after downtime (24h)
+    daily_export_scheduler = BackgroundScheduler(
+        timezone=tz,
+        job_defaults={
+            'coalesce': True,
+            'misfire_grace_time': 24 * 60 * 60,
+        },
+    )
+    # Run daily at 00:05
+    daily_export_scheduler.add_job(
+        export_yesterday_job,
+        'cron',
+        hour=0,
+        minute=5,
+        id='export_yesterday',
+        replace_existing=True,
+        coalesce=True,
+        misfire_grace_time=24 * 60 * 60,
+    )
+    daily_export_scheduler.start()
+
+class ManualExportRequest(BaseModel):
+    date: str  # YYYY-MM-DD
+    branch_id: Optional[int] = None
+
+@app.post("/api/reports/export-to-sheets")
+def manual_export_to_sheets(req: ManualExportRequest, db: Session = Depends(get_database), current_user: Admin = Depends(get_current_active_user)):
+    # Optional: require admin
+    if hasattr(current_user, 'role') and current_user.role != 'admin':
+        raise HTTPException(status_code=403, detail="Admin access required")
+    try:
+        target_date = datetime.strptime(req.date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    try:
+        export_day(db, target_date, branch_id=req.branch_id)
+        return {"message": "Export completed", "date": req.date, "branch_id": req.branch_id}
+    except Exception as e:
+        logger.exception("Manual export failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # -------------------------
 # Helper: initialize sample data
@@ -174,10 +259,13 @@ async def initialize_sample_data():
                     username="admin@test.com",
                     email="admin@test.com",
                     full_name="Default Admin",
-                    password_hash=hashed_password
+                    password_hash=hashed_password,
+                    role="admin",
+                    is_active=True,
+                    is_superuser=True,
                 )
                 db.add(db_admin)
-                logger.info("Created default admin user admin@test.com / testpassword")
+                logger.info("Created default admin user admin@test.com / testpassword (role=admin)")
 
             db.commit()
             logger.info("Sample data initialized successfully")
@@ -216,7 +304,7 @@ async def get_branches(
     current_user: Admin = Depends(get_current_active_user)
 ):
     """Get all branches (Admin only)"""
-    if hasattr(current_user, 'role') and current_user.role != UserRole.ADMIN:
+    if hasattr(current_user, 'role') and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     branches = db.query(Branch).filter(Branch.is_active == True).all()
     return branches
@@ -228,7 +316,7 @@ async def create_branch(
     current_user: Admin = Depends(get_current_active_user)
 ):
     """Create a new branch (Admin only)"""
-    if hasattr(current_user, 'role') and current_user.role != UserRole.ADMIN:
+    if hasattr(current_user, 'role') and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     existing_branch = db.query(Branch).filter(Branch.name == branch.name).first()
     if existing_branch:
@@ -247,7 +335,7 @@ async def update_branch(
     current_user: Admin = Depends(get_current_active_user)
 ):
     """Update a branch (Admin only)"""
-    if hasattr(current_user, 'role') and current_user.role != UserRole.ADMIN:
+    if hasattr(current_user, 'role') and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     db_branch = db.query(Branch).filter(Branch.id == branch_id).first()
     if not db_branch:
@@ -266,7 +354,7 @@ async def delete_branch(
     current_user: Admin = Depends(get_current_active_user)
 ):
     """Delete a branch (Admin only)"""
-    if hasattr(current_user, 'role') and current_user.role != UserRole.ADMIN:
+    if hasattr(current_user, 'role') and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     db_branch = db.query(Branch).filter(Branch.id == branch_id).first()
     if not db_branch:
@@ -299,11 +387,22 @@ async def get_expenses(
 ):
     """Get daily expenses with filtering"""
     query = db.query(DailyExpense)
-    # Branch filtering
-    if hasattr(current_user, 'role') and current_user.role == UserRole.WORKER:
-        if not current_user.branch_id:
-            raise HTTPException(status_code=403, detail="Worker must be assigned to a branch")
-        query = query.filter(DailyExpense.branch_id == current_user.branch_id)
+    # Branch filtering and permission check for workers
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        # Fetch branches this user has any permission for
+        user_branch_ids = [
+            b.branch_id for b in db.query(UserBranchPermission).filter(
+                UserBranchPermission.user_id == current_user.id
+            ).all()
+        ]
+        if branch_id is not None:
+            if branch_id not in user_branch_ids:
+                raise HTTPException(status_code=403, detail="No access to this branch")
+            query = query.filter(DailyExpense.branch_id == branch_id)
+        else:
+            if not user_branch_ids:
+                raise HTTPException(status_code=403, detail="No branch permissions assigned")
+            query = query.filter(DailyExpense.branch_id.in_(user_branch_ids))
     elif branch_id:
         query = query.filter(DailyExpense.branch_id == branch_id)
     if date:
@@ -315,6 +414,12 @@ async def get_expenses(
     if category:
         query = query.filter(DailyExpense.category == category)
     expenses = query.order_by(DailyExpense.expense_date.desc()).offset(skip).limit(limit).all()
+    # Ensure created_at is a valid datetime for response validation
+    from datetime import datetime as _dt
+    for exp in expenses:
+        if getattr(exp, "created_at", None) is None:
+            # Prefer expense_date if present, otherwise now
+            setattr(exp, "created_at", getattr(exp, "expense_date", None) or _dt.utcnow())
     return expenses
 
 @app.post("/api/expenses", response_model=DailyExpenseResponse)
@@ -324,10 +429,19 @@ async def create_expense(
     current_user: Admin = Depends(get_current_active_user)
 ):
     """Create a new daily expense"""
-    # Worker branch restriction
-    if hasattr(current_user, 'role') and current_user.role == UserRole.WORKER:
-        if not current_user.branch_id or current_user.branch_id != expense.branch_id:
-            raise HTTPException(status_code=403, detail="Cannot create expenses for other branches")
+    # Worker permission restriction: must have FULL_ACCESS for this branch
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        perm = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == current_user.id,
+            UserBranchPermission.branch_id == expense.branch_id
+        ).first()
+        if not perm:
+            raise HTTPException(status_code=403, detail="No access to this branch")
+        pl = getattr(perm, "permission_level", None)
+        if hasattr(pl, "value"):
+            pl = pl.value
+        if pl != "full_access":
+            raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
     branch = db.query(Branch).filter(Branch.id == expense.branch_id).first()
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
@@ -348,7 +462,20 @@ async def quick_add_expense(
     from inventory and assigns a category.
     """
     logger.info(f"Quick expense add received for item: {expense_data.item_name}")
-    
+    # Worker permission restriction: must have FULL_ACCESS for this branch
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        perm = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == current_user.id,
+            UserBranchPermission.branch_id == expense_data.branch_id
+        ).first()
+        if not perm:
+            raise HTTPException(status_code=403, detail="No access to this branch")
+        pl = getattr(perm, "permission_level", None)
+        if hasattr(pl, "value"):
+            pl = pl.value
+        if pl != "full_access":
+            raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
+
     # 1. Find the inventory item to get its cost
     # We assume an inventory item exists with the same name (e.g., "Milk")
     inventory_item = db.query(Inventory).filter(
@@ -412,12 +539,19 @@ async def update_expense(
     db_expense = db.query(DailyExpense).filter(DailyExpense.id == expense_id).first()
     if not db_expense:
         raise HTTPException(status_code=404, detail="Expense not found")
-    # Permissions for worker
-    if hasattr(current_user, 'role') and current_user.role == UserRole.WORKER:
-        if not current_user.branch_id or current_user.branch_id != db_expense.branch_id:
-            raise HTTPException(status_code=403, detail="Cannot edit expenses from other branches")
-        if db_expense.created_by != current_user.id:
-            raise HTTPException(status_code=403, detail="Can only edit your own expenses")
+    # Permissions for worker: require FULL_ACCESS for the branch
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        perm = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == current_user.id,
+            UserBranchPermission.branch_id == db_expense.branch_id
+        ).first()
+        if not perm:
+            raise HTTPException(status_code=403, detail="No access to this branch")
+        pl = getattr(perm, "permission_level", None)
+        if hasattr(pl, "value"):
+            pl = pl.value
+        if pl != "full_access":
+            raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
     update_data = expense_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_expense, field, value)
@@ -435,11 +569,18 @@ async def delete_expense(
     db_expense = db.query(DailyExpense).filter(DailyExpense.id == expense_id).first()
     if not db_expense:
         raise HTTPException(status_code=404, detail="Expense not found")
-    if hasattr(current_user, 'role') and current_user.role == UserRole.WORKER:
-        if not current_user.branch_id or current_user.branch_id != db_expense.branch_id:
-            raise HTTPException(status_code=403, detail="Cannot delete expenses from other branches")
-        if db_expense.created_by != current_user.id:
-            raise HTTPException(status_code=403, detail="Can only delete your own expenses")
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        perm = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == current_user.id,
+            UserBranchPermission.branch_id == db_expense.branch_id
+        ).first()
+        if not perm:
+            raise HTTPException(status_code=403, detail="No access to this branch")
+        pl = getattr(perm, "permission_level", None)
+        if hasattr(pl, "value"):
+            pl = pl.value
+        if pl != "full_access":
+            raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
     db.delete(db_expense)
     db.commit()
     return
@@ -459,7 +600,7 @@ async def get_expense_summary(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     query = db.query(DailyExpense).filter(func.date(DailyExpense.expense_date) == target_date)
-    if hasattr(current_user, 'role') and current_user.role == UserRole.WORKER and current_user.branch_id:
+    if hasattr(current_user, 'role') and current_user.role == "worker" and current_user.branch_id:
         query = query.filter(DailyExpense.branch_id == current_user.branch_id)
     elif branch_id:
         query = query.filter(DailyExpense.branch_id == branch_id)
@@ -678,74 +819,8 @@ async def delete_ingredient(
     return
 # -------------------------
 # PERMISSION MANAGEMENT
+# (Consolidated definitions are located later in this file.)
 # -------------------------
-@app.get("/api/admin/user-permissions", response_model=List[UserPermissionSummary])
-async def get_all_user_permissions(
-    db: Session = Depends(get_database),
-    current_user: Admin = Depends(get_current_active_user)
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    users = db.query(Admin).filter(Admin.role == "worker").all()
-    result = []
-    for user in users:
-        permissions = db.query(UserBranchPermission).filter(UserBranchPermission.user_id == user.id).all()
-        result.append(UserPermissionSummary(
-            user_id=user.id,
-            username=user.username,
-            full_name=user.full_name,
-            branches=permissions
-        ))
-    return result
-
-@app.post("/api/admin/assign-branch-permission")
-async def assign_branch_permission(
-    permission_data: UserBranchPermissionCreate,
-    db: Session = Depends(get_database),
-    current_user: Admin = Depends(get_current_active_user)
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    # Check if permission already exists
-    existing = db.query(UserBranchPermission).filter(
-        UserBranchPermission.user_id == permission_data.user_id,
-        UserBranchPermission.branch_id == permission_data.branch_id
-    ).first()
-    
-    if existing:
-        existing.permission_level = permission_data.permission_level
-        existing.updated_at = datetime.utcnow()
-        db.commit()
-        return existing
-    
-    new_permission = UserBranchPermission(**permission_data.dict())
-    db.add(new_permission)
-    db.commit()
-    db.refresh(new_permission)
-    return new_permission
-
-@app.delete("/api/admin/revoke-branch-permission/{user_id}/{branch_id}")
-async def revoke_branch_permission(
-    user_id: int,
-    branch_id: int,
-    db: Session = Depends(get_database),
-    current_user: Admin = Depends(get_current_active_user)
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    permission = db.query(UserBranchPermission).filter(
-        UserBranchPermission.user_id == user_id,
-        UserBranchPermission.branch_id == branch_id
-    ).first()
-    
-    if permission:
-        db.delete(permission)
-        db.commit()
-    
-    return {"message": "Permission revoked"}
 # -------------------------
 # MENU (CRUD with branch support)
 # -------------------------
@@ -760,7 +835,7 @@ async def get_menu_enhanced(
     current_user: Admin = Depends(get_current_active_user)
 ):
     query = db.query(MenuItem)
-    if current_user and hasattr(current_user, 'role') and current_user.role == UserRole.WORKER and current_user.branch_id:
+    if current_user and hasattr(current_user, 'role') and current_user.role == "worker" and current_user.branch_id:
         query = query.filter(MenuItem.branch_id == current_user.branch_id)
     elif branch_id:
         query = query.filter(MenuItem.branch_id == branch_id)
@@ -891,6 +966,240 @@ async def delete_menu_item_api(
     return
 
 # -------------------------
+# UTILITIES FOR SEEDING/MAINTENANCE (service key protected)
+# -------------------------
+@app.post("/api/dev/seed-branch-menu")
+async def seed_branch_menu(
+    request: Request,
+    branch_id: int = Body(1, embed=True),
+    make_available: bool = Body(True, embed=True),
+    db: Session = Depends(get_database),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+):
+    """Assign existing sample menu items to a branch and ensure availability.
+
+    Auth: Requires X-API-Key matching SERVICE_API_KEY.
+    """
+    service_key = os.getenv("SERVICE_API_KEY")
+    if not (service_key and x_api_key and x_api_key == service_key):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # Ensure branch exists (create if missing)
+    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    if not branch:
+        branch = Branch(id=branch_id, name="Coimbatore", is_active=True)
+        db.add(branch)
+        db.flush()
+
+    # Assign unassigned items to this branch and optionally mark available
+    updated = 0
+    items = db.query(MenuItem).all()
+    for it in items:
+        changed = False
+        if getattr(it, "branch_id", None) in (None, 0):
+            it.branch_id = branch_id
+            changed = True
+        if make_available and getattr(it, "is_available", None) is not True:
+            it.is_available = True
+            changed = True
+        if changed:
+            updated += 1
+            db.add(it)
+    db.commit()
+    return {"updated_items": updated, "branch_id": branch_id}
+
+# -------------------------
+# BRANCH-SCOPED MENU ENDPOINTS
+# -------------------------
+# Add this updated endpoint to your main.py file (replace the existing one)
+
+@app.get("/api/branches/{branch_id}/menu", response_model=List[MenuItemResponse])
+async def get_branch_menu(
+    request: Request,
+    branch_id: int,
+    category: Optional[str] = None,
+    available_only: bool = True,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_database),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """
+    Public read with service key: If X-API-Key matches SERVICE_API_KEY (env), allow access without JWT.
+    Otherwise, require valid Bearer JWT in Authorization header.
+    """
+    service_key = os.getenv("SERVICE_API_KEY")
+    authorized = False
+
+    # Debug logging
+    logger.info(f"Service key from env: {'SET' if service_key else 'NOT SET'}")
+    logger.info(f"X-API-Key header: {'PROVIDED' if x_api_key else 'NOT PROVIDED'}")
+    logger.info(f"Authorization header: {'PROVIDED' if authorization else 'NOT PROVIDED'}")
+
+    # 1) Service key bypass for public read
+    if service_key and x_api_key:
+        if x_api_key == service_key:
+            authorized = True
+            logger.info("Authorized via X-API-Key")
+        else:
+            logger.warning("X-API-Key provided but doesn't match SERVICE_API_KEY")
+
+    # 2) Fallback to JWT Authorization: Bearer <token>
+    if not authorized and authorization and authorization.lower().startswith("bearer "):
+        try:
+            token = authorization.split(" ", 1)[1]
+            from auth import verify_token, get_user  # local import to avoid cycles
+            token_data = verify_token(token, HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            ))
+            user = get_user(db, username=token_data.username)
+            if user and getattr(user, "is_active", True):
+                authorized = True
+                logger.info("Authorized via JWT token")
+        except HTTPException:
+            logger.warning("JWT token validation failed")
+        except Exception as e:
+            logger.error(f"JWT token validation error: {e}")
+
+    if not authorized:
+        logger.error("Authentication failed - no valid X-API-Key or JWT token")
+        raise HTTPException(
+            status_code=401, 
+            detail="Authentication required. Provide X-API-Key or Authorization header."
+        )
+
+    # Verify branch exists
+    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+
+    # Query items
+    query = db.query(MenuItem).filter(MenuItem.branch_id == branch_id)
+    if available_only:
+        query = query.filter(MenuItem.is_available == True)
+    if category:
+        query = query.filter(MenuItem.category == category)
+    
+    items = query.offset(skip).limit(limit).all()
+    logger.info(f"Returning {len(items)} menu items for branch {branch_id}")
+    return items
+
+@app.post("/api/branches/{branch_id}/menu", response_model=MenuItemResponse)
+async def create_branch_menu_item(
+    branch_id: int,
+    name: str = Form(...),
+    price: float = Form(...),
+    description: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
+    is_available: bool = Form(True),
+    ingredients: str = Form("[]"),
+    image: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    # Generate new numeric id string
+    max_id_query = db.query(func.max(MenuItem.id)).scalar()
+    max_id = 0
+    if max_id_query:
+        try:
+            max_id = int(max_id_query)
+        except (ValueError, TypeError):
+            max_id = 0
+    new_id = str(max_id + 1)
+    image_path = None
+    if image and image.filename:
+        image_path = f"/static/images/{new_id}_{image.filename}"
+        with open(f"static/images/{new_id}_{image.filename}", "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+    db_item = MenuItem(
+        id=new_id, name=name, price=price, description=description,
+        category=category, branch_id=branch_id, image_url=image_path, is_available=is_available
+    )
+    db.add(db_item)
+    db.flush()
+    ingredients_list = json.loads(ingredients)
+    for ingredient in ingredients_list:
+        db_ingredient = Ingredient(
+            menu_item_id=new_id,
+            name=ingredient['name'],
+            quantity=ingredient['quantity'],
+            unit=ingredient['unit'],
+            image_url=ingredient.get('image_url')
+        )
+        db.add(db_ingredient)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+@app.put("/api/branches/{branch_id}/menu/{item_id}", response_model=MenuItemResponse)
+async def update_branch_menu_item(
+    branch_id: int,
+    item_id: str,
+    name: str = Form(...),
+    price: float = Form(...),
+    description: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
+    is_available: str = Form("True"),
+    ingredients: str = Form("[]"),
+    image: Optional[UploadFile] = File(None),
+    image_url: Optional[str] = Form(None),
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    db_item = db.query(MenuItem).filter(MenuItem.id == item_id, MenuItem.branch_id == branch_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Menu item not found for this branch")
+    try:
+        image_path = db_item.image_url
+        if image and image.filename:
+            image_path = f"/static/images/{item_id}_{image.filename}"
+            save_path = f"static/images/{item_id}_{image.filename}"
+            with open(save_path, "wb") as buffer:
+                shutil.copyfileobj(image.file, buffer)
+        db_item.name = name
+        db_item.price = price
+        db_item.description = description
+        db_item.category = category
+        db_item.is_available = is_available.lower() in ['true', '1', 't', 'y', 'yes']
+        db_item.image_url = image_path
+        # Replace ingredients
+        db.query(Ingredient).filter(Ingredient.menu_item_id == item_id).delete(synchronize_session=False)
+        ingredients_list = json.loads(ingredients)
+        for ingredient_data in ingredients_list:
+            db_ingredient = Ingredient(
+                menu_item_id=item_id,
+                name=ingredient_data.get("name"),
+                quantity=ingredient_data.get("quantity"),
+                unit=ingredient_data.get("unit"),
+                image_url=ingredient_data.get("image_url")
+            )
+            db.add(db_ingredient)
+        db.commit()
+        db.refresh(db_item)
+        return db_item
+    except Exception:
+        db.rollback()
+        logger.exception("Error updating branch menu item")
+        raise HTTPException(status_code=500, detail="Internal Server Error during item update.")
+
+@app.delete("/api/branches/{branch_id}/menu/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_branch_menu_item(
+    branch_id: int,
+    item_id: str,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    db_item = db.query(MenuItem).filter(MenuItem.id == item_id, MenuItem.branch_id == branch_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Menu item not found for this branch")
+    db.delete(db_item)
+    db.commit()
+    return
+
+# -------------------------
 # ORDERS
 # -------------------------
 @app.post("/api/orders", response_model=OrderResponse)
@@ -998,10 +1307,15 @@ async def get_sales_enhanced(
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
+    """Get sales with proper branch filtering"""
     query = db.query(DailySale)
-    if hasattr(current_user, 'role') and current_user.role == UserRole.WORKER and current_user.branch_id:
+    # Workers: must be restricted to their assigned branch
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        if not current_user.branch_id:
+            raise HTTPException(status_code=403, detail="Worker must be assigned to a branch")
         query = query.filter(DailySale.branch_id == current_user.branch_id)
     elif branch_id:
+        # Admins can optionally filter by branch_id
         query = query.filter(DailySale.branch_id == branch_id)
     if date_filter:
         try:
@@ -1028,7 +1342,7 @@ async def get_sales_summary_enhanced(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     query = db.query(DailySale).filter(func.date(DailySale.sale_date) == target_date)
-    if hasattr(current_user, 'role') and current_user.role == UserRole.WORKER and current_user.branch_id:
+    if hasattr(current_user, 'role') and current_user.role == "worker" and current_user.branch_id:
         query = query.filter(DailySale.branch_id == current_user.branch_id)
     elif branch_id:
         query = query.filter(DailySale.branch_id == branch_id)
@@ -1074,6 +1388,111 @@ async def record_sale(
     return db_sale
 
 # -------------------------
+# BRANCH-SCOPED SALES ENDPOINTS
+# -------------------------
+@app.get("/api/branches/{branch_id}/daily-sales", response_model=List[DailySaleResponse])
+async def get_branch_daily_sales(
+    branch_id: int,
+    date_filter: Optional[str] = None,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Get daily sales for a specific branch"""
+    # Permission check for workers: must have any permission for this branch
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        has_perm = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == current_user.id,
+            UserBranchPermission.branch_id == branch_id
+        ).first()
+        if not has_perm:
+            raise HTTPException(status_code=403, detail="No access to this branch")
+
+    query = db.query(DailySale).filter(DailySale.branch_id == branch_id)
+    if date_filter:
+        try:
+            filter_date = datetime.strptime(date_filter, "%Y-%m-%d").date()
+            query = query.filter(func.date(DailySale.sale_date) == filter_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    else:
+        # Default to today if no date specified
+        today = date.today()
+        query = query.filter(func.date(DailySale.sale_date) == today)
+    return query.order_by(DailySale.sale_date.desc()).all()
+
+@app.put("/api/branches/{branch_id}/daily-sales/{item_id}", response_model=DailySaleResponse)
+async def set_branch_daily_sale_quantity(
+    branch_id: int,
+    item_id: int,
+    quantity: int = Form(...),
+    date_filter: Optional[str] = Form(None),
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Set/update daily sales quantity for a specific branch and item"""
+    # Permission check for workers: must have FULL_ACCESS for this branch
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        perm = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == current_user.id,
+            UserBranchPermission.branch_id == branch_id
+        ).first()
+        if not perm:
+            raise HTTPException(status_code=403, detail="No access to this branch")
+        # Normalize to string for comparison in case of enum instance
+        pl = getattr(perm, "permission_level", None)
+        if hasattr(pl, "value"):
+            pl = pl.value
+        if pl != "full_access":
+            raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
+
+    # Verify menu item exists for this branch
+    menu_item = db.query(MenuItem).filter(
+        MenuItem.id == item_id,
+        MenuItem.branch_id == branch_id
+    ).first()
+    if not menu_item:
+        raise HTTPException(status_code=404, detail="Menu item not found for this branch")
+
+    if quantity < 0:
+        raise HTTPException(status_code=400, detail="Quantity cannot be negative")
+
+    revenue = float(menu_item.price) * int(quantity)
+    # Determine target date for upsert (default to server today; allow explicit override)
+    target_date = date.today()
+    if date_filter:
+        try:
+            target_date = datetime.strptime(date_filter, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    # Upsert: update existing sale for today or create new
+    existing_sale = db.query(DailySale).filter(
+        DailySale.menu_item_id == item_id,
+        DailySale.branch_id == branch_id,
+        func.date(DailySale.sale_date) == target_date
+    ).first()
+
+    if existing_sale:
+        existing_sale.quantity = quantity
+        existing_sale.revenue = revenue
+        db.commit()
+        db.refresh(existing_sale)
+        return existing_sale
+    else:
+        # When creating a new record, set sale_date to the target_date with current time
+        db_sale = DailySale(
+            menu_item_id=item_id,
+            quantity=quantity,
+            revenue=revenue,
+            branch_id=branch_id,
+            sale_date=datetime.combine(target_date, datetime.now().time())
+        )
+        db.add(db_sale)
+        db.commit()
+        db.refresh(db_sale)
+        return db_sale
+
+# -------------------------
 # DASHBOARD
 # -------------------------
 @app.get("/api/dashboard", response_model=DashboardSummary)
@@ -1082,9 +1501,10 @@ async def get_dashboard_data_enhanced(
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
+    """Get dashboard data with proper branch isolation"""
     today = date.today()
     target_branch_id = None
-    if hasattr(current_user, 'role') and current_user.role == UserRole.WORKER:
+    if hasattr(current_user, 'role') and current_user.role == "worker":
         target_branch_id = current_user.branch_id
         if not target_branch_id:
             raise HTTPException(status_code=403, detail="Worker must be assigned to a branch")
@@ -1162,7 +1582,7 @@ async def get_inventory_enhanced(
     current_user: Admin = Depends(get_current_active_user)
 ):
     query = db.query(Inventory)
-    if hasattr(current_user, 'role') and current_user.role == UserRole.WORKER and current_user.branch_id:
+    if hasattr(current_user, 'role') and current_user.role == "worker" and current_user.branch_id:
         query = query.filter(Inventory.branch_id == current_user.branch_id)
     elif branch_id:
         query = query.filter(Inventory.branch_id == branch_id)
@@ -1217,7 +1637,7 @@ async def get_daily_report(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     target_branch_id = None
-    if hasattr(current_user, 'role') and current_user.role == UserRole.WORKER and current_user.branch_id:
+    if hasattr(current_user, 'role') and current_user.role == "worker" and current_user.branch_id:
         target_branch_id = current_user.branch_id
     elif branch_id:
         target_branch_id = branch_id
@@ -1267,6 +1687,156 @@ async def get_daily_report(
     }
 
 # -------------------------
+# REPORTS: Real sales summary (day/week/month)
+# -------------------------
+@app.get("/api/reports/sales-summary")
+async def get_sales_summary(
+    branch_id: Optional[int] = None,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Return real totals for today, last 7 days, and month-to-date.
+    Filters by the user's branch if worker; otherwise optional branch_id.
+    """
+    # Determine scope
+    target_branch_id = None
+    if hasattr(current_user, 'role') and current_user.role == "worker" and current_user.branch_id:
+        target_branch_id = current_user.branch_id
+    elif branch_id:
+        target_branch_id = branch_id
+
+    today = date.today()
+    week_start = today - timedelta(days=6)  # last 7 days inclusive
+    month_start = today.replace(day=1)      # month-to-date
+
+    def compute_range(start_d: date, end_d: date):
+        q = db.query(
+            func.coalesce(func.sum(DailySale.quantity), 0).label("items"),
+            func.coalesce(func.sum(DailySale.revenue), 0.0).label("revenue"),
+        ).filter(func.date(DailySale.sale_date) >= start_d, func.date(DailySale.sale_date) <= end_d)
+        if target_branch_id:
+            q = q.filter(DailySale.branch_id == target_branch_id)
+        row = q.one()
+        return {
+            "total_items_sold": int(row.items or 0),
+            "total_revenue": round(float(row.revenue or 0.0), 2),
+        }
+
+    # Today's per-item breakdown (highest to lowest)
+    item_rows = db.query(
+        DailySale.menu_item_id,
+        func.coalesce(func.sum(DailySale.quantity), 0).label("qty"),
+        func.coalesce(func.sum(DailySale.revenue), 0.0).label("rev"),
+    ).filter(func.date(DailySale.sale_date) == today)
+    if target_branch_id:
+        item_rows = item_rows.filter(DailySale.branch_id == target_branch_id)
+    item_rows = item_rows.group_by(DailySale.menu_item_id).order_by(func.sum(DailySale.quantity).desc()).all()
+
+    today_items = []
+    for r in item_rows:
+        mi = db.query(MenuItem).filter(MenuItem.id == r.menu_item_id).first()
+        if mi:
+            today_items.append({
+                "item_id": mi.id,
+                "name": mi.name,
+                "quantity_sold": int(r.qty or 0),
+                "revenue": round(float(r.rev or 0.0), 2),
+            })
+
+    # Week per-item breakdown (last 7 days inclusive)
+    week_rows = db.query(
+        DailySale.menu_item_id,
+        func.coalesce(func.sum(DailySale.quantity), 0).label("qty"),
+        func.coalesce(func.sum(DailySale.revenue), 0.0).label("rev"),
+    ).filter(func.date(DailySale.sale_date) >= week_start, func.date(DailySale.sale_date) <= today)
+    if target_branch_id:
+        week_rows = week_rows.filter(DailySale.branch_id == target_branch_id)
+    week_rows = week_rows.group_by(DailySale.menu_item_id).order_by(func.sum(DailySale.quantity).desc()).all()
+
+    week_items = []
+    for r in week_rows:
+        mi = db.query(MenuItem).filter(MenuItem.id == r.menu_item_id).first()
+        if mi:
+            week_items.append({
+                "item_id": mi.id,
+                "name": mi.name,
+                "quantity_sold": int(r.qty or 0),
+                "revenue": round(float(r.rev or 0.0), 2),
+            })
+
+    # Month per-item breakdown (month-to-date)
+    month_rows = db.query(
+        DailySale.menu_item_id,
+        func.coalesce(func.sum(DailySale.quantity), 0).label("qty"),
+        func.coalesce(func.sum(DailySale.revenue), 0.0).label("rev"),
+    ).filter(func.date(DailySale.sale_date) >= month_start, func.date(DailySale.sale_date) <= today)
+    if target_branch_id:
+        month_rows = month_rows.filter(DailySale.branch_id == target_branch_id)
+    month_rows = month_rows.group_by(DailySale.menu_item_id).order_by(func.sum(DailySale.quantity).desc()).all()
+
+    month_items = []
+    for r in month_rows:
+        mi = db.query(MenuItem).filter(MenuItem.id == r.menu_item_id).first()
+        if mi:
+            month_items.append({
+                "item_id": mi.id,
+                "name": mi.name,
+                "quantity_sold": int(r.qty or 0),
+                "revenue": round(float(r.rev or 0.0), 2),
+            })
+
+    return {
+        "branch_id": target_branch_id,
+        "day": compute_range(today, today),
+        "week": compute_range(week_start, today),
+        "month": compute_range(month_start, today),
+        "today_items": today_items,
+        "week_items": week_items,
+        "month_items": month_items,
+    }
+
+# -------------------------
+# REPORTS: Real expense summary (day/week/month)
+# -------------------------
+@app.get("/api/reports/expense-summary")
+async def get_expense_summary(
+    branch_id: Optional[int] = None,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Return real expense totals for today, last 7 days, and month-to-date."""
+    # Scope branch
+    target_branch_id = None
+    if hasattr(current_user, 'role') and current_user.role == "worker" and current_user.branch_id:
+        target_branch_id = current_user.branch_id
+    elif branch_id:
+        target_branch_id = branch_id
+
+    today = date.today()
+    week_start = today - timedelta(days=6)
+    month_start = today.replace(day=1)
+
+    def compute_expense_range(start_d: date, end_d: date):
+        q = db.query(
+            func.coalesce(func.sum(DailyExpense.total_amount), 0.0).label("total"),
+            func.count(DailyExpense.id).label("count"),
+        ).filter(func.date(DailyExpense.expense_date) >= start_d, func.date(DailyExpense.expense_date) <= end_d)
+        if target_branch_id:
+            q = q.filter(DailyExpense.branch_id == target_branch_id)
+        row = q.one()
+        return {
+            "total_expenses": round(float(row.total or 0.0), 2),
+            "expense_count": int(row.count or 0),
+        }
+
+    return {
+        "branch_id": target_branch_id,
+        "day": compute_expense_range(today, today),
+        "week": compute_expense_range(week_start, today),
+        "month": compute_expense_range(month_start, today),
+    }
+
+# -------------------------
 # WORKER-SPECIFIC (read-only) endpoints
 # -------------------------
 @app.get("/api/worker/dashboard")
@@ -1274,7 +1844,7 @@ async def get_worker_dashboard(
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
-    if not (hasattr(current_user, 'role') and current_user.role == UserRole.WORKER):
+    if not (hasattr(current_user, 'role') and current_user.role == "worker"):
         raise HTTPException(status_code=403, detail="Worker access required")
     if not current_user.branch_id:
         raise HTTPException(status_code=403, detail="Worker must be assigned to a branch")
@@ -1286,7 +1856,7 @@ async def get_worker_sales(
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
-    if not (hasattr(current_user, 'role') and current_user.role == UserRole.WORKER):
+    if not (hasattr(current_user, 'role') and current_user.role == "worker"):
         raise HTTPException(status_code=403, detail="Worker access required")
     return await get_sales_enhanced(branch_id=current_user.branch_id, date_filter=date_filter, db=db, current_user=current_user)
 
@@ -1297,7 +1867,7 @@ async def get_worker_expenses(
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
-    if not (hasattr(current_user, 'role') and current_user.role == UserRole.WORKER):
+    if not (hasattr(current_user, 'role') and current_user.role == "worker"):
         raise HTTPException(status_code=403, detail="Worker access required")
     return await get_expenses(branch_id=current_user.branch_id, date=date, category=category, db=db, current_user=current_user)
 
@@ -1309,10 +1879,260 @@ async def get_all_users(
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
-    if not (hasattr(current_user, 'role') and current_user.role == UserRole.ADMIN):
+    """Get all users with their permissions loaded"""
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
     users = db.query(Admin).all()
+    # Load permissions for each user
+    for user in users:
+        user.branch_permissions = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == user.id
+        ).all()
     return users
+
+@app.get("/api/admin/users-lite")
+async def get_all_users_lite(
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Return minimal user info (id, username, email, full_name) for admin UI prefill.
+    This avoids strict Pydantic validation on nested relations.
+    """
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    rows = db.query(Admin).all()
+    result = []
+    for u in rows:
+        result.append({
+            "id": getattr(u, "id", None),
+            "username": getattr(u, "username", None) or "",
+            "email": getattr(u, "email", None) or "",
+            "full_name": getattr(u, "full_name", None) or "",
+        })
+    return result
+
+@app.get("/api/admin/user-permissions", response_model=List[UserPermissionSummary])
+async def get_all_user_permissions(
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Get comprehensive user permissions summary"""
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    try:
+        # Local imports to avoid circular issues during app import
+        from schemas import (
+            UserPermissionSummary as UPS,
+            UserBranchPermissionResponse as UBPR,
+            BranchResponse as BRR,
+            PermissionLevel as SPermissionLevel,
+        )
+
+        # Get all worker users
+        users = db.query(Admin).filter(Admin.role == "worker").all()
+        summaries: List[UPS] = []
+        for user in users:
+            permissions = db.query(UserBranchPermission).filter(
+                UserBranchPermission.user_id == user.id
+            ).all()
+
+            branches: List[UBPR] = []
+            for perm in permissions:
+                branch = db.query(Branch).filter(Branch.id == perm.branch_id).first()
+                # Normalize permission_level to schemas enum
+                pl = getattr(perm, "permission_level", None)
+                if hasattr(pl, "value"):
+                    pl = pl.value
+                try:
+                    ple = SPermissionLevel(pl) if pl is not None else SPermissionLevel.VIEW_ONLY
+                except Exception:
+                    # Fallback: coerce invalid values to VIEW_ONLY
+                    ple = SPermissionLevel.VIEW_ONLY
+
+                # Build BranchResponse manually to avoid from_orm dependency on orm_mode
+                if branch:
+                    from datetime import datetime as _dt
+                    branch_resp = BRR(
+                        id=getattr(branch, "id", None),
+                        name=getattr(branch, "name", None) or "",
+                        location=getattr(branch, "location", None),
+                        address=getattr(branch, "address", None),
+                        phone=getattr(branch, "phone", None),
+                        email=getattr(branch, "email", None),
+                        is_active=getattr(branch, "is_active", True),
+                        created_at=getattr(branch, "created_at", None) or _dt.utcnow(),
+                        updated_at=getattr(branch, "updated_at", None) or _dt.utcnow(),
+                    )
+                else:
+                    branch_resp = None
+                from datetime import datetime as _dt
+                branches.append(UBPR(
+                    id=getattr(perm, "id", None),
+                    user_id=getattr(perm, "user_id", None),
+                    branch_id=getattr(perm, "branch_id", None),
+                    permission_level=ple,  # pydantic will serialize properly
+                    created_at=getattr(perm, "created_at", None) or _dt.utcnow(),
+                    updated_at=getattr(perm, "updated_at", None) or _dt.utcnow(),
+                    branch=branch_resp,
+                ))
+
+            summaries.append(UPS(
+                user_id=getattr(user, "id", None),
+                username=getattr(user, "username", None) or "",
+                full_name=getattr(user, "full_name", None) or "",
+                branches=branches,
+            ))
+        return summaries
+    except Exception as e:
+        logger.exception("Error building user-permissions response")
+        raise HTTPException(status_code=500, detail="Failed to fetch user permissions")
+
+@app.post("/api/admin/assign-branch-permission")
+async def assign_branch_permission(
+    payload: dict = Body(...),
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    try:
+        user_id = int(payload.get("user_id"))
+        branch_id = int(payload.get("branch_id"))
+        permission_level = str(payload.get("permission_level"))
+        if permission_level not in ("view_only", "full_access"):
+            raise HTTPException(status_code=400, detail="Invalid permission_level")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid request body")
+
+    existing = db.query(UserBranchPermission).filter(
+        UserBranchPermission.user_id == user_id,
+        UserBranchPermission.branch_id == branch_id
+    ).first()
+
+    if existing:
+        existing.permission_level = permission_level
+        existing.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    new_perm = UserBranchPermission(user_id=user_id, branch_id=branch_id, permission_level=permission_level)
+    db.add(new_perm)
+    db.commit()
+    db.refresh(new_perm)
+    return new_perm
+
+@app.delete("/api/admin/revoke-branch-permission/{user_id}/{branch_id}")
+async def revoke_branch_permission(
+    user_id: int,
+    branch_id: int,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    perm = db.query(UserBranchPermission).filter(
+        UserBranchPermission.user_id == user_id,
+        UserBranchPermission.branch_id == branch_id
+    ).first()
+    if not perm:
+        raise HTTPException(status_code=404, detail="Permission not found")
+    db.delete(perm)
+    db.commit()
+    return {"detail": "Permission revoked"}
+
+# Utility endpoint to normalize legacy enum values. Admin only.
+from sqlalchemy import text
+
+@app.post("/api/admin/normalize-permissions")
+async def normalize_permissions(
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    try:
+        updated = 0
+        r1 = db.execute(text("""
+            UPDATE user_branch_permissions
+            SET permission_level = 'view_only'
+            WHERE permission_level = 'VIEW_ONLY'
+        """))
+        updated += r1.rowcount if r1.rowcount is not None else 0
+        r2 = db.execute(text("""
+            UPDATE user_branch_permissions
+            SET permission_level = 'full_access'
+            WHERE permission_level = 'FULL_ACCESS'
+        """))
+        updated += r2.rowcount if r2.rowcount is not None else 0
+        r3 = db.execute(text("""
+            UPDATE user_branch_permissions
+            SET permission_level = 'view_only'
+            WHERE permission_level NOT IN ('view_only','full_access') OR permission_level IS NULL
+        """))
+        updated += r3.rowcount if r3.rowcount is not None else 0
+        db.commit()
+        # Verify
+        rows = db.execute(text("SELECT DISTINCT permission_level FROM user_branch_permissions")).fetchall()
+        values = [row[0] for row in rows]
+        return {"updated_rows": updated, "distinct_values": values}
+    except Exception as e:
+        db.rollback()
+        logger.exception("Failed to normalize permissions")
+        raise HTTPException(status_code=500, detail=f"Failed to normalize permissions: {e}")
+
+# Grant a worker full access to ALL branches (creates/updates permissions per branch)
+@app.post("/api/admin/grant-all-branches-full-access/{user_id}")
+async def grant_all_branches_full_access(
+    user_id: int,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    branches = db.query(Branch).filter(Branch.is_active == True).all()
+    updated = 0
+    for br in branches:
+        perm = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == user_id,
+            UserBranchPermission.branch_id == br.id
+        ).first()
+        if perm:
+            perm.permission_level = PermissionLevel.FULL_ACCESS
+            updated += 1
+        else:
+            db.add(UserBranchPermission(user_id=user_id, branch_id=br.id, permission_level=PermissionLevel.FULL_ACCESS))
+            updated += 1
+    db.commit()
+    return {"updated": updated}
+
+# Limit a worker to a single branch (removes other permissions, keeps full_access on that branch)
+@app.post("/api/admin/limit-to-single-branch/{user_id}/{branch_id}")
+async def limit_to_single_branch(
+    user_id: int,
+    branch_id: int,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    # Delete other permissions
+    db.query(UserBranchPermission).filter(
+        UserBranchPermission.user_id == user_id,
+        UserBranchPermission.branch_id != branch_id
+    ).delete(synchronize_session=False)
+    # Ensure full_access on the selected branch
+    perm = db.query(UserBranchPermission).filter(
+        UserBranchPermission.user_id == user_id,
+        UserBranchPermission.branch_id == branch_id
+    ).first()
+    if perm:
+        perm.permission_level = PermissionLevel.FULL_ACCESS
+    else:
+        db.add(UserBranchPermission(user_id=user_id, branch_id=branch_id, permission_level=PermissionLevel.FULL_ACCESS))
+    db.commit()
+    return {"limited_to_branch_id": branch_id}
 
 @app.post("/api/admin/users", response_model=AdminResponse)
 async def create_user(
@@ -1320,26 +2140,81 @@ async def create_user(
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
-    if not (hasattr(current_user, 'role') and current_user.role == UserRole.ADMIN):
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
     existing_user = db.query(Admin).filter((Admin.username == user.username) | (Admin.email == user.email)).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Username or email already registered")
     hashed_password = get_password_hash(user.password)
-    db_user = Admin(username=user.username, email=user.email, full_name=user.full_name, password_hash=hashed_password, role=user.role, branch_id=user.branch_id)
+    role_value = getattr(user.role, 'value', user.role)
+    db_user = Admin(
+        username=user.username,
+        email=user.email,
+        full_name=user.full_name or user.username,
+        password_hash=hashed_password,
+        role=role_value,
+    )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
 
-@app.put("/api/admin/users/{user_id}", response_model=AdminResponse)
-async def update_user(
+@app.post("/api/admin/users/{user_id}/password")
+async def set_user_password(
     user_id: int,
-    user_update: AdminResponse,  # reuse response schema for update body shape loosely; you can change to AdminUpdate schema if available
+    new_password: str,
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
-    if not (hasattr(current_user, 'role') and current_user.role == UserRole.ADMIN):
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    db_user = db.query(Admin).filter(Admin.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not new_password or len(new_password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+    db_user.password_hash = get_password_hash(new_password)
+    db.commit()
+    return {"message": "Password updated"}
+
+@app.delete("/api/admin/users/{user_id}")
+async def delete_user(
+    user_id: int,
+    hard: bool = False,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Delete or deactivate a user.
+    - By default performs a soft delete (is_active=False).
+    - If hard=True, attempts to permanently delete the user. This may fail if there are dependent rows (e.g., created expenses).
+    """
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    db_user = db.query(Admin).filter(Admin.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not hard:
+        db_user.is_active = False
+        db.commit()
+        db.refresh(db_user)
+        return {"message": "User deactivated"}
+    # Hard delete path
+    try:
+        db.delete(db_user)
+        db.commit()
+        return {"message": "User deleted"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Hard delete failed: {str(e)}")
+
+@app.put("/api/admin/users/{user_id}", response_model=AdminResponse)
+async def update_user(
+    user_id: int,
+    user_update: AdminUpdate,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
     db_user = db.query(Admin).filter(Admin.id == user_id).first()
     if not db_user:
@@ -1348,6 +2223,8 @@ async def update_user(
     for field, value in update_data.items():
         if field == "password":
             continue
+        if field == "role":
+            value = getattr(value, 'value', value)
         setattr(db_user, field, value)
     db.commit()
     db.refresh(db_user)
@@ -1373,6 +2250,7 @@ async def trigger_daily_reset(current_user: Admin = Depends(get_current_active_u
     except Exception as e:
         logger.exception("Daily reset failed")
         raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
+
 
 # -------------------------
 # Categories endpoint

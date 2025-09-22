@@ -56,7 +56,12 @@ class UserBranchPermission(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("admins.id"), nullable=False)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
-    permission_level = Column(SQLEnum(PermissionLevel), nullable=False, default=PermissionLevel.VIEW_ONLY)
+    # Store enum values (e.g., 'view_only', 'full_access') to match existing DB data
+    permission_level = Column(
+        SQLEnum(PermissionLevel, values_callable=lambda enum_cls: [e.value for e in enum_cls]),
+        nullable=False,
+        default=PermissionLevel.VIEW_ONLY,
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

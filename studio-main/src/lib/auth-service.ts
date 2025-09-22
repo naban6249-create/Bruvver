@@ -35,7 +35,7 @@ async function handleResponse(response: Response) {
   return response.json();
 }
 
-export async function loginUser(username: string, password: string): Promise<User | null> {
+export async function loginUser(username: string, password: string): Promise<LoginResponse | null> {
   try {
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
@@ -56,7 +56,7 @@ export async function loginUser(username: string, password: string): Promise<Use
 
     const data: LoginResponse = await response.json();
     
-    // Store token in cookies (for server-side) and localStorage (for client-side)
+    // Store token in cookies (for server-side)
     const cookieStore = await cookies();
     cookieStore.set('token', data.access_token, {
       httpOnly: true,
@@ -65,14 +65,9 @@ export async function loginUser(username: string, password: string): Promise<Use
       sameSite: 'lax'
     });
 
-    // Also set a client-side accessible version for immediate use
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('token', data.access_token);
-      localStorage.setItem('currentUser', JSON.stringify(data.user));
-    }
-
     console.log('Successfully logged in user:', data.user.username);
-    return data.user;
+    // Return full response so client can persist token in localStorage
+    return data;
 
   } catch (error) {
     console.error('Login error:', error);

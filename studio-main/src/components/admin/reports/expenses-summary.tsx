@@ -2,15 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Landmark, AlertCircle } from 'lucide-react';
+import { Landmark } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from "@/hooks/use-toast";
-import { getDailyExpenses } from '@/lib/expenses-service';
+import { getRealExpenseSummary, type RealExpenseSummary } from '@/lib/expenses-service';
 
-interface ExpensesData {
-  totalExpenses: number;
-}
-
+interface ExpensesData { totalExpenses: number }
 const initialExpensesData: ExpensesData = { totalExpenses: 0 };
 
 export function ExpensesSummary() {
@@ -21,42 +18,31 @@ export function ExpensesSummary() {
   const [monthExpenses, setMonthExpenses] = useState<ExpensesData>(initialExpensesData);
   const { toast } = useToast();
 
-  const fetchExpensesData = useCallback(async (period: 'day' | 'week' | 'month') => {
-    if (!branchId) return initialExpensesData;
+  const fetchReal = useCallback(async (): Promise<RealExpenseSummary | null> => {
     try {
-        const expenses = await getDailyExpenses(branchId);
-        let totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-
-        if (period === "week") {
-            totalExpenses *= 7;
-        } else if (period === "month") {
-            totalExpenses *= 30;
-        }
-
-        return { totalExpenses };
-
+      return await getRealExpenseSummary(branchId || undefined);
     } catch (error) {
-        console.error(error);
-        toast({
-            title: "Error",
-            description: `Could not load ${period} expenses data.`,
-            variant: "destructive"
-        });
-        return initialExpensesData;
+      console.error(error);
+      toast({ title: 'Error', description: 'Could not load expense summary.', variant: 'destructive' });
+      return null;
     }
   }, [branchId, toast]);
 
   useEffect(() => {
-    const loadExpenses = async () => {
-        const dayData = await fetchExpensesData('day');
-        setDayExpenses(dayData);
-        const weekData = await fetchExpensesData('week');
-        setWeekExpenses(weekData);
-        const monthData = await fetchExpensesData('month');
-        setMonthExpenses(monthData);
+    const load = async () => {
+      const summary = await fetchReal();
+      if (!summary) {
+        setDayExpenses(initialExpensesData);
+        setWeekExpenses(initialExpensesData);
+        setMonthExpenses(initialExpensesData);
+        return;
+      }
+      setDayExpenses({ totalExpenses: summary.day.total_expenses });
+      setWeekExpenses({ totalExpenses: summary.week.total_expenses });
+      setMonthExpenses({ totalExpenses: summary.month.total_expenses });
     };
-    loadExpenses();
-  }, [fetchExpensesData]);
+    load();
+  }, [fetchReal]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -73,7 +59,6 @@ export function ExpensesSummary() {
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{formatCurrency(data.totalExpenses)}</div>
-        <p className="text-xs text-muted-foreground">+10% from last period (simulated)</p>
       </CardContent>
     </Card>
   );

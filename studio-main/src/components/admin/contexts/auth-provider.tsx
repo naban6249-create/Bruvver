@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { AuthContext, authUtils, type AuthContextType } from './auth-context';
-import type { User } from './types';
+import { AuthContext, type AuthContextType, authUtils } from '@/lib/auth-context';
+import { getCurrentUser } from '@/lib/auth-service';
+import type { User } from '@/lib/types';
 
 interface AuthProviderProps {
   children: React.ReactNode;
@@ -13,15 +14,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Load user from localStorage on initial load
-    const loadUser = () => {
+    const loadUser = async () => {
       try {
+        // Try localStorage first
         const savedUser = authUtils.getCurrentUser();
         if (savedUser) {
           setUser(savedUser);
+          setIsLoading(false);
+          return;
+        }
+
+        // Try API call as fallback
+        const userData = await getCurrentUser();
+        if (userData) {
+          setUser(userData);
+          authUtils.saveUser(userData);
         }
       } catch (error) {
-        console.error('Failed to load user from storage:', error);
+        console.error('Error loading user:', error);
+        // User is not logged in, which is fine.
       } finally {
         setIsLoading(false);
       }

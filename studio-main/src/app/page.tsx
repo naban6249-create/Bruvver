@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button';
 import { MenuCard } from '@/components/menu-card';
 import { Coffee, Loader2 } from 'lucide-react';
 import type { MenuItem } from '@/lib/types';
-import { getMenuItems } from '@/lib/menu-service';
 import { useEffect, useState } from 'react';
 
-const IMAGE_SERVER_BASE_URL = process.env.NEXT_PUBLIC_API_SERVER_URL || 'http://localhost:8000';
+// Public site should showcase the Coimbatore branch menu
+const COIMBATORE_BRANCH_ID = (process.env.NEXT_PUBLIC_COIMBATORE_BRANCH_ID || '1');
 
 export default function Home() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -19,30 +19,38 @@ export default function Home() {
     const fetchMenuItems = async () => {
       try {
         setLoading(true);
-        const items = await getMenuItems();
+        setError(null);
         
-        // Apply the same image URL transformation as in menu-management.tsx
-        const transformedItems = items.map((item: any) => {
-          let finalImageUrl;
-          if (item.image_url) {
-            if (item.image_url.startsWith('http')) {
-              finalImageUrl = item.image_url;
-            } else {
-              finalImageUrl = `${IMAGE_SERVER_BASE_URL}${item.image_url}`;
+        console.log('Fetching menu items for branch:', COIMBATORE_BRANCH_ID);
+        
+        // Fetch via public proxy route to avoid requiring auth on the public home page
+        const res = await fetch(
+          `/api/public/menu?branchId=${encodeURIComponent(COIMBATORE_BRANCH_ID)}`, 
+          { 
+            cache: 'no-store',
+            headers: {
+              'Content-Type': 'application/json',
             }
           }
-          return {
-            ...item,
-            imageUrl: finalImageUrl,
-          };
-        });
+        );
+        
+        if (!res.ok) {
+          const errorData = await res.text();
+          throw new Error(`Failed to fetch menu (${res.status}): ${errorData}`);
+        }
+        
+        const items: MenuItem[] = await res.json();
+        console.log('Received menu items:', items);
         
         // Filter to show only available items on the public page
-        const availableItems = transformedItems.filter((item: MenuItem) => item.is_available);
+        const availableItems = Array.isArray(items) 
+          ? items.filter((item: MenuItem) => item.is_available)
+          : [];
+          
         setMenuItems(availableItems);
       } catch (err) {
         console.error('Failed to fetch menu items:', err);
-        setError('Failed to load menu items');
+        setError(err instanceof Error ? err.message : 'Failed to load menu items');
       } finally {
         setLoading(false);
       }
@@ -50,6 +58,13 @@ export default function Home() {
 
     fetchMenuItems();
   }, []);
+
+  const handleRetry = () => {
+    setError(null);
+    setLoading(true);
+    // Re-trigger the useEffect by changing the dependency array
+    window.location.reload();
+  };
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -59,14 +74,18 @@ export default function Home() {
             href="/"
             className="flex items-center gap-2 text-lg font-semibold md:text-base font-headline"
           >
-            <Coffee className="h-6 w-6" />
-            <span className="sr-only">Coffee Command Center</span>
-            Coffee Command Center
+            <span className="sr-only">Bruvvver</span>
+            <span className="flex items-center gap-1">
+              <span>Bru</span>
+              <Coffee aria-label="v" className="inline-block h-5 w-5 align-text-bottom" />
+              <Coffee aria-label="v" className="inline-block h-5 w-5 align-text-bottom" />
+              <span>er</span>
+            </span>
           </Link>
         </nav>
         <div className="flex w-full items-center justify-end gap-4 md:ml-auto md:gap-2 lg:gap-4">
-          <Button asChild>
-            <Link href="/admin/login">Admin Login</Link>
+          <Button asChild className="px-5 py-2.5 text-sm md:px-6 md:text-base">
+            <Link href="/admin/login">Login</Link>
           </Button>
         </div>
       </header>
@@ -95,24 +114,54 @@ export default function Home() {
               </div>
             ) : error ? (
               <div className="text-center py-12">
-                <p className="text-destructive mb-4">{error}</p>
+                <p className="text-destructive mb-4">
+                  {error.includes('Failed to fetch menu') 
+                    ? 'Unable to load menu items. Please check your connection and try again.'
+                    : error
+                  }
+                </p>
                 <Button 
-                  onClick={() => window.location.reload()} 
+                  onClick={handleRetry} 
                   variant="outline"
+                  className="mr-2"
                 >
                   Try Again
+                </Button>
+                <Button 
+                  asChild 
+                  variant="ghost"
+                >
+                  <Link href="/admin/login">Admin Login</Link>
                 </Button>
               </div>
             ) : menuItems.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-muted-foreground">No menu items available at the moment.</p>
+                <p className="text-muted-foreground mb-4">No menu items available at the moment.</p>
+                <p className="text-sm text-muted-foreground">
+                  Our menu is being updated. Please check back soon or contact us directly.
+                </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {menuItems.map((item) => (
-                  <MenuCard key={item.id} item={item} />
-                ))}
-              </div>
+              <>
+                <div className="text-center mb-8">
+                  <h2 className="text-2xl font-bold font-headline mb-2">
+                    Featured Menu Items
+                  </h2>
+                  <p className="text-muted-foreground">
+                    Discover our carefully crafted coffee beverages
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {menuItems.map((item) => (
+                    <MenuCard key={item.id} item={item} />
+                  ))}
+                </div>
+                <div className="text-center mt-8">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {menuItems.length} available item{menuItems.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              </>
             )}
           </div>
         </section>

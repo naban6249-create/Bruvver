@@ -15,22 +15,23 @@ import {
 // --- FIX: Updated the props to be more flexible ---
 interface DeleteConfirmationDialogProps {
   isOpen: boolean;
-  onClose: () => void;      // Added onClose to handle closing the dialog
+  onClose?: () => void;      // Optional; will default to no-op
   onConfirm: () => void;
-  title?: string;           // Made title optional and available
-  description?: string;     // Made description optional and available
+  title?: string;            // Made title optional and available
+  description?: string;      // Made description optional and available
 }
 
 export function DeleteConfirmationDialog({ 
   isOpen, 
-  onClose, 
+  onClose,
   onConfirm, 
   title = "Are you absolutely sure?", // Default title
   description = "This action cannot be undone. This will permanently delete the item." // Default description
 }: DeleteConfirmationDialogProps) {
+  const handleClose = onClose ?? (() => {});
   return (
     // --- FIX: Use onOpenChange to call the new onClose function ---
-    <AlertDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <AlertDialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
@@ -40,7 +41,7 @@ export function DeleteConfirmationDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           {/* AlertDialogCancel will now correctly trigger the onClose */}
-          <AlertDialogCancel onClick={onClose}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel onClick={handleClose}>Cancel</AlertDialogCancel>
           <AlertDialogAction 
             onClick={onConfirm} 
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"

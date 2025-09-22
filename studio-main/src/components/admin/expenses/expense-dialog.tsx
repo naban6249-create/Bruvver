@@ -35,8 +35,7 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
     unit_cost: '',
     total_amount: '',
     expense_date: '',
-    receipt_number: '',
-    vendor: ''
+    
   });
 
   // Load expense categories
@@ -72,8 +71,7 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
           unit_cost: expense.unit_cost.toString(),
           total_amount: expense.total_amount.toString(),
           expense_date: expense.expense_date ? expense.expense_date.split('T')[0] : '',
-          receipt_number: expense.receipt_number || '',
-          vendor: expense.vendor || ''
+          
         });
       } else {
         // Reset form for new expense
@@ -87,8 +85,7 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
           unit_cost: '',
           total_amount: '',
           expense_date: today,
-          receipt_number: '',
-          vendor: ''
+          
         });
       }
     }
@@ -113,6 +110,11 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
   const handleSave = () => {
     if (readOnly || !onSave) return;
 
+    // Ensure expense_date is always a string (required by type)
+    const dateStr = formData.expense_date && formData.expense_date.length > 0
+      ? new Date(formData.expense_date).toISOString()
+      : new Date().toISOString();
+
     const expenseData = {
       category: formData.category,
       item_name: formData.item_name,
@@ -121,9 +123,8 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
       unit: formData.unit || undefined,
       unit_cost: parseFloat(formData.unit_cost) || 0,
       total_amount: parseFloat(formData.total_amount) || 0,
-      expense_date: formData.expense_date ? new Date(formData.expense_date).toISOString() : undefined,
-      receipt_number: formData.receipt_number || undefined,
-      vendor: formData.vendor || undefined,
+      expense_date: dateStr,
+      
       branch_id: 0 // This will be set by the parent component
     };
 
@@ -272,30 +273,7 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
             </div>
           </div>
 
-          {/* Receipt Number and Vendor */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="receipt_number">Receipt Number</Label>
-              <Input
-                id="receipt_number"
-                value={formData.receipt_number}
-                onChange={(e) => handleInputChange('receipt_number', e.target.value)}
-                placeholder="Optional receipt reference"
-                disabled={readOnly}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="vendor">Vendor</Label>
-              <Input
-                id="vendor"
-                value={formData.vendor}
-                onChange={(e) => handleInputChange('vendor', e.target.value)}
-                placeholder="Supplier or vendor name"
-                disabled={readOnly}
-              />
-            </div>
-          </div>
+          {/* Removed Receipt Number and Vendor fields as requested */}
         </div>
 
         <DialogFooter>

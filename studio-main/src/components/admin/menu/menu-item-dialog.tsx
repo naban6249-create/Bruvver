@@ -20,40 +20,59 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 interface MenuItemDialogProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
-  onSave: (item: MenuItem) => void;
+  onSave: (item: MenuItem & { imageFile?: File }) => void;
   item: MenuItem | null;
   showIngredients?: boolean;
 }
 
 export function MenuItemDialog({ isOpen, setIsOpen, onSave, item, showIngredients = true }: MenuItemDialogProps) {
   const [name, setName] = useState('');
-  const [imageUrl, setImageUrl] = useState('https://picsum.photos/600/400');
+  const [imageUrl, setImageUrl] = useState('https://placehold.co/600x400/EEE/31343C?text=Click+to+upload');
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [imageError, setImageError] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [imageFile, setImageFile] = useState<File | undefined>(undefined);
+  const [price, setPrice] = useState<string>('');
+
+  // Image constraints
+  const MAX_FILE_SIZE_BYTES = 1.5 * 1024 * 1024; // 1.5 MB
+  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+  // Use a consistent 3:2 aspect (matches 600x400 placeholder)
+  const PREVIEW_WIDTH = 300;
+  const PREVIEW_HEIGHT = 200;
 
   useEffect(() => {
     if (item) {
       setName(item.name);
-      setImageUrl(item.imageUrl);
+      const incoming = (item.imageUrl ?? '').trim();
+      setImageUrl(incoming.length > 0 ? incoming : 'https://placehold.co/600x400/EEE/31343C?text=Click+to+upload');
       setIngredients(item.ingredients || []);
+      setPrice(typeof item.price === 'number' ? item.price.toString() : '');
     } else {
       setName('');
-      setImageUrl('https://picsum.photos/600/400');
+      setImageUrl('https://placehold.co/600x400/EEE/31343C?text=Click+to+upload');
       setIngredients([]);
+      setPrice('');
     }
-    setImageError(false);
+    setImageError(null);
+    setImageFile(undefined);
   }, [item, isOpen]);
 
   const handleSave = () => {
+    const parsedPrice = parseFloat(price || '0');
     const newItem: MenuItem = {
       id: item?.id || '',
       name,
       imageUrl,
-      price: item?.price || 0,
+      price: isNaN(parsedPrice) ? 0 : parsedPrice,
       ingredients,
+      // Provide sensible defaults for required fields
+      description: item?.description || '',
+      category: item?.category || 'hot',
+      is_available: item?.is_available ?? true,
     };
-    onSave(newItem);
+    // Pass the imageFile (if any) so the backend can store it
+    onSave({ ...(newItem as any), imageFile });
   };
   
   const handleImageClick = () => {
@@ -61,15 +80,75 @@ export function MenuItemDialog({ isOpen, setIsOpen, onSave, item, showIngredient
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImageUrl(reader.result as string);
-        setImageError(false);
-      };
-      reader.readAsDataURL(file);
+    const inputEl = event.target;
+    const file = inputEl.files?.[0];
+    if (!file) return;
+
+    // Validate type
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setImageError("Only JPG, PNG, or WEBP images are allowed.");
+      return;
     }
+    // Validate size
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setImageError("Image is too large. Please upload an image under 1.5 MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onload = () => {
+        // Resize/crop to PREVIEW_WIDTH x PREVIEW_HEIGHT while maintaining cover behavior
+        const canvas = document.createElement('canvas');
+        canvas.width = PREVIEW_WIDTH;
+        canvas.height = PREVIEW_HEIGHT;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          setImageError("Failed to process image.");
+          return;
+        }
+        // Compute cover scaling
+        const srcW = img.width;
+        const srcH = img.height;
+        const targetRatio = PREVIEW_WIDTH / PREVIEW_HEIGHT;
+        const srcRatio = srcW / srcH;
+        let drawW, drawH, sx, sy;
+        if (srcRatio > targetRatio) {
+          // wider than target: crop sides
+          drawH = srcH;
+          drawW = srcH * targetRatio;
+          sx = (srcW - drawW) / 2;
+          sy = 0;
+        } else {
+          // taller than target: crop top/bottom
+          drawW = srcW;
+          drawH = srcW / targetRatio;
+          sx = 0;
+          sy = (srcH - drawH) / 2;
+        }
+        ctx.drawImage(img, sx, sy, drawW, drawH, 0, 0, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+        // Create a Blob/File for upload and a preview URL
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            setImageError("Failed to process image.");
+            return;
+          }
+          const uniqueName = `upload_${Date.now()}.webp`;
+          const fileOut = new File([blob], uniqueName, { type: 'image/webp' });
+          setImageFile(fileOut);
+          const outUrl = URL.createObjectURL(blob);
+          setImageUrl(outUrl);
+          setImageError(null);
+        }, 'image/webp', 0.9);
+      };
+      img.onerror = () => setImageError("Could not load the selected image.");
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => setImageError("Failed to read the selected file.");
+    reader.readAsDataURL(file);
+    // Allow selecting the same file name again by clearing the input value
+    inputEl.value = '';
   };
 
   const handleIngredientChange = (index: number, field: keyof Ingredient, value: string | number) => {
@@ -107,27 +186,41 @@ export function MenuItemDialog({ isOpen, setIsOpen, onSave, item, showIngredient
             <Input id="name" value={name} onChange={e => setName(e.target.value)} />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="price">Price</Label>
+            <Input id="price" type="number" step="0.01" min="0" value={price} onChange={e => setPrice(e.target.value)} />
+          </div>
+          <div className="space-y-2">
             <Label>Image</Label>
             <div className="w-full cursor-pointer" onClick={handleImageClick}>
-              <Image
-                src={imageError ? 'https://placehold.co/600x400/EEE/31343C?text=Click+to+upload' : imageUrl}
-                alt="Click to upload"
-                width={200}
-                height={125}
-                className="rounded-md object-cover aspect-video"
-                onError={() => setImageError(true)}
-                onLoad={() => setImageError(false)}
-                unoptimized // Allows loading external URLs without next.config.js whitelisting
-                data-ai-hint="coffee drink"
-              />
+              {(() => {
+                const src = imageError ? 'https://placehold.co/600x400/EEE/31343C?text=Click+to+upload' : (imageUrl?.trim() || 'https://placehold.co/600x400/EEE/31343C?text=Click+to+upload');
+                const isRemote = !src.startsWith('/')
+                return (
+                  <Image
+                    src={src}
+                    alt="Click to upload"
+                    width={PREVIEW_WIDTH}
+                    height={PREVIEW_HEIGHT}
+                    className="rounded-md object-cover"
+                    style={{ width: '100%', height: 'auto' }}
+                    onError={() => setImageError("Preview failed to load")}
+                    onLoad={() => setImageError(null)}
+                    unoptimized={isRemote}
+                    data-ai-hint="coffee drink"
+                  />
+                );
+              })()}
             </div>
             <input 
               type="file" 
               ref={fileInputRef} 
               onChange={handleFileChange}
               className="hidden"
-              accept="image/*"
+              accept="image/png, image/jpeg, image/webp"
             />
+            {imageError && (
+              <p className="text-sm text-destructive mt-1">{imageError}</p>
+            )}
           </div>
           {showIngredients && (
             <div className="space-y-2">

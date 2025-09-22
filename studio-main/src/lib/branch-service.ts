@@ -1,88 +1,74 @@
-// src/lib/branch-service.ts
-'use server';
-
-import { cookies } from 'next/headers';
+// lib/branch-service.ts
 import type { Branch } from './types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
+// Use unified API base (must include '/api')
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
-// Helper to get authenticated headers
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('token')?.value;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
-}
+const getAuthHeader = (): Record<string, string> => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
 
-// Helper to handle API responses
-async function handleResponse(response: Response) {
+export async function getBranches(): Promise<Branch[]> {
+  const response = await fetch(`${API_BASE}/branches`, {
+    headers: { ...getAuthHeader() },
+    cache: 'no-store',
+  });
+  
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error("API Error:", errorText);
-    // Try to parse error detail from backend
-    try {
-      const errorJson = JSON.parse(errorText);
-      if (errorJson.detail) {
-        throw new Error(errorJson.detail);
-      }
-    } catch (e) {
-      // Fallback to full text
-      throw new Error(`API call failed with status ${response.status}: ${errorText}`);
-    }
+    throw new Error(`Failed to fetch branches: ${response.statusText}`);
   }
-  // For DELETE requests with no content
-  if (response.status === 204) {
-    return null;
-  }
+  
   return response.json();
 }
 
-// --- API Service Functions for Branches ---
-
-export async function getBranches(): Promise<Branch[]> {
-  try {
-    const headers = await getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/branches`, {
-      headers,
-      cache: 'no-store',
-    });
-    return await handleResponse(response);
-  } catch (error) {
-    console.error("Failed to get branches:", error);
-    return [];
-  }
-}
-
 export async function addBranch(branchData: Omit<Branch, 'id' | 'created_at' | 'updated_at'>): Promise<Branch> {
-  const headers = await getAuthHeaders();
-  const response = await fetch(`${API_BASE_URL}/branches`, {
+  const response = await fetch(`${API_BASE}/branches`, {
     method: 'POST',
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
     body: JSON.stringify(branchData),
+    cache: 'no-store',
   });
-  return handleResponse(response);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to create branch: ${errorText}`);
+  }
+  
+  return response.json();
 }
 
-export async function updateBranch(branchId: number, branchData: Partial<Omit<Branch, 'id' | 'created_at' | 'updated_at'>>): Promise<Branch> {
-  const headers = await getAuthHeaders();
-  const response = await fetch(`${API_BASE_URL}/branches/${branchId}`, {
+export async function updateBranch(branchId: number, branchData: Partial<Branch>): Promise<Branch> {
+  const response = await fetch(`${API_BASE}/branches/${branchId}`, {
     method: 'PUT',
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
     body: JSON.stringify(branchData),
+    cache: 'no-store',
   });
-  return handleResponse(response);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to update branch: ${errorText}`);
+  }
+  
+  return response.json();
 }
 
 export async function deleteBranch(branchId: number): Promise<void> {
-  const headers = await getAuthHeaders();
-  const response = await fetch(`${API_BASE_URL}/branches/${branchId}`, {
+  const response = await fetch(`${API_BASE}/branches/${branchId}`, {
     method: 'DELETE',
-    headers,
+    headers: { ...getAuthHeader() },
+    cache: 'no-store',
   });
-  await handleResponse(response);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to delete branch: ${errorText}`);
+  }
 }

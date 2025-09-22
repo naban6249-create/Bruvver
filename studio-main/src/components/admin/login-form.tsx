@@ -14,42 +14,27 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowRight, Loader2 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { loginUser } from "@/lib/auth-service";
-
-type Role = "admin" | "worker";
 
 export function LoginForm() {
   const router = useRouter();
   const { setUser } = useAuth();
   const { toast } = useToast();
   
-  const [role, setRole] = useState<Role>("admin");
-  const [email, setEmail] = useState("admin@test.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
-  const handleRoleChange = (selectedRole: Role) => {
-    setRole(selectedRole);
-    if (selectedRole === "admin") {
-      setEmail("admin@test.com");
-      setPassword("admin123");
-    } else {
-      setEmail("worker_cbe@test.com");
-      setPassword("worker123");
-    }
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      const userData = await loginUser(email, password);
+      const loginResp = await loginUser(email, password);
       
-      if (!userData) {
+      if (!loginResp) {
         toast({
           title: "Login Failed",
           description: "Invalid email or password",
@@ -58,20 +43,22 @@ export function LoginForm() {
         return;
       }
 
+      // Persist token and user in localStorage (client-side)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('token', loginResp.access_token);
+        localStorage.setItem('currentUser', JSON.stringify(loginResp.user));
+      }
+
       // Store user in context
-      setUser(userData);
+      setUser(loginResp.user);
 
       // Redirect based on role
-      if (userData.role === 'admin') {
-        router.push('/admin/dashboard?role=admin');
-      } else {
-        // For workers, redirect to dashboard - branch selection will be handled by AdminHeader
-        router.push('/admin/dashboard?role=worker');
-      }
+      const role = loginResp.user.role;
+      router.push(`/admin/dashboard?role=${role}`);
 
       toast({
         title: "Login Successful",
-        description: `Welcome back, ${userData.full_name}!`
+        description: `Welcome back, ${loginResp.user.full_name}!`
       });
 
     } catch (error) {
@@ -97,19 +84,6 @@ export function LoginForm() {
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="role">Role</Label>
-            <Select onValueChange={handleRoleChange} defaultValue={role}>
-              <SelectTrigger id="role">
-                <SelectValue placeholder="Select a role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="worker">Worker</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
             <Label htmlFor="email">Email</Label>
             <Input 
               id="email" 
@@ -133,14 +107,6 @@ export function LoginForm() {
               disabled={isLoading}
             />
           </div>
-
-          {role === "worker" && (
-            <div className="text-sm text-muted-foreground bg-blue-50 p-3 rounded">
-              <strong>Demo Credentials:</strong><br />
-              Coimbatore Worker: worker_cbe@test.com / worker123<br />
-              Bangalore Worker: worker_bgl@test.com / worker123
-            </div>
-          )}
         </CardContent>
         
         <CardFooter>

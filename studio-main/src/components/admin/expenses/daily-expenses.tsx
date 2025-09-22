@@ -344,9 +344,10 @@ export function DailyExpenses() {
             
             <DeleteConfirmationDialog
                 isOpen={isDeleteDialogOpen}
-                setIsOpen={setIsDeleteDialogOpen}
+                onClose={() => setIsDeleteDialogOpen(false)}
                 onConfirm={confirmDeleteItem}
-                itemName={selectedItem?.item_name}
+                title={`Delete ${selectedItem?.item_name ?? 'expense'}?`}
+                description="This action cannot be undone."
             />
         </>
     );

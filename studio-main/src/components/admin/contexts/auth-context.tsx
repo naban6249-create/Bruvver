@@ -1,25 +1,32 @@
+// lib/auth-context.tsx
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import type { User } from '@/lib/types';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import type { User, Branch } from '@/lib/types';
 
 interface AuthContextType {
   user: User | null;
   setUser: (user: User | null) => void;
+  hasPermission: (branchId: number, requiredLevel: 'view_only' | 'full_access') => boolean;
+  getUserBranches: () => Array<Branch & { permission: string }>;
   isLoading: boolean;
-  hasPermission: (branchId: number, level: 'view_only' | 'full_access') => boolean;
-  getUserBranches: () => Array<{ id: number; name: string; location?: string; permission: 'view_only' | 'full_access' }>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  setUser: () => {},
+  hasPermission: () => false,
+  getUserBranches: () => [],
+  isLoading: true,
+});
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}
+};
 
 interface AuthProviderProps {
   children: React.ReactNode;
@@ -30,62 +37,76 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Load user from localStorage on initial load
-    const loadUser = () => {
-      try {
-        const savedUser = localStorage.getItem('currentUser');
-        if (savedUser) {
-          setUser(JSON.parse(savedUser));
+    // Load user from localStorage on mount
+    if (typeof window !== 'undefined') {
+      const savedUser = localStorage.getItem('currentUser');
+      if (savedUser) {
+        try {
+          const parsedUser = JSON.parse(savedUser);
+          setUser(parsedUser);
+        } catch (error) {
+          console.error('Error parsing saved user:', error);
+          localStorage.removeItem('currentUser');
         }
-      } catch (error) {
-        console.error('Failed to load user from storage:', error);
-      } finally {
-        setIsLoading(false);
       }
-    };
-
-    loadUser();
+    }
+    setIsLoading(false);
   }, []);
 
-  const hasPermission = (branchId: number, level: 'view_only' | 'full_access'): boolean => {
+  const hasPermission = (branchId: number, requiredLevel: 'view_only' | 'full_access'): boolean => {
     if (!user) return false;
+    
+    // Admins have full access to all branches
     if (user.role === 'admin') return true;
-
-    const permission = user.branch_permissions.find(p => p.branch_id === branchId);
+    
+    // Workers need explicit permissions
+    const permission = user.branch_permissions?.find(p => p.branch_id === branchId);
     if (!permission) return false;
-
-    if (level === 'view_only') return true;
-    return permission.permission_level === 'full_access';
+    
+    // If full access is required, check specifically for that
+    if (requiredLevel === 'full_access') {
+      return permission.permission_level === 'full_access';
+    }
+    
+    // For view_only requirement, both view_only and full_access are sufficient
+    return permission.permission_level === 'view_only' || permission.permission_level === 'full_access';
   };
 
-  const getUserBranches = () => {
+  const getUserBranches = (): Array<Branch & { permission: string }> => {
     if (!user) return [];
-    if (user.role === 'admin') {
-      // For admins, we'd need to fetch all branches - simplified here
-      return [];
-    }
-
-    return user.branch_permissions.map(permission => ({
-      id: permission.branch_id,
-      name: permission.branch?.name || 'Unknown Branch',
-      location: permission.branch?.location,
-      permission: permission.permission_level
-    }));
+    
+    // Admins can access all branches - but we need to fetch them from API
+    // For now, return branches from permissions
+    return user.branch_permissions?.map(p => ({
+      id: p.branch_id,
+      name: p.branch?.name || `Branch ${p.branch_id}`,
+      location: p.branch?.location || '',
+      address: p.branch?.address || '',
+      phone: p.branch?.phone || '',
+      email: p.branch?.email || '',
+      is_active: p.branch?.is_active || true,
+      created_at: p.branch?.created_at || new Date().toISOString(),
+      updated_at: p.branch?.updated_at || new Date().toISOString(),
+      permission: p.permission_level
+    })) || [];
   };
 
   const contextValue: AuthContextType = {
     user,
     setUser: (newUser) => {
       setUser(newUser);
-      if (newUser) {
-        localStorage.setItem('currentUser', JSON.stringify(newUser));
-      } else {
-        localStorage.removeItem('currentUser');
+      if (typeof window !== 'undefined') {
+        if (newUser) {
+          localStorage.setItem('currentUser', JSON.stringify(newUser));
+        } else {
+          localStorage.removeItem('currentUser');
+          localStorage.removeItem('token');
+        }
       }
     },
-    isLoading,
     hasPermission,
-    getUserBranches
+    getUserBranches,
+    isLoading,
   };
 
   return (

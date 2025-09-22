@@ -1,4 +1,8 @@
-import { AuthProvider } from '@/components/contexts/auth-provider';
+import { cn } from "@/lib/utils"; // ✅ FIX: Import the cn utility
+import { AuthProvider } from "@/components/admin/contexts/auth-provider";
+import { Toaster } from "@/components/ui/toaster";
+import { alegreya, belleza } from "@/lib/fonts";
+import "./globals.css";
 
 export default function RootLayout({
   children,

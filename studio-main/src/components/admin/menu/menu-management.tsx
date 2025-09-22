@@ -103,13 +103,16 @@ export function MenuManagement() {
   const handleSaveItem = async (item: MenuItem) => {
     if (!branchId) return;
     const isNew = !item.id;
-    const itemWithBranch = { ...item, branchId };
+    const branchIdNum = parseInt(branchId, 10);
 
     try {
       if (isNew) {
-        await addMenuItem(itemWithBranch);
+        // Omit id for create and ensure numeric branchId
+        const { id, ...rest } = item;
+        await addMenuItem({ ...(rest as Omit<MenuItem, 'id'>), branchId: branchIdNum } as any);
       } else {
-        await updateMenuItem(itemWithBranch);
+        // For update, send full item with numeric branchId
+        await updateMenuItem({ ...item, branchId: branchIdNum } as any);
       }
       await fetchMenuItems();
       toast({ title: "Success", description: `Menu item ${isNew ? 'added' : 'updated'}.` });
@@ -163,14 +166,23 @@ export function MenuManagement() {
               {items.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="hidden sm:table-cell">
-                    <Image
-                      alt={item.name}
-                      className="aspect-square rounded-md object-cover"
-                      height="64"
-                      src={item.imageUrl}
-                      width="64"
-                      data-ai-hint="coffee drink"
-                    />
+                    {(() => {
+                      const imgSrc = item.imageUrl && item.imageUrl.trim().length > 0
+                        ? item.imageUrl
+                        : 'https://picsum.photos/64/64';
+                      const isRemote = !imgSrc.startsWith('/');
+                      return (
+                        <Image
+                          alt={item.name}
+                          className="aspect-square rounded-md object-cover"
+                          height="64"
+                          src={imgSrc}
+                          width="64"
+                          unoptimized={isRemote}
+                          data-ai-hint="coffee drink"
+                        />
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="font-medium">{item.name}</TableCell>
                   <TableCell className="hidden md:table-cell">
@@ -221,9 +233,10 @@ export function MenuManagement() {
           />
           <DeleteConfirmationDialog 
             isOpen={isDeleteDialogOpen}
-            setIsOpen={setIsDeleteDialogOpen}
+            onClose={() => setIsDeleteDialogOpen(false)}
             onConfirm={confirmDeleteItem}
-            itemName={selectedItem?.name}
+            title={`Delete ${selectedItem?.name ?? 'item'}?`}
+            description="This action cannot be undone."
           />
         </>
       )}

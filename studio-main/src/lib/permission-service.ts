@@ -1,89 +1,110 @@
-'use server';
+// lib/permission-service.ts
+import type { UserPermissionSummary, UserBranchPermissionCreate } from './types';
 
-import { cookies } from 'next/headers';
-import type { User, UserBranchPermission } from './types';
+// Use unified API base (must include '/api')
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
-// Ensure this points to your running backend API
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
+const getAuthHeader = (): Record<string, string> => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
 
-// --- Reusable Helper Functions ---
-
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const cookieStore = cookies();
-  const token = cookieStore.get('token')?.value;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+export async function getAllUserPermissions(): Promise<UserPermissionSummary[]> {
+  const response = await fetch(`${API_BASE}/admin/user-permissions`, {
+    headers: { ...getAuthHeader() },
+    cache: 'no-store',
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch user permissions: ${response.statusText}`);
   }
-  return headers;
+  
+  return response.json();
 }
 
-async function handleResponse(response: Response) {
+// Admin: grant a worker full access to ALL branches
+export async function grantAllBranchesFullAccess(userId: number): Promise<{ updated: number }> {
+  const response = await fetch(`${API_BASE}/admin/grant-all-branches-full-access/${userId}`, {
+    method: 'POST',
+    headers: { ...getAuthHeader() },
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Failed to grant full access: ${err}`);
+  }
+  return response.json();
+}
+
+// Admin: limit a worker to a single branch (full_access on that branch; remove others)
+export async function limitToSingleBranch(userId: number, branchId: number): Promise<{ limited_to_branch_id: number }> {
+  const response = await fetch(`${API_BASE}/admin/limit-to-single-branch/${userId}/${branchId}`, {
+    method: 'POST',
+    headers: { ...getAuthHeader() },
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Failed to limit to single branch: ${err}`);
+  }
+  return response.json();
+}
+
+export async function assignBranchPermission(data: UserBranchPermissionCreate): Promise<any> {
+  const response = await fetch(`${API_BASE}/admin/assign-branch-permission`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
+    body: JSON.stringify(data),
+    cache: 'no-store',
+  });
+  
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("API Error:", errorText);
-    try {
-      const errorJson = JSON.parse(errorText);
-      if (errorJson.detail) {
-        throw new Error(errorJson.detail);
-      }
-    } catch (e) {
-      throw new Error(`API call failed with status ${response.status}: ${errorText}`);
-    }
+    throw new Error(`Failed to assign permission: ${errorText}`);
   }
-  return response.status === 204 ? null : response.json();
+  
+  return response.json();
 }
 
-
-// --- Permission Service Functions ---
-
-/**
- * Fetches a list of all users and their detailed branch permissions.
- * Intended for admin use in the permissions management UI.
- */
-export async function getAllUserPermissions(): Promise<User[]> {
-  try {
-    const headers = await getAuthHeaders();
-    const response = await fetch(`${API_BASE_URL}/admin/user-permissions`, {
-      headers,
-      cache: 'no-store', // Always fetch fresh data
-    });
-    return await handleResponse(response);
-  } catch (error) {
-    console.error("Failed to get user permissions:", error);
-    return [];
-  }
-}
-
-/**
- * Assigns or updates a user's permission for a specific branch.
- * Intended for admin use.
- */
-export async function assignBranchPermission(permissionData: {
-  user_id: number;
-  branch_id: number;
-  permission_level: 'view_only' | 'full_access';
-}): Promise<UserBranchPermission> {
-  const headers = await getAuthHeaders();
-  const response = await fetch(`${API_BASE_URL}/admin/assign-permission`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(permissionData),
-  });
-  return handleResponse(response);
-}
-
-/**
- * Revokes a user's permission from a specific branch.
- * Intended for admin use.
- */
 export async function revokeBranchPermission(userId: number, branchId: number): Promise<void> {
-  const headers = await getAuthHeaders();
-  const response = await fetch(`${API_BASE_URL}/admin/revoke-permission/${userId}/${branchId}`, {
+  const response = await fetch(`${API_BASE}/admin/revoke-branch-permission/${userId}/${branchId}`, {
     method: 'DELETE',
-    headers,
+    headers: { ...getAuthHeader() },
+    cache: 'no-store',
   });
-  await handleResponse(response);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to revoke permission: ${errorText}`);
+  }
+}
+
+export async function updateBranchPermission(
+  userId: number, 
+  branchId: number, 
+  permissionLevel: 'view_only' | 'full_access'
+): Promise<any> {
+  const response = await fetch(`${API_BASE}/admin/assign-branch-permission`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      branch_id: branchId,
+      permission_level: permissionLevel
+    }),
+    cache: 'no-store',
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to update permission: ${errorText}`);
+  }
+  
+  return response.json();
 }

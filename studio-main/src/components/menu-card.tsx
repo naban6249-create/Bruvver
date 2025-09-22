@@ -9,7 +9,7 @@ interface MenuCardProps {
 }
 
 // --- DEFINE A FALLBACK IMAGE URL ---
-const FALLBACK_IMAGE_URL = "/images/placeholder-image.png"; // You can create a simple placeholder image in your public/images folder
+const FALLBACK_IMAGE_URL = "https://picsum.photos/600/400"; // Remote placeholder image (allowed in next.config.ts)
 
 export function MenuCard({ item }: MenuCardProps) {
   // --- FIX: Use the item's image URL or the fallback if it's missing ---

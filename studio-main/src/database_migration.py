@@ -118,6 +118,48 @@ def create_expense_categories_table():
     except Exception as e:
         print(f"❌ Error creating expense_categories table: {e}")
 
+def create_user_branch_permissions_table():
+    """Create or patch the user_branch_permissions table to match models"""
+    try:
+        with engine.connect() as conn:
+            # Create table if it doesn't exist
+            conn.execute(text(
+                """
+                CREATE TABLE IF NOT EXISTS user_branch_permissions (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    branch_id INTEGER NOT NULL,
+                    permission_level VARCHAR(50) DEFAULT 'view_only',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES admins (id),
+                    FOREIGN KEY (branch_id) REFERENCES branches (id)
+                )
+                """
+            ))
+            conn.commit()
+            print("✅ Ensured user_branch_permissions table exists")
+
+            # Ensure created_at column exists (SQLite can't add column with non-constant default)
+            if not check_column_exists('user_branch_permissions', 'created_at'):
+                conn.execute(text("ALTER TABLE user_branch_permissions ADD COLUMN created_at DATETIME"))
+                conn.commit()
+                # Backfill with current timestamp for existing rows
+                conn.execute(text("UPDATE user_branch_permissions SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
+                conn.commit()
+                print("✅ Added created_at to user_branch_permissions and backfilled")
+
+            # Ensure updated_at column exists (SQLite limitation workaround)
+            if not check_column_exists('user_branch_permissions', 'updated_at'):
+                conn.execute(text("ALTER TABLE user_branch_permissions ADD COLUMN updated_at DATETIME"))
+                conn.commit()
+                conn.execute(text("UPDATE user_branch_permissions SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"))
+                conn.commit()
+                print("✅ Added updated_at to user_branch_permissions and backfilled")
+
+    except Exception as e:
+        print(f"❌ Error creating or updating user_branch_permissions table: {e}")
+
 def add_branch_columns():
     """Add branch_id columns to existing tables"""
     tables_to_update = [
@@ -327,6 +369,7 @@ def create_sample_expenses():
                     'unit_cost': 800.0,
                     'total_amount': 4000.0,
                     'vendor': 'Coffee Suppliers Ltd',
+                    'receipt_number': 'ING-2024-001',
                     'created_by': admin_id
                 },
                 {
@@ -339,6 +382,7 @@ def create_sample_expenses():
                     'unit_cost': 2.5,
                     'total_amount': 1250.0,
                     'vendor': 'PackagePro',
+                    'receipt_number': 'SUP-2024-001',
                     'created_by': admin_id
                 },
                 {
@@ -383,12 +427,119 @@ def create_sample_expenses():
     except Exception as e:
         print(f"❌ Error creating sample expenses: {e}")
 
+def create_sample_menus_per_branch():
+    """Seed distinct menu items per branch with basic ingredients"""
+    try:
+        with engine.connect() as conn:
+            branches = conn.execute(text("SELECT id, name FROM branches ORDER BY id ASC")).fetchall()
+            if not branches:
+                print("⚠️  No branches found, skipping sample menus")
+                return
+
+            # Get current max MenuItem id (string numeric)
+            max_id_row = conn.execute(text("SELECT MAX(CAST(id AS INTEGER)) FROM menu_items")).fetchone()
+            next_id = (max_id_row[0] or 0) + 1
+
+            for (branch_id, branch_name) in branches:
+                # Create 2-3 unique items per branch if none exist for that branch
+                existing = conn.execute(text("SELECT COUNT(*) FROM menu_items WHERE branch_id = :b"), {"b": branch_id}).fetchone()[0]
+                if existing and existing > 0:
+                    print(f"ℹ️  Menu already exists for branch {branch_name}, skipping")
+                    continue
+
+                if 'Coimbatore' in (branch_name or ''):
+                    items = [
+                        {"name": "Coimbatore Filter Coffee", "price": 120.0, "category": "hot", "description": "Strong South Indian filter coffee"},
+                        {"name": "Mysore Pak Latte", "price": 180.0, "category": "hot", "description": "Latte with Mysore Pak twist"},
+                    ]
+                else:
+                    items = [
+                        {"name": "Bangalore Cold Brew", "price": 160.0, "category": "iced", "description": "Smooth cold brew over ice"},
+                        {"name": "Masala Cappuccino", "price": 190.0, "category": "hot", "description": "Cappuccino with Indian spices"},
+                    ]
+
+                for it in items:
+                    new_id = str(next_id)
+                    conn.execute(text(
+                        """
+                        INSERT INTO menu_items (id, name, price, description, category, is_available, branch_id, image_url)
+                        VALUES (:id, :name, :price, :description, :category, 1, :branch_id, :image_url)
+                        """
+                    ), {
+                        "id": new_id,
+                        "name": it["name"],
+                        "price": it["price"],
+                        "description": it["description"],
+                        "category": it["category"],
+                        "branch_id": branch_id,
+                        "image_url": None,
+                    })
+                    # basic ingredients
+                    ingredients = [
+                        {"name": "Coffee Beans", "quantity": 18.0, "unit": "g"},
+                        {"name": "Water", "quantity": 60.0, "unit": "ml"},
+                    ]
+                    for ing in ingredients:
+                        conn.execute(text(
+                            """
+                            INSERT INTO ingredients (menu_item_id, name, quantity, unit, image_url)
+                            VALUES (:menu_item_id, :name, :quantity, :unit, NULL)
+                            """
+                        ), {
+                            "menu_item_id": new_id,
+                            "name": ing["name"],
+                            "quantity": ing["quantity"],
+                            "unit": ing["unit"],
+                        })
+                    next_id += 1
+                print(f"✅ Seeded sample menu for branch {branch_name}")
+            conn.commit()
+    except Exception as e:
+        print(f"❌ Error creating sample menus per branch: {e}")
+
+def create_sample_sales_per_branch():
+    """Seed a couple of daily sales rows per branch for today's date"""
+    try:
+        with engine.connect() as conn:
+            branches = conn.execute(text("SELECT id, name FROM branches ORDER BY id ASC")).fetchall()
+            if not branches:
+                print("⚠️  No branches found, skipping sample sales")
+                return
+
+            for (branch_id, branch_name) in branches:
+                # If sales exist today for this branch, skip
+                existing = conn.execute(text(
+                    "SELECT COUNT(*) FROM daily_sales WHERE branch_id = :b AND date(sale_date)=date('now')"
+                ), {"b": branch_id}).fetchone()[0]
+                if existing and existing > 0:
+                    print(f"ℹ️  Sales for today already exist for branch {branch_name}, skipping")
+                    continue
+
+                # pick first two items for this branch
+                items = conn.execute(text(
+                    "SELECT id, price FROM menu_items WHERE branch_id = :b LIMIT 2"
+                ), {"b": branch_id}).fetchall()
+                for idx, (item_id, price) in enumerate(items):
+                    qty = 5 + idx
+                    revenue = (price or 0) * qty
+                    conn.execute(text(
+                        """
+                        INSERT INTO daily_sales (menu_item_id, quantity, revenue, branch_id, sale_date)
+                        VALUES (:item_id, :qty, :revenue, :branch_id, CURRENT_TIMESTAMP)
+                        """
+                    ), {"item_id": item_id, "qty": qty, "revenue": revenue, "branch_id": branch_id})
+                if items:
+                    print(f"✅ Seeded sample daily sales for branch {branch_name}")
+            conn.commit()
+    except Exception as e:
+        print(f"❌ Error creating sample sales per branch: {e}")
+
 def verify_migration():
     """Verify that all migrations were successful"""
     try:
         with engine.connect() as conn:
             # Check tables exist
-            required_tables = ['branches', 'daily_expenses', 'expense_categories']
+            required_tables = ['branches', 'daily_expenses', 'expense_categories', 'user_branch_permissions']
             inspector = inspect(engine)
             existing_tables = inspector.get_table_names()
             
@@ -398,6 +549,14 @@ def verify_migration():
                 else:
                     print(f"❌ Table {table} missing")
             
+            # Check user_branch_permissions critical columns
+            if 'user_branch_permissions' in existing_tables:
+                for col in ['created_at', 'updated_at', 'permission_level']:
+                    if check_column_exists('user_branch_permissions', col):
+                        print(f"✅ user_branch_permissions.{col} exists")
+                    else:
+                        print(f"❌ user_branch_permissions.{col} missing")
+
             # Check key columns exist
             if 'menu_items' in existing_tables and check_column_exists('menu_items', 'branch_id'):
                 print("✅ Menu items have branch association")
@@ -416,6 +575,16 @@ def verify_migration():
             if check_table_exists('daily_expenses'):
                 expense_count = conn.execute(text("SELECT COUNT(*) FROM daily_expenses")).fetchone()[0]
                 print(f"✅ Sample expenses: {expense_count}")
+
+            # Per-branch menu and sales counts
+            try:
+                branches = conn.execute(text("SELECT id, name FROM branches ORDER BY id ASC")).fetchall()
+                for (bid, bname) in branches:
+                    mcount = conn.execute(text("SELECT COUNT(*) FROM menu_items WHERE branch_id = :b"), {"b": bid}).fetchone()[0]
+                    scount = conn.execute(text("SELECT COUNT(*) FROM daily_sales WHERE branch_id = :b AND date(sale_date)=date('now')"), {"b": bid}).fetchone()[0]
+                    print(f"✅ Branch '{bname}' -> menu items: {mcount}, today sales rows: {scount}")
+            except Exception as e:
+                print(f"ℹ️  Per-branch verification skipped: {e}")
             
     except Exception as e:
         print(f"❌ Error during verification: {e}")
@@ -430,6 +599,7 @@ def run_migration():
     create_branches_table()
     create_daily_expenses_table()
     create_expense_categories_table()
+    create_user_branch_permissions_table()
     
     # Step 2: Add columns to existing tables
     print("\n🔧 Adding new columns...")
@@ -442,6 +612,8 @@ def run_migration():
     update_admin_roles()
     assign_existing_data_to_branches()
     create_sample_expenses()
+    create_sample_menus_per_branch()
+    create_sample_sales_per_branch()
     
     # Step 4: Verify migration
     print("\n✅ Verifying migration...")
