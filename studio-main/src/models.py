@@ -29,6 +29,7 @@ class Branch(Base):
     expenses = relationship("DailyExpense", back_populates="branch", cascade="all, delete-orphan")
     inventory = relationship("Inventory", back_populates="branch", cascade="all, delete-orphan")
     reports = relationship("DailyReport", back_populates="branch", cascade="all, delete-orphan")
+    opening_balances = relationship("OpeningBalance", back_populates="branch", cascade="all, delete-orphan")
 
 class Admin(Base):
     __tablename__ = "admins"
@@ -212,3 +213,15 @@ class DailyReport(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     branch = relationship("Branch", back_populates="reports")
+
+class OpeningBalance(Base):
+    __tablename__ = "opening_balances"
+
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    amount = Column(Float, nullable=False, default=0.0)
+    date = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    branch = relationship("Branch", back_populates="opening_balances")

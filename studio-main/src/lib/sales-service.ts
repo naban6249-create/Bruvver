@@ -1,4 +1,3 @@
-// lib/sales-service.ts
 import type { DailySale } from './types';
 import Cookies from 'js-cookie';
 

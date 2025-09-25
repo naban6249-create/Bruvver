@@ -4,20 +4,21 @@ import { Suspense } from 'react';
 
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from "react";
+import { DailyBalanceDashboard } from "./dashboard/daily-balance-dashboard";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Mail, Sheet } from 'lucide-react';
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MenuManagement } from "./menu/menu-management";
-import { useToast } from "@/hooks/use-toast";
 import { DailySalesBreakdown } from "./dashboard/daily-sales-breakdown";
 import { resetDailySales } from "@/lib/sales-service";
 import { DailyExpenses } from "./expenses/daily-expenses";
 import { BranchManagement } from "./branches/branch-management";
 import { ReportsDashboard } from "./reports/reports-dashboard";
+import { useToast } from "@/hooks/use-toast";
+import { MenuManagement } from "./menu/menu-management";
 import { WorkerDashboard } from './dashboard/worker-dashboard';
 import { PermissionManagement } from './permissions/permission-management';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Mail, Sheet } from 'lucide-react';
-import { useAuth } from "@/lib/auth-context";
 
 export function DashboardClient() {
     const { toast } = useToast();
@@ -90,6 +91,7 @@ export function DashboardClient() {
                     <div className="flex items-center justify-between mb-6">
                         <TabsList>
                             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                            <TabsTrigger value="balance">Daily Balance</TabsTrigger>
                             <TabsTrigger value="menu">Menu</TabsTrigger>
                             <TabsTrigger value="expenses">Daily Expenses</TabsTrigger>
                             <TabsTrigger value="branches">Branches</TabsTrigger>
@@ -139,6 +141,12 @@ export function DashboardClient() {
                                 </CardContent>
                             </Card>
                         </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="balance">
+                        <Suspense fallback={<div>Loading balance data...</div>}>
+                            <DailyBalanceDashboard />
+                        </Suspense>
                     </TabsContent>
                     
                     <TabsContent value="menu">

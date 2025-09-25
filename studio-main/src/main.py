@@ -1,4 +1,3 @@
-# main.py - Complete merged version with multi-branch, expenses, worker APIs, enhanced auth & upload
 from fastapi import FastAPI, HTTPException, Depends, status, File, UploadFile, Form, Body, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -27,7 +26,7 @@ os.makedirs("static/images", exist_ok=True)
 from database import engine, get_database
 from models import (
     Base, MenuItem, Ingredient, DailySale, Admin, Order, OrderItem, Inventory,
-    Branch, DailyExpense, ExpenseCategory, UserBranchPermission, PermissionLevel
+    Branch, DailyExpense, ExpenseCategory, UserBranchPermission, PermissionLevel, OpeningBalance
 )
 from schemas import (
     UserRole,  # 👈 FIX: import from schemas, not models
@@ -43,6 +42,7 @@ from schemas import (
     UserPermissionSummary, UserBranchPermissionCreate,  # ✅ This was missing!
     UserBranchPermissionResponse,  # ✅ Add this too
     UserBranchPermissionBase,# Added UserPermissionSummary
+    OpeningBalanceResponse, OpeningBalanceCreate, OpeningBalanceUpdate, DailyBalanceSummary
 )
 from sqlalchemy import func, and_
 
@@ -1621,6 +1621,92 @@ async def update_inventory(
     return db_item
 
 # -------------------------
+# DASHBOARD
+# -------------------------
+async def get_dashboard_data_enhanced(
+    branch_id: Optional[int] = None,
+    db = None,
+    current_user = None
+):
+    """Get comprehensive dashboard data for a branch"""
+    today = date.today()
+    target_branch_id = None
+    if hasattr(current_user, 'role') and current_user.role == "worker" and current_user.branch_id:
+        target_branch_id = current_user.branch_id
+    elif branch_id:
+        target_branch_id = branch_id
+
+    # Sales data
+    sales_filter = func.date(DailySale.sale_date) == today
+    expense_filter = func.date(DailyExpense.expense_date) == today
+    if target_branch_id:
+        sales_filter = and_(sales_filter, DailySale.branch_id == target_branch_id)
+        expense_filter = and_(expense_filter, DailyExpense.branch_id == target_branch_id)
+
+    today_sales = db.query(DailySale).filter(sales_filter).all()
+    today_items_sold = sum(sale.quantity for sale in today_sales)
+    today_revenue = sum(sale.revenue for sale in today_sales)
+
+    today_expenses = db.query(DailyExpense).filter(expense_filter).all()
+    total_expenses = sum(expense.total_amount for expense in today_expenses)
+    net_profit = today_revenue - total_expenses
+
+    # Expense breakdown
+    expense_breakdown = {}
+    for expense in today_expenses:
+        if expense.category not in expense_breakdown:
+            expense_breakdown[expense.category] = 0
+        expense_breakdown[expense.category] += expense.total_amount
+    expense_breakdown_list = [{"category": cat, "amount": round(amount, 2)} for cat, amount in expense_breakdown.items()]
+
+    # Pending orders
+    orders_query = db.query(Order).filter(Order.status.in_(["pending", "preparing"]))
+    if target_branch_id:
+        orders_query = orders_query.filter(Order.branch_id == target_branch_id)
+    pending_orders_count = orders_query.count()
+
+    # Low stock items
+    inventory_query = db.query(Inventory).filter(Inventory.current_stock <= Inventory.minimum_threshold)
+    if target_branch_id:
+        inventory_query = inventory_query.filter(Inventory.branch_id == target_branch_id)
+    low_stock_count = inventory_query.count()
+
+    # Top selling items last 7 days
+    week_ago = today - timedelta(days=7)
+    top_items_query = db.query(
+        DailySale.menu_item_id,
+        func.sum(DailySale.quantity).label('total_quantity'),
+        func.sum(DailySale.revenue).label('total_revenue')
+    ).filter(func.date(DailySale.sale_date) >= week_ago)
+    if target_branch_id:
+        top_items_query = top_items_query.filter(DailySale.branch_id == target_branch_id)
+    top_items = top_items_query.group_by(DailySale.menu_item_id).order_by(func.sum(DailySale.quantity).desc()).limit(5).all()
+    top_selling_items = []
+    for item_sale in top_items:
+        menu_item = db.query(MenuItem).filter(MenuItem.id == item_sale.menu_item_id).first()
+        if menu_item:
+            top_selling_items.append({"name": menu_item.name, "quantity_sold": item_sale.total_quantity, "revenue": round(item_sale.total_revenue, 2)})
+
+    # Recent orders
+    recent_orders_query = db.query(Order).order_by(Order.created_at.desc())
+    if target_branch_id:
+        recent_orders_query = recent_orders_query.filter(Order.branch_id == target_branch_id)
+    recent_orders = recent_orders_query.limit(5).all()
+
+    return {
+        "branch_id": target_branch_id,
+        "today_sales": today_items_sold,
+        "today_revenue": round(today_revenue, 2),
+        "today_expenses": round(total_expenses, 2),
+        "net_profit": round(net_profit, 2),
+        "pending_orders": pending_orders_count,
+        "low_stock_items": low_stock_count,
+        "top_selling_items": top_selling_items,
+        "recent_orders": recent_orders,
+        "expense_breakdown": expense_breakdown_list
+    }
+
+# -------------------------
 # REPORTS (daily)
 # -------------------------
 @app.get("/api/reports/daily")
@@ -1835,6 +1921,19 @@ async def get_expense_summary(
         "week": compute_expense_range(week_start, today),
         "month": compute_expense_range(month_start, today),
     }
+
+@app.get("/api/admin/dashboard")
+async def get_admin_dashboard(
+    branch_id: Optional[int] = None,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Get admin dashboard data"""
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # Use the same logic as get_dashboard_data_enhanced but for admin access
+    return await get_dashboard_data_enhanced(branch_id=branch_id, db=db, current_user=current_user)
 
 # -------------------------
 # WORKER-SPECIFIC (read-only) endpoints

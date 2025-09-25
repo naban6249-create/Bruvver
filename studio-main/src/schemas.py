@@ -1,4 +1,3 @@
-# schemas.py - Updated with RBAC Support
 from pydantic import BaseModel, EmailStr, validator
 from typing import List, Optional
 from datetime import datetime
@@ -385,6 +384,39 @@ class DashboardSummary(BaseModel):
     top_selling_items: List[dict]
     recent_orders: List[OrderResponse]
     expense_breakdown: List[dict]
+
+# -----------------------
+# OPENING BALANCE SCHEMAS
+# -----------------------
+class OpeningBalanceBase(BaseModel):
+    branch_id: int
+    amount: float
+    date: Optional[datetime] = None
+
+class OpeningBalanceCreate(OpeningBalanceBase):
+    pass
+
+class OpeningBalanceUpdate(BaseModel):
+    amount: Optional[float] = None
+    date: Optional[datetime] = None
+
+class OpeningBalanceResponse(OpeningBalanceBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# -----------------------
+# DAILY BALANCE SUMMARY
+# -----------------------
+class DailyBalanceSummary(BaseModel):
+    opening_balance: float
+    total_revenue: float
+    total_expenses: float
+    calculated_balance: float
+    transaction_count: int
 
 # -----------------------
 # IMAGE UPLOAD

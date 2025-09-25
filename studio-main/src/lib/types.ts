@@ -7,6 +7,7 @@ export interface Branch {
   address?: string;
   phone?: string;
   email?: string;
+  openingBalance?: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;

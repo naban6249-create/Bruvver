@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { DailySalesBreakdown } from "./daily-sales-breakdown";
 import { WorkerExpenses } from "../expenses/worker-expenses";
 import { MenuManagement } from "../menu/menu-management";
+import { DailyBalanceDashboard } from "./daily-balance-dashboard";
 import { useAuth } from "@/lib/auth-context";
 import { AlertCircle, Eye, Edit } from "lucide-react";
 
@@ -21,7 +22,7 @@ export function WorkerDashboard() {
     const hasFullAccess = currentBranchId ? hasPermission(currentBranchId, 'full_access') : false;
 
     // Find current branch details
-    const currentBranch = userBranches.find(b => b.id === currentBranchId);
+    const currentBranch = userBranches.find((b: any) => b.id === currentBranchId);
 
     if (!user) {
         return (
@@ -122,6 +123,7 @@ export function WorkerDashboard() {
                 <div className="flex items-center mb-6">
                     <TabsList>
                         <TabsTrigger value="dashboard">Daily Sales</TabsTrigger>
+                        <TabsTrigger value="balance">Daily Balance</TabsTrigger>
                         <TabsTrigger value="expenses">Daily Supplies</TabsTrigger>
                         <TabsTrigger value="menu">Menu</TabsTrigger>
                     </TabsList>
@@ -142,6 +144,24 @@ export function WorkerDashboard() {
                             </Card>
                         )}
                         <DailySalesBreakdown />
+                    </div>
+                </TabsContent>
+                
+                <TabsContent value="balance">
+                    <div className="space-y-6">
+                        {!hasFullAccess && (
+                            <Card className="border-amber-200 bg-amber-50">
+                                <CardContent className="p-4">
+                                    <div className="flex items-center gap-2">
+                                        <Eye className="h-4 w-4 text-amber-600" />
+                                        <p className="text-sm text-amber-800">
+                                            You can view balance data but cannot edit opening balance.
+                                        </p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+                        <DailyBalanceDashboard />
                     </div>
                 </TabsContent>
                 
