@@ -31,14 +31,12 @@ export async function GET(request: NextRequest) {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-API-Key': SERVICE_API_KEY,
-      'Authorization': SERVICE_API_KEY,  // Try without "Bearer" prefix
     };
 
     console.log('Fetching from:', apiUrl);
     console.log('Headers being sent:', {
       'Content-Type': headers['Content-Type'],
       'X-API-Key': headers['X-API-Key'] ? `${headers['X-API-Key'].substring(0, 10)}...` : 'MISSING',
-      'Authorization': headers['Authorization'] ? `${headers['Authorization'].substring(0, 10)}...` : 'MISSING'
     });
     
     const response = await fetch(apiUrl, {

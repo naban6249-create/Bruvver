@@ -1,5 +1,7 @@
 "use client";
 
+import { Suspense } from 'react';
+
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +15,6 @@ import { BranchManagement } from "./branches/branch-management";
 import { ReportsDashboard } from "./reports/reports-dashboard";
 import { WorkerDashboard } from './dashboard/worker-dashboard';
 import { PermissionManagement } from './permissions/permission-management';
-import { AdminHeader } from './admin-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Mail, Sheet } from 'lucide-react';
 import { useAuth } from "@/lib/auth-context";
@@ -71,9 +72,10 @@ export function DashboardClient() {
     if (role === 'worker') {
         return (
             <>
-                
                 <div className="container mx-auto p-6">
-                    <WorkerDashboard />
+                    <Suspense fallback={<div>Loading worker dashboard...</div>}>
+                        <WorkerDashboard />
+                    </Suspense>
                 </div>
             </>
         );
@@ -102,7 +104,9 @@ export function DashboardClient() {
                     </div>
                     
                     <TabsContent value="dashboard">
-                        <DailySalesBreakdown />
+                        <Suspense fallback={<div>Loading sales data...</div>}>
+                            <DailySalesBreakdown />
+                        </Suspense>
                         <div className="mt-8 grid gap-4 md:gap-8 lg:grid-cols-2">
                             <Card>
                                 <CardHeader>

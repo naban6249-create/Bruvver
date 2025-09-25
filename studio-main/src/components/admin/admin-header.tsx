@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { Coffee, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useEffect, useState } from 'react';
@@ -186,11 +186,12 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
     <header className="sticky top-0 flex h-16 items-center justify-between gap-4 border-b bg-background px-4 md:px-6 z-50">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold font-headline flex items-center gap-1">
-            <span>Bru</span>
-            <Coffee aria-label="v" className="inline-block h-5 w-5 align-text-bottom" />
-            <Coffee aria-label="v" className="inline-block h-5 w-5 align-text-bottom" />
-            <span>er</span>
+          <h1 className="text-lg font-semibold font-headline">
+            <img
+              src="/images/bruvvers_logo_main.png"
+              alt="Bruvvver Coffee Logo"
+              className="h-6 w-auto"
+            />
           </h1>
         </div>
         

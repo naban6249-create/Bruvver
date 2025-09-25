@@ -14,6 +14,7 @@ import logging
 from database import SessionLocal
 from models import DailySale, MenuItem
 from crud import get_menu_item
+from sheets_exporter import export_day
 
 # Load environment variables
 load_dotenv()
@@ -37,89 +38,22 @@ class AutomationService:
                 logger.info("Google Sheets client initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Google Sheets client: {e}")
-    
+
     async def export_daily_sales_to_sheets(self):
-        """Export yesterday's sales data to Google Sheets"""
-        if not self.google_sheets_client:
-            logger.warning("Google Sheets client not available")
-            return
-        
         try:
-            # Get yesterday's date
             yesterday = datetime.now().date() - timedelta(days=1)
-            
-            # Get database session
+            logger.info(f"Starting daily export for {yesterday.isoformat()}")
+
             db = SessionLocal()
-            
-            # Query yesterday's sales
-            sales = db.query(DailySale).filter(
-                DailySale.sale_date >= yesterday,
-                DailySale.sale_date < yesterday + timedelta(days=1)
-            ).all()
-            
-            if not sales:
-                logger.info(f"No sales data found for {yesterday}")
+            try:
+                # Call the centralized export function from sheets_exporter
+                # This will export both sales and expenses for all branches
+                export_day(db, yesterday)
+                logger.info(f"Successfully exported sales and expenses for {yesterday.isoformat()}")
+            finally:
                 db.close()
-                return
-            
-            # Prepare data for export
-            export_data = []
-            total_revenue = 0
-            
-            for sale in sales:
-                menu_item = get_menu_item(db, sale.menu_item_id)
-                if menu_item:
-                    revenue = sale.quantity * menu_item.price
-                    total_revenue += revenue
-                    
-                    export_data.append([
-                        str(yesterday),
-                        menu_item.name,
-                        sale.quantity,
-                        f"${menu_item.price:.2f}",
-                        f"${revenue:.2f}",
-                        sale.sale_date.strftime("%Y-%m-%d %H:%M:%S")
-                    ])
-            
-            # Open Google Sheet
-            sheet_id = os.getenv("GOOGLE_SHEET_ID")
-            if not sheet_id:
-                logger.error("GOOGLE_SHEET_ID not set in environment variables")
-                db.close()
-                return
-            
-            spreadsheet = self.google_sheets_client.open_by_key(sheet_id)
-            worksheet = spreadsheet.sheet1
-            
-            # Add headers if sheet is empty
-            if worksheet.row_count == 0:
-                headers = ["Date", "Item Name", "Quantity", "Unit Price", "Revenue", "Sale Time"]
-                worksheet.append_row(headers)
-            
-            # Add data
-            for row in export_data:
-                worksheet.append_row(row)
-            
-            # Add summary row
-            summary_row = [
-                str(yesterday),
-                "DAILY TOTAL",
-                sum(sale.quantity for sale in sales),
-                "",
-                f"${total_revenue:.2f}",
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            ]
-            worksheet.append_row(summary_row)
-            
-            logger.info(f"Successfully exported {len(export_data)} sales records to Google Sheets")
-            
-            # Send email notification
-            await self.send_daily_summary_email(export_data, total_revenue, yesterday)
-            
-            db.close()
-            
         except Exception as e:
-            logger.error(f"Failed to export sales to Google Sheets: {e}")
+            logger.error(f"Failed to export daily data to Google Sheets: {e}")
     
     async def send_daily_summary_email(self, sales_data: List, total_revenue: float, date: datetime.date):
         """Send daily summary email to admin"""

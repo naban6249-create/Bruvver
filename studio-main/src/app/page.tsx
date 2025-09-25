@@ -75,15 +75,21 @@ export default function Home() {
             className="flex items-center gap-2 text-lg font-semibold md:text-base font-headline"
           >
             <span className="sr-only">Bruvvver</span>
-            <span className="flex items-center gap-1">
-              <span>Bru</span>
-              <Coffee aria-label="v" className="inline-block h-5 w-5 align-text-bottom" />
-              <Coffee aria-label="v" className="inline-block h-5 w-5 align-text-bottom" />
-              <span>er</span>
-            </span>
+            <img
+              src="/images/bruvvers_logo_main.png"
+              alt="Bruvvver Coffee Logo"
+              className="h-8 w-auto"
+            />
           </Link>
         </nav>
         <div className="flex w-full items-center justify-end gap-4 md:ml-auto md:gap-2 lg:gap-4">
+          <Button
+            variant="ghost"
+            className="px-5 py-2.5 text-sm md:px-6 md:text-base text-foreground hover:bg-primary hover:text-primary-foreground"
+            onClick={() => window.open('https://www.bruvvers.in/', '_blank')}
+          >
+            About Us
+          </Button>
           <Button asChild className="px-5 py-2.5 text-sm md:px-6 md:text-base">
             <Link href="/admin/login">Login</Link>
           </Button>

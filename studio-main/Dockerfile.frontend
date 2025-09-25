@@ -1,0 +1,43 @@
+# Use Node.js 20 LTS
+FROM node:20-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including devDependencies for TypeScript build) with retry logic
+RUN --mount=type=cache,target=/root/.npm npm install --verbose --no-audit --no-fund || \
+    sleep 5 && npm install --verbose --no-audit --no-fund
+
+# Copy source code (including updated dashboard with Suspense boundary)
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
+
+# Change ownership more efficiently - do this before pruning to minimize files
+RUN chown -R nextjs:nodejs /app && \
+    npm prune --production
+
+# Switch to non-root user
+USER nextjs
+
+# Expose port
+EXPOSE 3000
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1
+
+# Start the application
+CMD ["npm", "start"]
