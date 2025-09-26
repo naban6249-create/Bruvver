@@ -30,8 +30,6 @@ pydantic
 pydantic-settings
 
 # Development
-pytest
-pytest-asyncio
 httpx
 
 cloudinary
