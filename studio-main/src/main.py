@@ -14,7 +14,8 @@ import json
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 import uuid
-
+import cloudinary
+from cloudinary import uploader
 # Set up detailed logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
