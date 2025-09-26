@@ -28,10 +28,25 @@ export function DailyExpenses() {
     const [selectedItem, setSelectedItem] = useState<DailyExpense | null>(null);
     const { toast } = useToast();
 
+    // Add current date state
+    const [currentDate, setCurrentDate] = useState('');
+
     // Check permissions for current branch
     const currentBranchId = branchId ? parseInt(branchId) : null;
     const hasViewAccess = currentBranchId ? hasPermission(currentBranchId, 'view_only') : false;
     const hasFullAccess = currentBranchId ? hasPermission(currentBranchId, 'full_access') : false;
+
+    // Set current date on component mount
+    useEffect(() => {
+        const today = new Date();
+        const options: Intl.DateTimeFormatOptions = {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        };
+        setCurrentDate(today.toLocaleDateString('en-US', options));
+    }, []);
 
     const fetchExpenses = useCallback(async () => {
         if (!branchId) {
@@ -225,6 +240,10 @@ export function DailyExpenses() {
                                     <Badge variant="secondary" className="ml-2">View Only</Badge>
                                 )}
                             </CardDescription>
+                        </div>
+                        <div className="text-right">
+                            <p className="font-semibold text-lg text-foreground/90">{currentDate.split(',')[0]}</p>
+                            <p className="font-medium text-foreground/80">{currentDate.split(',').slice(1).join(',')}</p>
                         </div>
                         {hasFullAccess && (
                             <Button size="sm" className="gap-1" onClick={handleAddNewItem}>

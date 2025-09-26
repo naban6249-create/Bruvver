@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { DailySalesBreakdown } from "./daily-sales-breakdown";
 import { WorkerExpenses } from "../expenses/worker-expenses";
-import { MenuManagement } from "../menu/menu-management";
 import { DailyBalanceDashboard } from "./daily-balance-dashboard";
 import { useAuth } from "@/lib/auth-context";
 import { AlertCircle, Eye, Edit } from "lucide-react";
@@ -15,7 +14,7 @@ export function WorkerDashboard() {
     const { user, hasPermission, getUserBranches } = useAuth();
     const searchParams = useSearchParams();
     const branchId = searchParams.get('branchId');
-    
+
     const currentBranchId = branchId ? parseInt(branchId) : null;
     const userBranches = getUserBranches();
     const hasViewAccess = currentBranchId ? hasPermission(currentBranchId, 'view_only') : false;
@@ -54,8 +53,8 @@ export function WorkerDashboard() {
                             <p>You have access to the following branches:</p>
                             <div className="flex flex-wrap gap-2">
                                 {userBranches.map(branch => (
-                                    <Badge 
-                                        key={branch.id} 
+                                    <Badge
+                                        key={branch.id}
                                         variant={branch.permission === 'full_access' ? 'default' : 'secondary'}
                                     >
                                         {branch.name} - {branch.permission === 'full_access' ? 'Full Access' : 'View Only'}
@@ -100,7 +99,7 @@ export function WorkerDashboard() {
                             {currentBranch?.location && `Location: ${currentBranch.location}`}
                         </p>
                     </div>
-                    <Badge 
+                    <Badge
                         variant={hasFullAccess ? 'default' : 'secondary'}
                         className="flex items-center gap-1"
                     >
@@ -123,12 +122,11 @@ export function WorkerDashboard() {
                 <div className="flex items-center mb-6">
                     <TabsList>
                         <TabsTrigger value="dashboard">Daily Sales</TabsTrigger>
+                        <TabsTrigger value="expenses">Daily Expenses</TabsTrigger>
                         <TabsTrigger value="balance">Daily Balance</TabsTrigger>
-                        <TabsTrigger value="expenses">Daily Supplies</TabsTrigger>
-                        <TabsTrigger value="menu">Menu</TabsTrigger>
                     </TabsList>
                 </div>
-                
+
                 <TabsContent value="dashboard">
                     <div className="space-y-6">
                         {!hasFullAccess && (
@@ -146,25 +144,7 @@ export function WorkerDashboard() {
                         <DailySalesBreakdown />
                     </div>
                 </TabsContent>
-                
-                <TabsContent value="balance">
-                    <div className="space-y-6">
-                        {!hasFullAccess && (
-                            <Card className="border-amber-200 bg-amber-50">
-                                <CardContent className="p-4">
-                                    <div className="flex items-center gap-2">
-                                        <Eye className="h-4 w-4 text-amber-600" />
-                                        <p className="text-sm text-amber-800">
-                                            You can view balance data but cannot edit opening balance.
-                                        </p>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
-                        <DailyBalanceDashboard />
-                    </div>
-                </TabsContent>
-                
+
                 <TabsContent value="expenses">
                     <div className="space-y-6">
                         {!hasFullAccess && (
@@ -182,8 +162,8 @@ export function WorkerDashboard() {
                         <WorkerExpenses />
                     </div>
                 </TabsContent>
-                
-                <TabsContent value="menu">
+
+                <TabsContent value="balance">
                     <div className="space-y-6">
                         {!hasFullAccess && (
                             <Card className="border-amber-200 bg-amber-50">
@@ -191,13 +171,13 @@ export function WorkerDashboard() {
                                     <div className="flex items-center gap-2">
                                         <Eye className="h-4 w-4 text-amber-600" />
                                         <p className="text-sm text-amber-800">
-                                            You can view the menu but cannot make changes to items or ingredients.
+                                            You can view balance data but cannot edit opening balance.
                                         </p>
                                     </div>
                                 </CardContent>
                             </Card>
                         )}
-                        <MenuManagement />
+                        <DailyBalanceDashboard />
                     </div>
                 </TabsContent>
             </Tabs>

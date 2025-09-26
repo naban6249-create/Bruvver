@@ -76,7 +76,7 @@ class UserBranchPermission(Base):
 class MenuItem(Base):
     __tablename__ = "menu_items"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
     price = Column(Float, nullable=False)
     description = Column(Text, nullable=True)
@@ -95,7 +95,7 @@ class Ingredient(Base):
     __tablename__ = "ingredients"
 
     id = Column(Integer, primary_key=True, index=True)
-    menu_item_id = Column(Integer, ForeignKey("menu_items.id"))
+    menu_item_id = Column(String, ForeignKey("menu_items.id"))
     name = Column(String, nullable=False)
     quantity = Column(Float, nullable=False)
     unit = Column(String, nullable=False)
@@ -124,7 +124,7 @@ class OrderItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"))
-    menu_item_id = Column(Integer, ForeignKey("menu_items.id"))
+    menu_item_id = Column(String, ForeignKey("menu_items.id"))  # Change Integer to String
     quantity = Column(Integer, nullable=False)
     unit_price = Column(Float, nullable=False)
     total_price = Column(Float, nullable=False)
@@ -137,7 +137,7 @@ class DailySale(Base):
     __tablename__ = "daily_sales"
 
     id = Column(Integer, primary_key=True, index=True)
-    menu_item_id = Column(Integer, ForeignKey("menu_items.id"))
+    menu_item_id = Column(String, ForeignKey("menu_items.id"))
     branch_id = Column(Integer, ForeignKey("branches.id"))
     quantity = Column(Integer, nullable=False)
     revenue = Column(Float, nullable=False)

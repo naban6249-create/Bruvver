@@ -42,7 +42,7 @@ from schemas import (
     UserPermissionSummary, UserBranchPermissionCreate,  # ✅ This was missing!
     UserBranchPermissionResponse,  # ✅ Add this too
     UserBranchPermissionBase,# Added UserPermissionSummary
-    OpeningBalanceResponse, OpeningBalanceCreate, OpeningBalanceUpdate, DailyBalanceSummary
+    OpeningBalanceResponse, OpeningBalanceCreate, OpeningBalanceUpdateRequest, OpeningBalanceUpdate, DailyBalanceSummary
 )
 from sqlalchemy import func, and_
 
@@ -296,6 +296,78 @@ async def health_check():
     }
 
 # -------------------------
+# OPENING BALANCE
+# -------------------------
+@app.get("/api/opening-balances", response_model=List[OpeningBalanceResponse])
+async def get_opening_balances(
+    branch_id: Optional[int] = None,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Get all opening balances (Admin only)"""
+    if hasattr(current_user, 'role') and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    query = db.query(OpeningBalance)
+    if branch_id:
+        query = query.filter(OpeningBalance.branch_id == branch_id)
+    return query.all()
+
+@app.post("/api/opening-balances", response_model=OpeningBalanceResponse)
+async def create_opening_balance(
+    balance: OpeningBalanceCreate,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Create a new opening balance (Admin only)"""
+    if hasattr(current_user, 'role') and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    # Check if branch exists
+    branch = db.query(Branch).filter(Branch.id == balance.branch_id).first()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    db_balance = OpeningBalance(**balance.dict())
+    db.add(db_balance)
+    db.commit()
+    db.refresh(db_balance)
+    return db_balance
+
+@app.put("/api/opening-balances/{balance_id}", response_model=OpeningBalanceResponse)
+async def update_opening_balance(
+    balance_id: int,
+    balance_update: OpeningBalanceUpdate,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Update an opening balance (Admin only)"""
+    if hasattr(current_user, 'role') and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    db_balance = db.query(OpeningBalance).filter(OpeningBalance.id == balance_id).first()
+    if not db_balance:
+        raise HTTPException(status_code=404, detail="Opening balance not found")
+    update_data = balance_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_balance, field, value)
+    db.commit()
+    db.refresh(db_balance)
+    return db_balance
+
+@app.delete("/api/opening-balances/{balance_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_opening_balance(
+    balance_id: int,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Delete an opening balance (Admin only)"""
+    if hasattr(current_user, 'role') and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    db_balance = db.query(OpeningBalance).filter(OpeningBalance.id == balance_id).first()
+    if not db_balance:
+        raise HTTPException(status_code=404, detail="Opening balance not found")
+    db.delete(db_balance)
+    db.commit()
+    return
+
+# -------------------------
 # BRANCH MANAGEMENT
 # -------------------------
 @app.get("/api/branches", response_model=List[BranchResponse])
@@ -442,10 +514,20 @@ async def create_expense(
             pl = pl.value
         if pl != "full_access":
             raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
+            
     branch = db.query(Branch).filter(Branch.id == expense.branch_id).first()
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
-    db_expense = DailyExpense(**expense.dict(), created_by=current_user.id)
+
+    # Add this line to recalculate the total amount on the server
+    recalculated_total = (expense.quantity or 0) * (expense.unit_cost or 0)
+
+    # Use the recalculated amount when creating the database object
+    db_expense = DailyExpense(
+        **expense.dict(exclude={"total_amount"}), 
+        total_amount=recalculated_total, 
+        created_by=current_user.id
+    )
     db.add(db_expense)
     db.commit()
     db.refresh(db_expense)
@@ -458,8 +540,7 @@ async def quick_add_expense(
 ):
     """
     A simplified endpoint for workers to add common expenses
-    like milk or water. It automatically looks up the cost
-    from inventory and assigns a category.
+    with user-provided unit cost.
     """
     logger.info(f"Quick expense add received for item: {expense_data.item_name}")
     # Worker permission restriction: must have FULL_ACCESS for this branch
@@ -476,18 +557,8 @@ async def quick_add_expense(
         if pl != "full_access":
             raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
 
-    # 1. Find the inventory item to get its cost
-    # We assume an inventory item exists with the same name (e.g., "Milk")
-    inventory_item = db.query(Inventory).filter(
-        func.lower(Inventory.item_name) == func.lower(expense_data.item_name),
-        Inventory.branch_id == expense_data.branch_id
-    ).first()
-    
-    unit_cost = 0.0
-    if inventory_item and inventory_item.cost_per_unit:
-        unit_cost = inventory_item.cost_per_unit
-    else:
-        logger.warning(f"No inventory item or cost found for '{expense_data.item_name}'. Defaulting cost to 0.")
+    # Use the unit cost provided by the worker instead of looking it up from inventory
+    unit_cost = getattr(expense_data, 'unit_cost', 0.0)
 
     # 2. Determine category based on item name
     category_name = "Other"
@@ -495,12 +566,12 @@ async def quick_add_expense(
         category_name = "Dairy"
     elif "water" in expense_data.item_name.lower():
         category_name = "Utilities"
-        
+
     category_obj = db.query(ExpenseCategory).filter(ExpenseCategory.name == category_name).first()
 
     # 3. Create the full DailyExpense object
     total_amount = unit_cost * expense_data.quantity
-    
+
     db_expense = DailyExpense(
         item_name=expense_data.item_name,
         quantity=expense_data.quantity,
@@ -513,18 +584,12 @@ async def quick_add_expense(
         expense_date=expense_data.expense_date or datetime.utcnow(),
         created_by=current_user.id
     )
-    
+
     db.add(db_expense)
-    
-    # 4. Optional: Update inventory stock (deduct what was used)
-    if inventory_item:
-        inventory_item.current_stock = (inventory_item.current_stock or 0) - expense_data.quantity
-        inventory_item.updated_at = datetime.utcnow()
-        db.add(inventory_item)
-    
+    # Note: Removed inventory stock update since we're not looking up inventory items
     db.commit()
     db.refresh(db_expense)
-    
+
     logger.info(f"Successfully created quick expense ID: {db_expense.id}")
     return db_expense
 
@@ -539,7 +604,8 @@ async def update_expense(
     db_expense = db.query(DailyExpense).filter(DailyExpense.id == expense_id).first()
     if not db_expense:
         raise HTTPException(status_code=404, detail="Expense not found")
-    # Permissions for worker: require FULL_ACCESS for the branch
+    
+    # Permission checks...
     if hasattr(current_user, 'role') and current_user.role == "worker":
         perm = db.query(UserBranchPermission).filter(
             UserBranchPermission.user_id == current_user.id,
@@ -552,9 +618,18 @@ async def update_expense(
             pl = pl.value
         if pl != "full_access":
             raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
+    
     update_data = expense_update.dict(exclude_unset=True)
+    
+    # Recalculate total_amount if quantity or unit_cost is being updated
+    if 'quantity' in update_data or 'unit_cost' in update_data:
+        new_quantity = update_data.get('quantity', db_expense.quantity or 0)
+        new_unit_cost = update_data.get('unit_cost', db_expense.unit_cost or 0)
+        update_data['total_amount'] = new_quantity * new_unit_cost
+    
     for field, value in update_data.items():
         setattr(db_expense, field, value)
+    
     db.commit()
     db.refresh(db_expense)
     return db_expense
@@ -1199,6 +1274,131 @@ async def delete_branch_menu_item(
     db.commit()
     return
 
+@app.get("/api/branches/{branch_id}/opening-balance", response_model=OpeningBalanceResponse)
+async def get_opening_balance_for_date(
+    branch_id: int,
+    date: Optional[str] = None,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Get the opening balance for a specific branch and date."""
+    # Permission check for workers
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        perm = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == current_user.id,
+            UserBranchPermission.branch_id == branch_id
+        ).first()
+        if not perm:
+            raise HTTPException(status_code=403, detail="No access to this branch")
+
+    try:
+        target_date = datetime.strptime(date, "%Y-%m-%d").date() if date else datetime.utcnow().date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    db_opening_balance = db.query(OpeningBalance).filter(
+        OpeningBalance.branch_id == branch_id,
+        func.date(OpeningBalance.date) == target_date
+    ).first()
+
+    if not db_opening_balance:
+        # If no opening balance is found, return a default one with amount 0.
+        # This is what the frontend expects.
+        return {
+            "id": -1,
+            "branch_id": branch_id,
+            "amount": 0.0,
+            "date": datetime.combine(target_date, datetime.min.time()),
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+        }
+
+    return db_opening_balance
+
+@app.post("/api/branches/{branch_id}/opening-balance", response_model=OpeningBalanceResponse)
+async def create_or_update_opening_balance(
+    branch_id: int,
+    opening_balance: OpeningBalanceUpdateRequest,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Create or update the opening balance for a specific branch and date."""
+    # Worker permission restriction
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        perm = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == current_user.id,
+            UserBranchPermission.branch_id == branch_id
+        ).first()
+        if not perm or perm.permission_level != PermissionLevel.FULL_ACCESS:
+            raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
+
+    target_date = opening_balance.date or datetime.utcnow().date()
+    db_opening_balance = db.query(OpeningBalance).filter(
+        OpeningBalance.branch_id == branch_id,
+        func.date(OpeningBalance.date) == target_date
+    ).first()
+
+    if db_opening_balance:
+        db_opening_balance.amount = opening_balance.amount
+        db_opening_balance.updated_at = datetime.utcnow()
+    else:
+        db_opening_balance = OpeningBalance(**opening_balance.dict(), branch_id=branch_id)
+        db.add(db_opening_balance)
+    
+    db.commit()
+    db.refresh(db_opening_balance)
+    return db_opening_balance
+
+from sqlalchemy import func
+
+@app.get("/api/branches/{branch_id}/daily-balance", response_model=DailyBalanceSummary)
+async def get_daily_balance_summary(
+    branch_id: int,
+    date: Optional[str] = None,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Get the daily balance summary for a specific branch and date."""
+    try:
+        target_date = datetime.strptime(date, "%Y-%m-%d").date() if date else datetime.utcnow().date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    # Get opening balance for the specified date
+    opening_balance_obj = db.query(OpeningBalance).filter(
+        OpeningBalance.branch_id == branch_id,
+        func.date(OpeningBalance.date) == target_date
+    ).first()
+    opening_balance = opening_balance_obj.amount if opening_balance_obj else 0.0
+
+    # Get total revenue for the specified date
+    total_revenue = db.query(func.sum(DailySale.revenue)).filter(
+        DailySale.branch_id == branch_id,
+        func.date(DailySale.sale_date) == target_date
+    ).scalar() or 0.0
+
+    # Get total expenses for the specified date
+    total_expenses = db.query(func.sum(DailyExpense.total_amount)).filter(
+        DailyExpense.branch_id == branch_id,
+        func.date(DailyExpense.expense_date) == target_date
+    ).scalar() or 0.0
+
+    # Get the count of transactions for the day
+    transaction_count = db.query(func.count(DailySale.id)).filter(
+        DailySale.branch_id == branch_id,
+        func.date(DailySale.sale_date) == target_date
+    ).scalar() or 0
+
+    calculated_balance = opening_balance + total_revenue - total_expenses
+
+    return {
+        "opening_balance": opening_balance,
+        "total_revenue": total_revenue,
+        "total_expenses": total_expenses,
+        "calculated_balance": calculated_balance,
+        "transaction_count": transaction_count,
+    }
+
 # -------------------------
 # ORDERS
 # -------------------------
@@ -1423,7 +1623,7 @@ async def get_branch_daily_sales(
 @app.put("/api/branches/{branch_id}/daily-sales/{item_id}", response_model=DailySaleResponse)
 async def set_branch_daily_sale_quantity(
     branch_id: int,
-    item_id: int,
+    item_id: str,
     quantity: int = Form(...),
     date_filter: Optional[str] = Form(None),
     db: Session = Depends(get_database),
@@ -1625,8 +1825,8 @@ async def update_inventory(
 # -------------------------
 async def get_dashboard_data_enhanced(
     branch_id: Optional[int] = None,
-    db = None,
-    current_user = None
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
 ):
     """Get comprehensive dashboard data for a branch"""
     today = date.today()

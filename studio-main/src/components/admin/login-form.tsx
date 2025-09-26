@@ -16,11 +16,10 @@ import { Label } from "@/components/ui/label";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
-import { loginUser } from "@/lib/auth-service";
 
 export function LoginForm() {
   const router = useRouter();
-  const { setUser } = useAuth();
+  const { login } = useAuth();
   const { toast } = useToast();
   
   const [email, setEmail] = useState("");
@@ -32,33 +31,15 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      const loginResp = await loginUser(email, password);
-      
-      if (!loginResp) {
-        toast({
-          title: "Login Failed",
-          description: "Invalid email or password",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Persist token and user in localStorage (client-side)
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('token', loginResp.access_token);
-        localStorage.setItem('currentUser', JSON.stringify(loginResp.user));
-      }
-
-      // Store user in context
-      setUser(loginResp.user);
+      const user = await login(email, password);
 
       // Redirect based on role
-      const role = loginResp.user.role;
+      const role = user.role;
       router.push(`/admin/dashboard?role=${role}`);
 
       toast({
         title: "Login Successful",
-        description: `Welcome back, ${loginResp.user.full_name}!`
+        description: `Welcome back, ${user.full_name}!`
       });
 
     } catch (error) {

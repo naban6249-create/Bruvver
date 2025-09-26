@@ -129,7 +129,7 @@ export async function getDailyBalanceSummary(branchId: string, date?: string): P
       openingBalance: data.opening_balance || 0,
       totalRevenue: data.total_revenue || 0,
       totalExpenses: data.total_expenses || 0,
-      calculatedBalance: (data.total_revenue || 0) + (data.opening_balance || 0) - (data.total_expenses || 0),
+      calculatedBalance: (data.opening_balance || 0) + (data.total_revenue || 0) - (data.total_expenses || 0),
       transactionCount: data.transaction_count || 0,
     };
   } catch (error) {

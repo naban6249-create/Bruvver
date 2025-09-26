@@ -97,8 +97,9 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
     const unitCost = parseFloat(formData.unit_cost) || 0;
     const total = quantity * unitCost;
     
-    if (total > 0 && !readOnly) {
-      setFormData(prev => ({ ...prev, total_amount: total.toString() }));
+    // Always update total when quantity or unit cost changes (unless in read-only mode)
+    if (!readOnly) {
+      setFormData(prev => ({ ...prev, total_amount: total.toFixed(2) }));
     }
   }, [formData.quantity, formData.unit_cost, readOnly]);
 
@@ -255,10 +256,14 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
                 step="0.01"
                 min="0"
                 value={formData.total_amount}
-                onChange={(e) => handleInputChange('total_amount', e.target.value)}
                 placeholder="0.00"
-                disabled={readOnly}
+                readOnly
+                className="bg-muted cursor-not-allowed"
+                tabIndex={-1}
               />
+              <p className="text-xs text-muted-foreground">
+                Automatically calculated: Quantity × Unit Cost
+              </p>
             </div>
 
             <div className="space-y-2">

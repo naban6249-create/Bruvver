@@ -1,5 +1,5 @@
-import { cn } from "@/lib/utils"; // ✅ FIX: Import the cn utility
-import { AuthProvider } from "@/components/admin/contexts/auth-provider";
+// app/layout.tsx
+import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
 import { alegreya, belleza } from "@/lib/fonts";
 import "./globals.css";
@@ -11,10 +11,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={cn('font-body antialiased', alegreya.variable, belleza.variable)}>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+      <body className={cn("font-body antialiased", alegreya.variable, belleza.variable)}>
+        {children}
         <Toaster />
       </body>
     </html>

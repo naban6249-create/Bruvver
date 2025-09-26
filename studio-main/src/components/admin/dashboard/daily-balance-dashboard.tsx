@@ -7,10 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { getOpeningBalance, updateOpeningBalance } from '@/lib/balance-service';
-import { getDailySales } from '@/lib/sales-service';
-import { getMenuItems } from '@/lib/menu-service';
-import { getDailyExpenses } from '@/lib/expenses-service';
+import { getOpeningBalance, updateOpeningBalance, getDailyBalanceSummary } from '@/lib/balance-service';
 import { DollarSign, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 
 export function DailyBalanceDashboard() {
@@ -19,47 +16,57 @@ export function DailyBalanceDashboard() {
   const role = searchParams.get('role');
   const { toast } = useToast();
 
-  const [openingBalance, setOpeningBalance] = useState(0);
-  const [collections, setCollections] = useState(0);
-  const [expenses, setExpenses] = useState(0);
-  const [balance, setBalance] = useState(0);
+  const [summary, setSummary] = useState({
+    openingBalance: 0,
+    totalRevenue: 0,
+    totalExpenses: 0,
+    calculatedBalance: 0,
+    transactionCount: 0,
+  });
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [newOpeningBalance, setNewOpeningBalance] = useState<string | number>('');
+
+  // Add current date state
+  const [currentDate, setCurrentDate] = useState('');
+
+  // Set current date on component mount
+  useEffect(() => {
+    const today = new Date();
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    };
+    setCurrentDate(today.toLocaleDateString('en-US', options));
+  }, []);
+
+  // Add the 'date' parameter to the fetchSummary function
+  const fetchSummary = async (branchId: string, date?: Date) => {
+    const dateString = date ? date.toISOString().split('T')[0] : undefined;
+    const summaryData = await getDailyBalanceSummary(branchId, dateString);
+    setSummary(summaryData);
+    setNewOpeningBalance(summaryData.openingBalance);
+  };
 
   const fetchData = useCallback(async () => {
     if (!branchId) return;
-    try {
-      const [ob, sales, menu, branchExpenses] = await Promise.all([
-        getOpeningBalance(branchId),
-        getDailySales(branchId),
-        getMenuItems(branchId),
-        getDailyExpenses(branchId),
-      ]);
-
-      const totalCollections = sales.reduce((acc, sale) => {
-        const item = menu.find(i => i.id === sale.itemId);
-        return acc + (item ? item.price * sale.quantity : 0);
-      }, 0);
-
-      const totalExpenses = branchExpenses.reduce((acc, expense) => acc + expense.total_amount, 0);
-
-      setOpeningBalance(ob);
-      setNewOpeningBalance(ob);
-      setCollections(totalCollections);
-      setExpenses(totalExpenses);
-      setBalance(ob + totalCollections - totalExpenses);
-
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to load dashboard data.',
-        variant: 'destructive',
-      });
-    }
-  }, [branchId, toast]);
+    await fetchSummary(branchId, selectedDate);
+  }, [branchId, selectedDate]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (branchId) {
+      fetchSummary(branchId, selectedDate);
+    }
+  }, [branchId, selectedDate]);
+
+  // ... inside the handleDateChange function, call fetchSummary
+  const handleDateChange = (date?: Date) => {
+    setSelectedDate(date);
+    if (branchId && date) {
+      fetchSummary(branchId, date);
+    }
+  };
 
   const handleUpdateOpeningBalance = async () => {
     if (!branchId || typeof newOpeningBalance !== 'number') return;
@@ -69,7 +76,9 @@ export function DailyBalanceDashboard() {
         title: 'Success',
         description: 'Opening balance updated successfully.',
       });
-      await fetchData();
+      if (branchId && selectedDate) {
+        await fetchSummary(branchId, selectedDate);
+      }
     } catch (error) {
       toast({
         title: 'Error',
@@ -89,10 +98,18 @@ export function DailyBalanceDashboard() {
   return (
     <Card className="mt-8">
       <CardHeader>
-        <CardTitle className="font-headline">Daily Balance Sheet</CardTitle>
-        <CardDescription>
-          An overview of your daily financial transactions for the selected branch.
-        </CardDescription>
+        <div className="flex justify-between items-start">
+          <div>
+            <CardTitle className="font-headline">Daily Balance Sheet</CardTitle>
+            <CardDescription>
+              An overview of your daily financial transactions for the selected branch.
+            </CardDescription>
+          </div>
+          <div className="text-right">
+            <p className="font-semibold text-lg text-foreground/90">{currentDate.split(',')[0]}</p>
+            <p className="font-medium text-foreground/80">{currentDate.split(',').slice(1).join(',')}</p>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {role === 'admin' && (
@@ -118,7 +135,7 @@ export function DailyBalanceDashboard() {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(openingBalance)}</div>
+              <div className="text-2xl font-bold">{formatCurrency(summary.openingBalance)}</div>
               <p className="text-xs text-muted-foreground">Cash at the start of the day</p>
             </CardContent>
           </Card>
@@ -128,7 +145,7 @@ export function DailyBalanceDashboard() {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{formatCurrency(collections)}</div>
+              <div className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalRevenue)}</div>
               <p className="text-xs text-muted-foreground">Total revenue from sales</p>
             </CardContent>
           </Card>
@@ -138,7 +155,7 @@ export function DailyBalanceDashboard() {
               <TrendingDown className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{formatCurrency(expenses)}</div>
+              <div className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalExpenses)}</div>
               <p className="text-xs text-muted-foreground">Total cash outflow</p>
             </CardContent>
           </Card>
@@ -148,7 +165,7 @@ export function DailyBalanceDashboard() {
               <Wallet className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(balance)}</div>
+              <div className="text-2xl font-bold">{formatCurrency(summary.calculatedBalance)}</div>
               <p className="text-xs text-muted-foreground">Net cash in hand</p>
             </CardContent>
           </Card>

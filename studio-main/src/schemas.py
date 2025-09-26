@@ -183,6 +183,7 @@ class QuickExpenseCreate(BaseModel):
     item_name: str
     quantity: float
     unit: str
+    unit_cost: float  # Add this field
     branch_id: int
     expense_date: Optional[datetime] = None
 
@@ -396,6 +397,10 @@ class OpeningBalanceBase(BaseModel):
 class OpeningBalanceCreate(OpeningBalanceBase):
     pass
 
+class OpeningBalanceUpdateRequest(BaseModel):
+    amount: float
+    date: Optional[datetime] = None
+
 class OpeningBalanceUpdate(BaseModel):
     amount: Optional[float] = None
     date: Optional[datetime] = None
@@ -417,6 +422,45 @@ class DailyBalanceSummary(BaseModel):
     total_expenses: float
     calculated_balance: float
     transaction_count: int
+
+# -----------------------
+# EXPENSES
+# -----------------------
+class DailyExpenseBase(BaseModel):
+    branch_id: int
+    category: str
+    item_name: str
+    description: Optional[str] = None
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    unit_cost: float
+    total_amount: float
+    expense_date: Optional[datetime] = None
+    receipt_number: Optional[str] = None
+    vendor: Optional[str] = None
+
+class DailyExpenseCreate(DailyExpenseBase):
+    pass
+
+class DailyExpenseUpdate(BaseModel):
+    category: Optional[str] = None
+    item_name: Optional[str] = None
+    description: Optional[str] = None
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    unit_cost: Optional[float] = None
+    expense_date: Optional[datetime] = None
+    receipt_number: Optional[str] = None
+    vendor: Optional[str] = None
+
+class DailyExpenseResponse(DailyExpenseBase):
+    id: int
+    category_id: Optional[int] = None
+    created_by: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 # -----------------------
 # IMAGE UPLOAD

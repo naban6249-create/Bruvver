@@ -113,6 +113,7 @@ export async function addQuickExpense(expenseData: {
   item_name: string;
   quantity: number;
   unit: string;
+  unit_cost: number;  // Add this field
   branch_id: number;
   expense_date?: string;
 }): Promise<DailyExpense> {
