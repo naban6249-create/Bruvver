@@ -760,38 +760,36 @@ async def login_admin_enhanced(
 # -------------------------
 # IMAGE UPLOAD (validated)
 # -------------------------
-UPLOAD_DIR = "static/images"
+# Replace your existing /api/upload-image endpoint with this one
 @app.post("/api/upload-image")
-async def upload_image_validated(file: UploadFile = File(...)):
-    """Upload and validate image files with size and format restrictions"""
+async def upload_image_to_cloudinary(file: UploadFile = File(...)):
+    """Uploads an image to Cloudinary and returns its public URL."""
+    # Note: The cloudinary library automatically reads credentials
+    # from the CLOUDINARY_URL environment variable.
+
     try:
         allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg']
         if file.content_type not in allowed_types:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid file type. Allowed types: {', '.join([t.split('/')[1] for t in allowed_types])}"
-            )
+            raise HTTPException(status_code=400, detail="Invalid file type.")
+
         MAX_SIZE = 2 * 1024 * 1024  # 2MB
-        file_content = await file.read()
-        if len(file_content) > MAX_SIZE:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File too large. Maximum size: 2MB, current size: {len(file_content)/1024/1024:.2f}MB"
-            )
-        await file.seek(0)
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
-        ext = os.path.splitext(file.filename)[1] if file.filename else '.jpg'
-        filename = f"{uuid.uuid4().hex}{ext}"
-        file_path = os.path.join(UPLOAD_DIR, filename)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        file_url = f"/static/images/{filename}"
-        logger.info(f"Image uploaded successfully: {file_url}")
-        return {"url": file_url, "filename": filename, "size": len(file_content), "content_type": file.content_type}
-    except HTTPException:
-        raise
+        contents = await file.read()
+        if len(contents) > MAX_SIZE:
+            raise HTTPException(status_code=400, detail="File too large. Max 2MB.")
+
+        # Upload the file to Cloudinary
+        result = uploader.upload(contents, folder="menu_items")
+
+        # Get the secure URL from the result
+        secure_url = result.get("secure_url")
+        if not secure_url:
+            raise HTTPException(status_code=500, detail="Cloudinary upload failed.")
+
+        logger.info(f"Image uploaded to Cloudinary: {secure_url}")
+        return {"url": secure_url, "filename": result.get("public_id")}
+
     except Exception as e:
-        logger.error(f"Error uploading image: {e}", exc_info=True)
+        logger.error(f"Error uploading to Cloudinary: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 # -------------------------
