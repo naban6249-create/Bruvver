@@ -5,6 +5,7 @@ uvicorn[standard]
 # Database
 sqlalchemy
 alembic
+psycopg2-binary
 
 # Authentication & Security
 python-jose[cryptography]
@@ -32,3 +33,5 @@ pydantic-settings
 pytest
 pytest-asyncio
 httpx
+
+cloudinary
