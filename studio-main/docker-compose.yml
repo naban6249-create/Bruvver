@@ -1,4 +1,22 @@
 services:
+  # PostgreSQL Database (for local development)
+  postgres:
+    image: postgres:15-alpine
+    container_name: coffee_shop_postgres
+    environment:
+      - POSTGRES_DB=coffee_shop
+      - POSTGRES_USER=coffee_user
+      - POSTGRES_PASSWORD=coffee_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coffee_user -d coffee_shop"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   # Redis for caching (optional)
   redis:
     image: redis:7-alpine
@@ -21,7 +39,7 @@ services:
     image: coffee-shop-backend:latest
     container_name: coffee_shop_backend
     environment:
-      - DATABASE_URL=sqlite:///./coffee_shop.db
+      - DATABASE_URL=postgresql://coffee_user:coffee_password@postgres:5432/coffee_shop
       - REDIS_URL=redis://redis:6379/0
       - SERVICE_API_KEY=sk-coffee-management-2024
       - API_KEY=sk-coffee-management-2024
@@ -30,15 +48,16 @@ services:
       - ALLOWED_ORIGINS=http://localhost:3000,http://localhost:9002
       - TZ=Asia/Kolkata
       - GOOGLE_SHEETS_CREDENTIALS_PATH=/app/credentials.json
-      - GOOGLE_SHEET_ID=
+      - GOOGLE_SHEET_ID=1HUumnzKXmZeg7TDQt7t5E87aPXHcGbyceYSf_mqmnq8
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
     ports:
       - "8000:8000"
     volumes:
       - ./static:/app/static
       - ./src:/app/src
-      - ./coffee_shop.db:/app/coffee_shop.db
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -80,4 +99,5 @@ services:
       start_period: 40s
 
 volumes:
+  postgres_data:
   redis_data:
