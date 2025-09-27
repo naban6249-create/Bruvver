@@ -1,51 +1,50 @@
+# Top-level keys for all your Render resources
+databases:
+  - name: coffee-shop-db
+    plan: free # Optional: specify your plan
+
 services:
-  # 1. Backend API Service (Python/FastAPI with Docker)
+  # 1. Backend API Service (Python/FastAPI)
   - type: web
     name: coffee-shop-backend
-    runtime: docker
-    # The path to your backend's Dockerfile
-    dockerfilePath: ./studio-main/Dockerfile.backend
+    runtime: python
+    rootDir: ./
+    pythonVersion: "3.11"
+    buildCommand: "pip install -r studio-main/src/requirements.txt"
+    startCommand: "uvicorn studio-main.src.main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: coffee-shop-db # Correctly gets URL from the database
+          name: coffee-shop-db
           property: connectionString
       - key: REDIS_URL
         fromService:
           type: redis
-          name: coffee-shop-redis # Correctly gets URL from the Redis service
+          name: coffee-shop-redis
           property: connectionString
       - key: ALLOWED_ORIGINS
         fromService:
           type: web
-          name: coffee-shop-frontend # Sets CORS to your frontend's URL
+          name: coffee-shop-frontend
           property: url
       - key: TZ
         value: Asia/Kolkata
 
-  # 2. Frontend Web Service (Next.js with Node Runtime)
+  # 2. Frontend Web Service (Next.js)
   - type: web
     name: coffee-shop-frontend
     runtime: node
-    # The root directory for your frontend code
     rootDir: ./studio-main
-    # Build and start commands for the frontend
     buildCommand: "npm install && npm run build"
     startCommand: "npm start"
     envVars:
-      # This automatically sets your API URL for the frontend
       - key: NEXT_PUBLIC_API_BASE_URL
         fromService:
           type: web
           name: coffee-shop-backend
           property: url
 
-# 3. Database and Redis Definitions
-databases:
-  - name: coffee-shop-db
-    plan: free # Optional: specify your plan
-
-services:
+  # 3. Redis Service
   - type: redis
     name: coffee-shop-redis
     plan: free # Optional: specify your plan
