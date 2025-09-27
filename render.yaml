@@ -2,8 +2,6 @@ services:
   # PostgreSQL Database Service
   - type: pserv
     name: coffee-shop-db
-    runtime: postgresql
-    ipAllowList: []
 
   # Backend API Service
   - type: web
@@ -11,13 +9,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile.backend
     buildCommand: docker build -f Dockerfile.backend -t coffee-shop-backend .
-    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT --workers 1
     envVars:
-      - key: DATABASE_URL
-        fromService:
-          type: pserv
-          name: coffee-shop-db
-          property: connectionString
       - key: REDIS_URL
         value: redis://redis:6379/0
       - key: SERVICE_API_KEY
@@ -52,7 +44,6 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile.frontend
     buildCommand: docker build -f Dockerfile.frontend -t coffee-shop-frontend .
-    startCommand: npm start
     envVars:
       - key: NEXT_PUBLIC_API_BASE_URL
         fromService:
