@@ -1,17 +1,17 @@
 import type { NextConfig } from 'next';
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://127.0.0.1:8000';
-
 const nextConfig: NextConfig = {
   async rewrites() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL;
+
     return [
       {
         source: '/api/:path*',
-        destination: `${API_BASE_URL}/api/:path*`,
+        destination: `${apiUrl}/:path*`,
       },
       {
         source: '/static/:path*',
-        destination: `${API_BASE_URL}/static/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_API_SERVER_URL}/static/:path*`,
       },
     ];
   },
@@ -24,10 +24,22 @@ const nextConfig: NextConfig = {
   images: {
     dangerouslyAllowSVG: true,
     remotePatterns: [
-      { protocol: 'https', hostname: '**' },
-      { protocol: 'https', hostname: 'picsum.photos' },
-      { protocol: 'http', hostname: 'localhost' },
-      { protocol: 'http', hostname: '127.0.0.1' },
+      {
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+      },
+      {
+        protocol: 'http',
+        hostname: '127.0.0.1',
+      },
     ],
   },
 };
