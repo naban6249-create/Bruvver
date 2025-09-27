@@ -1,25 +1,22 @@
-fastapi==0.110.0
-uvicorn[standard]==0.27.1
-sqlalchemy==2.0.36
-alembic==1.13.3
-python-multipart==0.0.10
-python-dotenv==1.0.1
-psycopg2-binary==2.9.9
-google-auth==2.35.0
-google-auth-oauthlib==1.2.1
-google-auth-httplib2==0.2.0
-google-api-python-client==2.147.0
-apscheduler==3.10.4
-# Use compatible pydantic version that doesn't require Rust compilation
-pydantic==2.8.2
-pydantic-settings==2.4.0
-bcrypt==4.2.1
+# Use older FastAPI that works with Pydantic V1 and Python 3.13
+fastapi==0.95.2
+uvicorn[standard]==0.21.1
+sqlalchemy==2.0.23
+alembic==1.12.1
+psycopg2-binary==2.9.7
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-jinja2==3.1.4
-requests==2.32.3
-aiohttp==3.10.11
-Pillow==10.4.0
-email-validator==2.2.0
+python-multipart==0.0.6
+apscheduler==3.10.4
+gspread==6.1.2
+google-auth==2.23.4
+google-auth-oauthlib==1.1.0
 emails==0.6
-cloudinary==1.41.0
+email-validator==2.0.0
+python-dotenv==1.0.0
+# Use Pydantic V1 with specific typing extensions
+pydantic==1.10.15
+typing-extensions==4.5.0
+cloudinary==1.44.1
+httpx==0.25.2
+Pillow==10.4.0
