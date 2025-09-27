@@ -4,6 +4,7 @@ services:
     name: coffee-shop-backend
     runtime: docker
     dockerfilePath: ./Dockerfile.backend
+    buildCommand: "echo 'Using Docker build'"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -21,7 +22,9 @@ services:
       - key: TZ
         value: Asia/Kolkata
       - key: PYTHONUNBUFFERED
-        value: 1
+        value: "1"
+      - key: PYTHONDONTWRITEBYTECODE
+        value: "1"
 
   # Frontend Web Service
   - type: web
