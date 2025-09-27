@@ -23,9 +23,9 @@ export default function Home() {
         
         console.log('Fetching menu items for branch:', COIMBATORE_BRANCH_ID);
         
-        // This URL will be caught by the proxy in next.config.ts and forwarded directly to the Python backend.
+        // Updated to use the correct endpoint structure that matches your backend
         const res = await fetch(
-          `/api/branches/${COIMBATORE_BRANCH_ID}/menu?available_only=true`, 
+          `/api/public/menu?branchId=${COIMBATORE_BRANCH_ID}`, 
           { 
             cache: 'no-store',
             headers: {
