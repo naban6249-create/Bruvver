@@ -29,10 +29,10 @@ email-validator==2.1.0
 # Configuration
 python-dotenv==1.0.0
 
-# Data validation - Use specific versions with pre-compiled wheels
-pydantic==2.4.2
-pydantic-core==2.10.1
-pydantic-settings==2.0.3
+# Data validation - Use Pydantic V1 to avoid Rust compilation
+pydantic==1.10.13
+# Remove any pydantic v2 dependencies that might conflict
+typing-extensions>=4.2.0
 
 # Cloud services
 cloudinary==1.44.1
