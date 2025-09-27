@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Construct the FastAPI endpoint URL
-    const apiUrl = `${process.env.API_BASE_URL}/menu/1?available_only=true`;
+    const apiUrl = `http://127.0.0.1:8000/menu/1?available_only=true`;
     
     // Prepare headers - try different authorization formats
     const headers: Record<string, string> = {
