@@ -1,14 +1,15 @@
 services:
-  # Backend API Service (Your FastAPI app)
+  # Backend API Service (using native Python runtime)
   - type: web
     name: coffee-shop-backend
     runtime: python
-    plan: starter
+    plan: free # Use the free instance type
+    rootDir: studio-main/src # Set the root to your Python code
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
-        value: "3.11.9"
+        value: "3.11" # Use a stable Python version
       - key: DATABASE_URL
         fromDatabase:
           name: coffee-shop-db
@@ -17,29 +18,17 @@ services:
         fromService:
           type: redis
           name: coffee-shop-redis
-          property: connectionString
-      - key: SERVICE_API_KEY
-        generateValue: true
-      - key: API_KEY
-        generateValue: true
+          property: host
       - key: TZ
         value: Asia/Kolkata
-      - key: PYTHONUNBUFFERED
-        value: "1"
-      - key: ENVIRONMENT
-        value: "production"
-      - key: ALLOWED_ORIGINS
-        value: "https://coffee-shop-frontend.onrender.com,http://localhost:3000"
-      - key: CLOUDINARY_URL
-        value: "cloudinary://YOUR_API_KEY:YOUR_API_SECRET@dtlfxjl13"
 
-  # Frontend Web Service (Add this if you have a frontend app)
+  # Frontend Web Service (using Docker)
   - type: web
     name: coffee-shop-frontend
-    runtime: node
-    plan: starter
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    runtime: docker
+    plan: free # Use the free instance type
+    rootDir: studio-main # Set the root to your Next.js code
+    dockerfilePath: ./Dockerfile.frontend
     envVars:
       - key: NEXT_PUBLIC_API_BASE_URL
         fromService:
@@ -51,21 +40,18 @@ services:
           type: web
           name: coffee-shop-backend
           property: host
-      - key: NEXT_PUBLIC_COIMBATORE_BRANCH_ID
-        value: "1"
-      - key: NODE_ENV
-        value: production
-    # Only include this section if you have frontend code
 
-  # Background Worker Service (Optional - for scheduled tasks)
+  # Scheduler Worker Service (for automation)
   - type: worker
     name: coffee-shop-scheduler
     runtime: python
+    plan: free # Use the free instance type
+    rootDir: studio-main/src # Set the root to your Python code
     buildCommand: pip install -r requirements.txt
     startCommand: python automation.py
     envVars:
       - key: PYTHON_VERSION
-        value: "3.11.9"
+        value: "3.11"
       - key: DATABASE_URL
         fromDatabase:
           name: coffee-shop-db
@@ -74,19 +60,14 @@ services:
         fromService:
           type: redis
           name: coffee-shop-redis
-          property: connectionString
-      - key: TZ
-        value: Asia/Kolkata
+          property: host
 
-  # Redis Service (For caching and background jobs)
+  # Redis Service
   - type: redis
     name: coffee-shop-redis
-    plan: starter
-    maxmemoryPolicy: allkeys-lru
+    plan: free # Use the free instance type
 
-# PostgreSQL Database
 databases:
+  # PostgreSQL Database
   - name: coffee-shop-db
-    databaseName: coffee_shop
-    user: coffee_user
-    plan: starter
+    plan: free # Use the free instance type
