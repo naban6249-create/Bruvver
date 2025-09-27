@@ -1,1 +1,80 @@
+services:
+  # Backend API Service
+  - type: web
+    name: coffee-shop-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.backend
+    buildCommand: docker build -f Dockerfile.backend -t coffee-shop-backend .
+    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT --workers 1
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: coffee-shop-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: coffee-shop-redis
+          property: connectionString
+      - key: SERVICE_API_KEY
+        generateValue: true
+      - key: API_KEY
+        generateValue: true
+      - key: NEXT_PUBLIC_API_BASE_URL
+        fromService:
+          type: web
+          name: coffee-shop-frontend
+          property: host
+      - key: NEXT_PUBLIC_API_SERVER_URL
+        fromService:
+          type: web
+          name: coffee-shop-frontend
+          property: host
+      - key: ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: coffee-shop-frontend
+          property: host
+      - key: TZ
+        value: Asia/Kolkata
+      - key: PYTHONPATH
+        value: /app/src
+      - key: PYTHONUNBUFFERED
+        value: 1
 
+  # Frontend Web Service
+  - type: web
+    name: coffee-shop-frontend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.frontend
+    buildCommand: docker build -f Dockerfile.frontend -t coffee-shop-frontend .
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE_URL
+        fromService:
+          type: web
+          name: coffee-shop-backend
+          property: host
+      - key: NEXT_PUBLIC_API_SERVER_URL
+        fromService:
+          type: web
+          name: coffee-shop-backend
+          property: host
+      - key: NEXT_PUBLIC_COIMBATORE_BRANCH_ID
+        value: "1"
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+
+  # Redis Service
+  - type: redis
+    name: coffee-shop-redis
+    ipAllowList: []
+
+  # PostgreSQL Database
+  - type: pserv
+    name: coffee-shop-db
+    plan: free # Or your desired plan
+    postgres:
+      version: 15 # Or your desired version
