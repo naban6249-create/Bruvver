@@ -2,9 +2,11 @@ services:
   # Backend API Service
   - type: web
     name: coffee-shop-backend
-    runtime: docker
-    dockerfilePath: ./Dockerfile.backend
-    buildCommand: "echo 'Using Docker build'"
+    runtime: python
+    rootDir: ./src
+    pythonVersion: "3.11"
+    buildCommand: "pip install --upgrade pip && pip install --only-binary=:all: --no-cache-dir -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -46,8 +48,11 @@ services:
   # Scheduler Worker Service (for automation)
   - type: worker
     name: coffee-shop-scheduler
-    runtime: docker
-    dockerfilePath: ./Dockerfile.backend
+    runtime: python
+    rootDir: ./src
+    pythonVersion: "3.11"
+    buildCommand: "pip install --upgrade pip && pip install --only-binary=:all: --no-cache-dir -r requirements.txt"
+    startCommand: "python scheduler.py"  # Adjust this to your scheduler script
     envVars:
       - key: DATABASE_URL
         fromDatabase:
