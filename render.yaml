@@ -1,80 +1,51 @@
 services:
-  # Backend API Service
+  # 1. Backend API Service (Python/FastAPI with Docker)
   - type: web
     name: coffee-shop-backend
     runtime: docker
-    dockerfilePath: ./Dockerfile.backend
-    buildCommand: docker build -f Dockerfile.backend -t coffee-shop-backend .
-    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT --workers 1
+    # The path to your backend's Dockerfile
+    dockerfilePath: ./studio-main/Dockerfile.backend
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: coffee-shop-db
+          name: coffee-shop-db # Correctly gets URL from the database
           property: connectionString
       - key: REDIS_URL
         fromService:
           type: redis
-          name: coffee-shop-redis
+          name: coffee-shop-redis # Correctly gets URL from the Redis service
           property: connectionString
-      - key: SERVICE_API_KEY
-        generateValue: true
-      - key: API_KEY
-        generateValue: true
-      - key: NEXT_PUBLIC_API_BASE_URL
-        fromService:
-          type: web
-          name: coffee-shop-frontend
-          property: host
-      - key: NEXT_PUBLIC_API_SERVER_URL
-        fromService:
-          type: web
-          name: coffee-shop-frontend
-          property: host
       - key: ALLOWED_ORIGINS
         fromService:
           type: web
-          name: coffee-shop-frontend
-          property: host
+          name: coffee-shop-frontend # Sets CORS to your frontend's URL
+          property: url
       - key: TZ
         value: Asia/Kolkata
-      - key: PYTHONPATH
-        value: /app/src
-      - key: PYTHONUNBUFFERED
-        value: 1
 
-  # Frontend Web Service
+  # 2. Frontend Web Service (Next.js with Node Runtime)
   - type: web
     name: coffee-shop-frontend
-    runtime: docker
-    dockerfilePath: ./Dockerfile.frontend
-    buildCommand: docker build -f Dockerfile.frontend -t coffee-shop-frontend .
-    startCommand: npm start
+    runtime: node
+    # The root directory for your frontend code
+    rootDir: ./studio-main
+    # Build and start commands for the frontend
+    buildCommand: "npm install && npm run build"
+    startCommand: "npm start"
     envVars:
+      # This automatically sets your API URL for the frontend
       - key: NEXT_PUBLIC_API_BASE_URL
         fromService:
           type: web
           name: coffee-shop-backend
-          property: host
-      - key: NEXT_PUBLIC_API_SERVER_URL
-        fromService:
-          type: web
-          name: coffee-shop-backend
-          property: host
-      - key: NEXT_PUBLIC_COIMBATORE_BRANCH_ID
-        value: "1"
-      - key: NODE_ENV
-        value: production
-      - key: PORT
-        value: 3000
+          property: url
 
-  # Redis Service
+# 3. Database and Redis Definitions
+databases:
+  - name: coffee-shop-db
+    plan: free # Optional: specify your plan
+
+services:
   - type: redis
     name: coffee-shop-redis
-    ipAllowList: []
-
-  # PostgreSQL Database
-  - type: pserv
-    name: coffee-shop-db
-    plan: free # Or your desired plan
-    postgres:
-      version: 15 # Or your desired version
+    plan: free # Optional: specify your plan
