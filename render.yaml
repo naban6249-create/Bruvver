@@ -1,4 +1,3 @@
-# Top-level keys for all your Render resources
 databases:
   - name: coffee-shop-db
     plan: free # Optional: specify your plan
@@ -9,7 +8,7 @@ services:
     name: coffee-shop-backend
     runtime: python
     rootDir: ./
-    pythonVersion: "3.11"
+    python: "3.11" # ✅ CORRECTED: Was 'pythonVersion'
     buildCommand: "pip install -r studio-main/src/requirements.txt"
     startCommand: "uvicorn studio-main.src.main:app --host 0.0.0.0 --port $PORT"
     envVars:
