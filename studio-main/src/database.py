@@ -7,8 +7,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Database URL from environment or default to SQLite
+# Get the database URL from the environment variable
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+
+# If you're running locally and want to use SQLite for development, you can add a fallback:
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./coffee_shop.db")
+
+# Handle the difference in connection schemes between Heroku/Render and SQLAlchemy
+if SQLALCHEMY_DATABASE_URL and SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # Create engine
 engine = create_engine(
