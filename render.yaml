@@ -2,7 +2,7 @@ services:
   # PostgreSQL Database Service
   - type: pserv
     name: coffee-shop-db
-    runtime: postgres
+    runtime: postgresql
     startCommand: postgres
 
   # Backend API Service
