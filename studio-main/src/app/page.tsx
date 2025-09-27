@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { Button } from '../components/ui/button';
-import { MenuCard } from '../components/menu-card';
+import { Button } from '@/components/ui/button';
+import { MenuCard } from '@/components/menu-card';
 import { Coffee, Loader2 } from 'lucide-react';
-import type { MenuItem } from '../lib/types';
+import type { MenuItem } from '@/lib/types';
 import { useEffect, useState } from 'react';
 
 // Public site should showcase the Coimbatore branch menu
@@ -25,7 +25,7 @@ export default function Home() {
         
         // This URL will be caught by the proxy in next.config.ts and forwarded directly to the Python backend.
         const res = await fetch(
-          `/api/menu/${COIMBATORE_BRANCH_ID}?available_only=true`, 
+          `/api/branches/${COIMBATORE_BRANCH_ID}/menu?available_only=true`, 
           { 
             cache: 'no-store',
             headers: {
@@ -178,4 +178,3 @@ export default function Home() {
     </div>
   );
 }
-
