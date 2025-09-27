@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { MenuCard } from '@/components/menu-card';
+import { Button } from '../components/ui/button';
+import { MenuCard } from '../components/menu-card';
 import { Coffee, Loader2 } from 'lucide-react';
-import type { MenuItem } from '@/lib/types';
+import type { MenuItem } from '../lib/types';
 import { useEffect, useState } from 'react';
 
 // Public site should showcase the Coimbatore branch menu
@@ -23,9 +23,9 @@ export default function Home() {
         
         console.log('Fetching menu items for branch:', COIMBATORE_BRANCH_ID);
         
-        // Fetch via public proxy route to avoid requiring auth on the public home page
+        // This URL will be caught by the proxy in next.config.ts and forwarded directly to the Python backend.
         const res = await fetch(
-          `/api/public/menu?branchId=${encodeURIComponent(COIMBATORE_BRANCH_ID)}`, 
+          `/api/menu/${COIMBATORE_BRANCH_ID}?available_only=true`, 
           { 
             cache: 'no-store',
             headers: {
@@ -178,3 +178,4 @@ export default function Home() {
     </div>
   );
 }
+
