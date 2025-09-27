@@ -1,6 +1,6 @@
 services:
   # PostgreSQL Database Service
-  - type: pserv
+  - type: postgres
     name: coffee-shop-db
 
   # Backend API Service
