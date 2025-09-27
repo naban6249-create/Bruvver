@@ -10,8 +10,9 @@ google-auth-oauthlib==1.2.1
 google-auth-httplib2==0.2.0
 google-api-python-client==2.147.0
 apscheduler==3.10.4
-pydantic==2.9.2
-pydantic-settings==2.6.1
+# Use compatible pydantic version that doesn't require Rust compilation
+pydantic==2.8.2
+pydantic-settings==2.4.0
 bcrypt==4.2.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
