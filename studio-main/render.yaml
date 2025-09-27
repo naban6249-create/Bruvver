@@ -4,7 +4,7 @@ services:
     name: coffee-shop-backend
     runtime: python
     plan: free # Use the free instance type
-    rootDir: studio-main/src # Set the root to your Python code
+    rootDir: studio-main/src # Tells Render to run commands from here
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -27,7 +27,7 @@ services:
     name: coffee-shop-frontend
     runtime: docker
     plan: free # Use the free instance type
-    rootDir: studio-main # Set the root to your Next.js code
+    rootDir: studio-main # The root for the frontend is different
     dockerfilePath: ./Dockerfile.frontend
     envVars:
       - key: NEXT_PUBLIC_API_BASE_URL
@@ -46,7 +46,7 @@ services:
     name: coffee-shop-scheduler
     runtime: python
     plan: free # Use the free instance type
-    rootDir: studio-main/src # Set the root to your Python code
+    rootDir: studio-main/src # Tells Render to run commands from here
     buildCommand: pip install -r requirements.txt
     startCommand: python automation.py
     envVars:
