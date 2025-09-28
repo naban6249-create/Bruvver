@@ -9,30 +9,40 @@ async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// studio-main/src/app/api/public/menu/route.ts
+
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries: number = 5) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Fetch attempt ${attempt}/${maxRetries} to: ${url}`);
       const response = await fetch(url, options);
+
+      // If the response is a server error OR an auth error, treat it as retryable
+      if (response.status >= 500 || response.status === 401 || response.status === 403) {
+        console.log(`Attempt ${attempt} failed with status ${response.status}. Retrying...`);
+        // Throw an error to trigger the catch block for a retry
+        throw new Error(`Retryable status code: ${response.status}`);
+      }
+      
+      // If the response is ok, we can return it
       return response;
+
     } catch (error: any) {
       console.log(`Attempt ${attempt} failed:`, error.message);
       
       if (attempt === maxRetries) {
+        // If we've exhausted retries, throw the final error
         throw error;
       }
       
-      // If it's a connection refused error, wait longer before retry
-      if (error.code === 'ECONNREFUSED') {
-        const waitTime = attempt * 2000; // 2s, 4s, 6s, 8s
-        console.log(`Backend not ready, waiting ${waitTime}ms before retry...`);
-        await sleep(waitTime);
-      } else {
-        // For other errors, shorter wait
-        await sleep(1000);
-      }
+      // Wait before the next attempt
+      const waitTime = attempt * 1000; // 1s, 2s, 3s...
+      console.log(`Waiting ${waitTime}ms before next retry...`);
+      await sleep(waitTime);
     }
   }
+  // This line should not be reachable, but is included for type safety
+  throw new Error("Fetch with retry failed unexpectedly.");
 }
 
 export async function GET(request: NextRequest) {
