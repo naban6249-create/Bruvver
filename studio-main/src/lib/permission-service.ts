@@ -2,7 +2,7 @@
 import type { UserPermissionSummary, UserBranchPermissionCreate } from './types';
 
 // Use unified API base (must include '/api')
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
 const getAuthHeader = (): Record<string, string> => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -10,7 +10,7 @@ const getAuthHeader = (): Record<string, string> => {
 };
 
 export async function getAllUserPermissions(): Promise<UserPermissionSummary[]> {
-  const response = await fetch(`${API_BASE}/admin/user-permissions`, {
+  const response = await fetch(`${API_BASE_URL}/admin/user-permissions`, {
     headers: { ...getAuthHeader() },
     cache: 'no-store',
   });
@@ -24,7 +24,7 @@ export async function getAllUserPermissions(): Promise<UserPermissionSummary[]> 
 
 // Admin: grant a worker full access to ALL branches
 export async function grantAllBranchesFullAccess(userId: number): Promise<{ updated: number }> {
-  const response = await fetch(`${API_BASE}/admin/grant-all-branches-full-access/${userId}`, {
+  const response = await fetch(`${API_BASE_URL}/admin/grant-all-branches-full-access/${userId}`, {
     method: 'POST',
     headers: { ...getAuthHeader() },
     cache: 'no-store',
@@ -38,7 +38,7 @@ export async function grantAllBranchesFullAccess(userId: number): Promise<{ upda
 
 // Admin: limit a worker to a single branch (full_access on that branch; remove others)
 export async function limitToSingleBranch(userId: number, branchId: number): Promise<{ limited_to_branch_id: number }> {
-  const response = await fetch(`${API_BASE}/admin/limit-to-single-branch/${userId}/${branchId}`, {
+  const response = await fetch(`${API_BASE_URL}/admin/limit-to-single-branch/${userId}/${branchId}`, {
     method: 'POST',
     headers: { ...getAuthHeader() },
     cache: 'no-store',
@@ -51,7 +51,7 @@ export async function limitToSingleBranch(userId: number, branchId: number): Pro
 }
 
 export async function assignBranchPermission(data: UserBranchPermissionCreate): Promise<any> {
-  const response = await fetch(`${API_BASE}/admin/assign-branch-permission`, {
+  const response = await fetch(`${API_BASE_URL}/admin/assign-branch-permission`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -70,7 +70,7 @@ export async function assignBranchPermission(data: UserBranchPermissionCreate): 
 }
 
 export async function revokeBranchPermission(userId: number, branchId: number): Promise<void> {
-  const response = await fetch(`${API_BASE}/admin/revoke-branch-permission/${userId}/${branchId}`, {
+  const response = await fetch(`${API_BASE_URL}/admin/revoke-branch-permission/${userId}/${branchId}`, {
     method: 'DELETE',
     headers: { ...getAuthHeader() },
     cache: 'no-store',
@@ -87,7 +87,7 @@ export async function updateBranchPermission(
   branchId: number, 
   permissionLevel: 'view_only' | 'full_access'
 ): Promise<any> {
-  const response = await fetch(`${API_BASE}/admin/assign-branch-permission`, {
+  const response = await fetch(`${API_BASE_URL}/admin/assign-branch-permission`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
