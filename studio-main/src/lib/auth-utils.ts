@@ -1,7 +1,7 @@
 // lib/auth-utils.ts
 'use client';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_SERVER_URL || "http://localhost:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_SERVER_URL || "http://localhost:8000";
 
 export interface LoginCredentials {
   username: string;
@@ -58,7 +58,7 @@ export class AuthUtils {
   // Login function
   static async login(credentials: LoginCredentials): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE}/api/auth/login`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -119,7 +119,7 @@ export class AuthUtils {
     if (!this.isAuthenticated()) return false;
 
     try {
-      const response = await this.authenticatedFetch(`${API_BASE}/api/auth/me`);
+      const response = await this.authenticatedFetch(`${API_BASE_URL}/api/auth/me`);
       return response.ok;
     } catch (error) {
       console.error('Token verification failed:', error);
