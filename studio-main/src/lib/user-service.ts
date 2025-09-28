@@ -2,7 +2,7 @@
 import type { User } from './types';
 import Cookies from 'js-cookie';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
 const getAuthHeader = (): Record<string, string> => {
   let token: string | null = null;
@@ -29,7 +29,7 @@ export async function createWorker(input: CreateWorkerInput): Promise<User> {
     role: input.role || 'worker'
   } as Record<string, any>;
 
-  const response = await fetch(`${API_BASE}/admin/users`, {
+  const response = await fetch(`${API_BASE_URL}/admin/users`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -55,7 +55,7 @@ export async function updateUser(userId: number, data: Partial<Pick<User, 'full_
   if (typeof data.role === 'string' && (data.role === 'admin' || data.role === 'worker')) payload.role = data.role;
   if (typeof data.is_active === 'boolean') payload.is_active = data.is_active;
 
-  const response = await fetch(`${API_BASE}/admin/users/${userId}`, {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -72,7 +72,7 @@ export async function updateUser(userId: number, data: Partial<Pick<User, 'full_
 }
 
 export async function setUserPassword(userId: number, newPassword: string): Promise<void> {
-  const url = `${API_BASE}/admin/users/${userId}/password?new_password=${encodeURIComponent(newPassword)}`;
+  const url = `${API_BASE_URL}/admin/users/${userId}/password?new_password=${encodeURIComponent(newPassword)}`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { ...getAuthHeader() },
@@ -85,7 +85,7 @@ export async function setUserPassword(userId: number, newPassword: string): Prom
 }
 
 export async function deactivateUser(userId: number): Promise<void> {
-  const response = await fetch(`${API_BASE}/admin/users/${userId}`, {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
     method: 'DELETE',
     headers: { ...getAuthHeader() },
     cache: 'no-store',
@@ -97,7 +97,7 @@ export async function deactivateUser(userId: number): Promise<void> {
 }
 
 export async function getAllUsers(): Promise<User[]> {
-  const response = await fetch(`${API_BASE}/admin/users-lite`, {
+  const response = await fetch(`${API_BASE_URL}/admin/users-lite`, {
     headers: { ...getAuthHeader() },
     cache: 'no-store',
   });
