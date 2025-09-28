@@ -2,7 +2,7 @@ import type { DailySale } from './types';
 import Cookies from 'js-cookie';
 
 // Keep this consistent with menu-service.ts
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
 function getBrowserToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -35,7 +35,7 @@ export interface RealSalesSummary {
 export async function getRealSalesSummary(branchId?: string): Promise<RealSalesSummary> {
   const params = new URLSearchParams();
   if (branchId) params.append('branch_id', branchId);
-  const url = `${API_BASE}/reports/sales-summary${params.toString() ? `?${params.toString()}` : ''}`;
+  const url = `${API_BASE_URL}/reports/sales-summary${params.toString() ? `?${params.toString()}` : ''}`;
   const response = await fetch(url, {
     headers: { ...getAuthHeader() },
     cache: 'no-store',
@@ -57,7 +57,7 @@ export async function getDailySales(branchId: string, date?: string): Promise<Da
   const params = new URLSearchParams();
   if (date) params.append('date_filter', date);
 
-  const url = `${API_BASE}/branches/${branchId}/daily-sales${params.toString() ? `?${params.toString()}` : ''}`;
+  const url = `${API_BASE_URL}/branches/${branchId}/daily-sales${params.toString() ? `?${params.toString()}` : ''}`;
   const response = await fetch(url, { headers: { ...getAuthHeader() }, cache: 'no-store' });
   if (!response.ok) {
     throw new Error(`Failed to fetch sales: ${response.statusText}`);
@@ -74,7 +74,7 @@ export async function getDailySales(branchId: string, date?: string): Promise<Da
 }
 
 export async function updateDailySale(branchId: string, itemId: string, quantity: number): Promise<DailySale> {
-  const response = await fetch(`${API_BASE}/branches/${branchId}/daily-sales/${itemId}`, {
+  const response = await fetch(`${API_BASE_URL}/branches/${branchId}/daily-sales/${itemId}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -103,7 +103,7 @@ export async function getSalesSummary(branchId: string, date?: string): Promise<
   const params = new URLSearchParams({ branch_id: branchId });
   if (date) params.append('date_filter', date);
   
-  const response = await fetch(`${API_BASE}/sales/summary?${params.toString()}`, {
+  const response = await fetch(`${API_BASE_URL}/sales/summary?${params.toString()}`, {
     headers: { ...getAuthHeader() },
     cache: 'no-store',
   });
@@ -116,7 +116,7 @@ export async function getSalesSummary(branchId: string, date?: string): Promise<
 }
 
 export async function resetDailySales(branchId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/admin/daily-reset`, {
+  const response = await fetch(`${API_BASE_URL}/admin/daily-reset`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -135,7 +135,7 @@ export async function resetDailySales(branchId: string): Promise<void> {
 // scope: 'today' => clears today's sales/expenses/reports for that branch
 //        'all'   => clears all historical sales/expenses/reports for that branch
 export async function resetBranchData(branchId: string | number, scope: 'today' | 'all' = 'today'): Promise<{ message: string } & Record<string, any>> {
-  const url = `${API_BASE}/admin/branch-reset/${branchId}?scope=${scope}`;
+  const url = `${API_BASE_URL}/admin/branch-reset/${branchId}?scope=${scope}`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { ...getAuthHeader() },
