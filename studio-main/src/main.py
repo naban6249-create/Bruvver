@@ -1613,14 +1613,25 @@ async def get_sales_enhanced(
 ):
     """Get sales with proper branch filtering"""
     query = db.query(DailySale)
-    # Workers: must be restricted to their assigned branch
+
+    # Workers: must be restricted to their assigned branches
     if hasattr(current_user, 'role') and current_user.role == "worker":
-        if not current_user.branch_id:
-            raise HTTPException(status_code=403, detail="Worker must be assigned to a branch")
-        query = query.filter(DailySale.branch_id == current_user.branch_id)
+        user_branch_ids = [p.branch_id for p in db.query(UserBranchPermission).filter(UserBranchPermission.user_id == current_user.id).all()]
+        if not user_branch_ids:
+            raise HTTPException(status_code=403, detail="No branch access assigned")
+
+        # If a specific branch is requested, ensure the worker has access to it
+        if branch_id and branch_id not in user_branch_ids:
+             raise HTTPException(status_code=403, detail="You do not have permission for this branch")
+
+        # Filter by the worker's assigned branches, or a specific one if provided
+        target_branch_ids = [branch_id] if branch_id else user_branch_ids
+        query = query.filter(DailySale.branch_id.in_(target_branch_ids))
+
     elif branch_id:
         # Admins can optionally filter by branch_id
         query = query.filter(DailySale.branch_id == branch_id)
+
     if date_filter:
         try:
             filter_date = datetime.strptime(date_filter, "%Y-%m-%d").date()
@@ -1808,17 +1819,30 @@ async def get_dashboard_data_enhanced(
     """Get dashboard data with proper branch isolation"""
     today = date.today()
     target_branch_id = None
+
     if hasattr(current_user, 'role') and current_user.role == "worker":
-        target_branch_id = current_user.branch_id
-        if not target_branch_id:
-            raise HTTPException(status_code=403, detail="Worker must be assigned to a branch")
+        # For workers, find their FIRST assigned branch to show on the dashboard.
+        first_permission = db.query(UserBranchPermission).filter(UserBranchPermission.user_id == current_user.id).first()
+        if not first_permission:
+            raise HTTPException(status_code=403, detail="No branch access assigned")
+        # If a branch is requested, make sure they have access. Otherwise, use their first assigned branch.
+        if branch_id:
+            has_access = db.query(UserBranchPermission).filter(UserBranchPermission.user_id == current_user.id, UserBranchPermission.branch_id == branch_id).first()
+            if not has_access:
+                 raise HTTPException(status_code=403, detail="You do not have permission for this branch")
+            target_branch_id = branch_id
+        else:
+            target_branch_id = first_permission.branch_id
     elif branch_id:
+        # Admins can view any specific branch
         target_branch_id = branch_id
+
     sales_filter = func.date(DailySale.sale_date) == today
     expense_filter = func.date(DailyExpense.expense_date) == today
     if target_branch_id:
         sales_filter = and_(sales_filter, DailySale.branch_id == target_branch_id)
         expense_filter = and_(expense_filter, DailyExpense.branch_id == target_branch_id)
+    # ... rest of the function (no other changes needed here)
     today_sales = db.query(DailySale).filter(sales_filter).all()
     today_items_sold = sum(sale.quantity for sale in today_sales)
     today_revenue = sum(sale.revenue for sale in today_sales)
