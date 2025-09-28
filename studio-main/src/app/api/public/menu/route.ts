@@ -4,6 +4,37 @@ import { NextRequest, NextResponse } from 'next/server';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
 const SERVICE_API_KEY = process.env.SERVICE_API_KEY || process.env.FASTAPI_API_KEY;
 
+// Helper function to wait/retry
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url: string, options: RequestInit, maxRetries: number = 5) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Fetch attempt ${attempt}/${maxRetries} to: ${url}`);
+      const response = await fetch(url, options);
+      return response;
+    } catch (error: any) {
+      console.log(`Attempt ${attempt} failed:`, error.message);
+      
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // If it's a connection refused error, wait longer before retry
+      if (error.code === 'ECONNREFUSED') {
+        const waitTime = attempt * 2000; // 2s, 4s, 6s, 8s
+        console.log(`Backend not ready, waiting ${waitTime}ms before retry...`);
+        await sleep(waitTime);
+      } else {
+        // For other errors, shorter wait
+        await sleep(1000);
+      }
+    }
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -32,7 +63,8 @@ export async function GET(request: NextRequest) {
       'X-API-Key': SERVICE_API_KEY,
     };
 
-    const response = await fetch(apiUrl, {
+    // Use retry logic to handle backend startup timing
+    const response = await fetchWithRetry(apiUrl, {
       method: 'GET',
       headers,
       cache: 'no-store',
