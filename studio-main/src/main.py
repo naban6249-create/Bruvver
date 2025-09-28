@@ -70,7 +70,23 @@ app = FastAPI(
 )
 
 # CORS middleware
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:9002").split(",")
+from fastapi.middleware.cors import CORSMiddleware
+import os
+
+# Get allowed origins from environment variable or use defaults
+default_origins = [
+    "http://localhost:3000",
+    "http://localhost:9002",
+    "https://bruvver.onrender.com",  # production frontend
+]
+
+allowed_origins = os.getenv("ALLOWED_ORIGINS")
+if allowed_origins:
+    # Split comma-separated values into list
+    allowed_origins = [origin.strip() for origin in allowed_origins.split(",")]
+else:
+    allowed_origins = default_origins
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -78,6 +94,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Serve static files (images)
 app.mount("/static", StaticFiles(directory="static"), name="static")
