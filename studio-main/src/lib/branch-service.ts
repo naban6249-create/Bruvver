@@ -10,7 +10,7 @@ const getAuthHeader = (): Record<string, string> => {
 };
 
 export async function getBranches(): Promise<Branch[]> {
-  const response = await fetch(`${API_BASE}/branches`, {
+  const response = await fetch(`${API_BASE_URL}/branches`, {
     headers: { ...getAuthHeader() },
     cache: 'no-store',
   });
@@ -23,7 +23,7 @@ export async function getBranches(): Promise<Branch[]> {
 }
 
 export async function addBranch(branchData: Omit<Branch, 'id' | 'created_at' | 'updated_at'>): Promise<Branch> {
-  const response = await fetch(`${API_BASE}/branches`, {
+  const response = await fetch(`${API_BASE_URL}/branches`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -42,7 +42,7 @@ export async function addBranch(branchData: Omit<Branch, 'id' | 'created_at' | '
 }
 
 export async function updateBranch(branchId: number, branchData: Partial<Branch>): Promise<Branch> {
-  const response = await fetch(`${API_BASE}/branches/${branchId}`, {
+  const response = await fetch(`${API_BASE_URL}/branches/${branchId}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -61,7 +61,7 @@ export async function updateBranch(branchId: number, branchData: Partial<Branch>
 }
 
 export async function deleteBranch(branchId: number): Promise<void> {
-  const response = await fetch(`${API_BASE}/branches/${branchId}`, {
+  const response = await fetch(`${API_BASE_URL}/branches/${branchId}`, {
     method: 'DELETE',
     headers: { ...getAuthHeader() },
     cache: 'no-store',
