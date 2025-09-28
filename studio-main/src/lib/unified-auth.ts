@@ -2,7 +2,7 @@
 'use client';
 
 // Use the same base as other services; expected to include '/api'
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000/api";
 
 export interface LoginCredentials {
   username: string;
@@ -78,7 +78,7 @@ export class UnifiedAuth {
   static async login(credentials: LoginCredentials): Promise<boolean> {
     try {
       console.log('Attempting login...');
-      const response = await fetch(`${API_BASE}/auth/login`, {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials),
@@ -142,7 +142,7 @@ export class UnifiedAuth {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch(`${API_BASE}/upload-image`, {
+      const response = await fetch(`${API_BASE_URL}/upload-image`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }, // No Content-Type for FormData
         body: formData,
