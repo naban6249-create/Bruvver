@@ -199,17 +199,38 @@ def manual_export_to_sheets(req: ManualExportRequest, db: Session = Depends(get_
 # -------------------------
 # Helper: initialize sample data
 # -------------------------
+# Add this enhanced startup function to your FastAPI main.py
+# Replace your existing initialize_sample_data function with this:
+
 async def initialize_sample_data():
     """Initialize database with sample data if empty"""
     db = next(get_database())
     try:
+        # Create default branch first if it doesn't exist
+        branch = db.query(Branch).filter(Branch.id == 1).first()
+        if not branch:
+            branch = Branch(
+                id=1,
+                name="Coimbatore Main",
+                location="Coimbatore",
+                address="123 Coffee Street, Coimbatore",
+                phone="+91 9876543210",
+                email="coimbatore@bruvvers.in",
+                is_active=True
+            )
+            db.add(branch)
+            db.flush()
+            logger.info("Created default branch: Coimbatore Main (ID: 1)")
+
         # Only add sample items if none exist
         if db.query(MenuItem).count() == 0:
             sample_items = [
                 {
                     "id": "1", "name": "Classic Espresso", "price": 120.0,
                     "description": "Rich and bold espresso shot",
-                    "category": "hot", "image_url": "https://picsum.photos/600/400",
+                    "category": "hot", "image_url": "https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?w=600&h=400&fit=crop",
+                    "branch_id": 1,  # Assign to branch 1
+                    "is_available": True,
                     "ingredients": [
                         {"name": "Coffee Beans", "quantity": 18, "unit": "g"},
                         {"name": "Water", "quantity": 60, "unit": "ml"},
@@ -218,7 +239,9 @@ async def initialize_sample_data():
                 {
                     "id": "2", "name": "Caramel Macchiato", "price": 180.0,
                     "description": "Espresso with steamed milk and caramel",
-                    "category": "hot", "image_url": "https://picsum.photos/600/400",
+                    "category": "hot", "image_url": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=600&h=400&fit=crop",
+                    "branch_id": 1,  # Assign to branch 1
+                    "is_available": True,
                     "ingredients": [
                         {"name": "Coffee Beans", "quantity": 18, "unit": "g"},
                         {"name": "Milk", "quantity": 150, "unit": "ml"},
@@ -229,26 +252,66 @@ async def initialize_sample_data():
                 {
                     "id": "3", "name": "Iced Latte", "price": 160.0,
                     "description": "Smooth espresso with cold milk over ice",
-                    "category": "iced", "image_url": "https://picsum.photos/600/400",
+                    "category": "iced", "image_url": "https://images.unsplash.com/photo-1517701550103-4ec10bb2d8c3?w=600&h=400&fit=crop",
+                    "branch_id": 1,  # Assign to branch 1
+                    "is_available": True,
                     "ingredients": [
                         {"name": "Coffee Beans", "quantity": 18, "unit": "g"},
                         {"name": "Milk", "quantity": 200, "unit": "ml"},
+                        {"name": "Ice", "quantity": 100, "unit": "g"},
+                    ]
+                },
+                {
+                    "id": "4", "name": "Americano", "price": 100.0,
+                    "description": "Classic black coffee with hot water",
+                    "category": "hot", "image_url": "https://images.unsplash.com/photo-1551734337-b1c04d32c9f5?w=600&h=400&fit=crop",
+                    "branch_id": 1,
+                    "is_available": True,
+                    "ingredients": [
+                        {"name": "Coffee Beans", "quantity": 18, "unit": "g"},
+                        {"name": "Hot Water", "quantity": 150, "unit": "ml"},
+                    ]
+                },
+                {
+                    "id": "5", "name": "Cappuccino", "price": 150.0,
+                    "description": "Espresso with steamed milk and foam",
+                    "category": "hot", "image_url": "https://images.unsplash.com/photo-1572286258217-b9fbc18b5c12?w=600&h=400&fit=crop",
+                    "branch_id": 1,
+                    "is_available": True,
+                    "ingredients": [
+                        {"name": "Coffee Beans", "quantity": 18, "unit": "g"},
+                        {"name": "Milk", "quantity": 100, "unit": "ml"},
+                    ]
+                },
+                {
+                    "id": "6", "name": "Cold Brew", "price": 140.0,
+                    "description": "Smooth cold-brewed coffee served over ice",
+                    "category": "iced", "image_url": "https://images.unsplash.com/photo-1585941531823-71a1b5be4011?w=600&h=400&fit=crop",
+                    "branch_id": 1,
+                    "is_available": True,
+                    "ingredients": [
+                        {"name": "Cold Brew Coffee", "quantity": 200, "unit": "ml"},
                         {"name": "Ice", "quantity": 100, "unit": "g"},
                     ]
                 }
             ]
 
             for item_data in sample_items:
+                # Create menu item
                 db_item = MenuItem(
                     id=item_data["id"],
                     name=item_data["name"],
                     price=item_data["price"],
                     description=item_data["description"],
                     category=item_data["category"],
-                    image_url=item_data["image_url"]
+                    image_url=item_data["image_url"],
+                    branch_id=item_data["branch_id"],
+                    is_available=item_data["is_available"]
                 )
                 db.add(db_item)
                 db.flush()
+                
+                # Add ingredients
                 for ingredient_data in item_data["ingredients"]:
                     db_ingredient = Ingredient(
                         menu_item_id=item_data["id"],
@@ -259,37 +322,62 @@ async def initialize_sample_data():
                     )
                     db.add(db_ingredient)
 
+            logger.info(f"Created {len(sample_items)} sample menu items for branch 1")
+
             # Inventory
             sample_inventory = [
-                {"item_name": "Coffee Beans", "current_stock": 5000, "unit": "g", "minimum_threshold": 500},
-                {"item_name": "Milk", "current_stock": 2000, "unit": "ml", "minimum_threshold": 200},
-                {"item_name": "Caramel Syrup", "current_stock": 50, "unit": "pumps", "minimum_threshold": 10},
+                {"item_name": "Coffee Beans", "current_stock": 5000, "unit": "g", "minimum_threshold": 500, "branch_id": 1},
+                {"item_name": "Milk", "current_stock": 2000, "unit": "ml", "minimum_threshold": 200, "branch_id": 1},
+                {"item_name": "Caramel Syrup", "current_stock": 50, "unit": "pumps", "minimum_threshold": 10, "branch_id": 1},
             ]
             for inv_data in sample_inventory:
                 db_inventory = Inventory(**inv_data)
                 db.add(db_inventory)
 
-            # Default admin (if none)
-            if db.query(Admin).count() == 0:
-                default_admin_password = "testpassword"
-                hashed_password = get_password_hash(default_admin_password)
-                db_admin = Admin(
-                    username="admin@test.com",
-                    email="admin@test.com",
-                    full_name="Default Admin",
-                    password_hash=hashed_password,
-                    role="admin",
-                    is_active=True,
-                    is_superuser=True,
-                )
-                db.add(db_admin)
-                logger.info("Created default admin user admin@test.com / testpassword (role=admin)")
+        # Default admin (if none)
+        if db.query(Admin).count() == 0:
+            default_admin_password = "testpassword"
+            hashed_password = get_password_hash(default_admin_password)
+            db_admin = Admin(
+                username="admin@test.com",
+                email="admin@test.com",
+                full_name="Default Admin",
+                password_hash=hashed_password,
+                role="admin",
+                is_active=True,
+                is_superuser=True,
+            )
+            db.add(db_admin)
+            logger.info("Created default admin user admin@test.com / testpassword (role=admin)")
 
-            db.commit()
-            logger.info("Sample data initialized successfully")
-    except Exception:
+        # Ensure we have some expense categories
+        if db.query(ExpenseCategory).count() == 0:
+            categories = [
+                {"name": "Dairy", "description": "Milk and dairy products"},
+                {"name": "Coffee", "description": "Coffee beans and related items"},
+                {"name": "Utilities", "description": "Water, electricity, etc."},
+                {"name": "Other", "description": "Miscellaneous expenses"},
+            ]
+            for cat_data in categories:
+                db_category = ExpenseCategory(**cat_data)
+                db.add(db_category)
+            logger.info("Created default expense categories")
+
+        db.commit()
+        
+        # Verify the data was created
+        menu_count = db.query(MenuItem).filter(MenuItem.branch_id == 1).count()
+        available_count = db.query(MenuItem).filter(
+            MenuItem.branch_id == 1, 
+            MenuItem.is_available == True
+        ).count()
+        
+        logger.info(f"Branch 1 has {menu_count} total menu items, {available_count} available")
+        logger.info("Sample data initialized successfully")
+        
+    except Exception as e:
         db.rollback()
-        logger.exception("Failed to initialize sample data")
+        logger.exception(f"Failed to initialize sample data: {e}")
     finally:
         db.close()
 
