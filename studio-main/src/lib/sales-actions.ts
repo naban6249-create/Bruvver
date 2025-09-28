@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const cookieStore = await cookies();
@@ -16,7 +16,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 export async function updateDailySaleServer(branchId: string | number, itemId: string | number, quantity: number) {
   const headers = await getAuthHeaders();
-  const resp = await fetch(`${API_BASE}/branches/${branchId}/daily-sales/${itemId}`, {
+  const resp = await fetch(`${API_BASE_URL}/branches/${branchId}/daily-sales/${itemId}`, {
     method: 'PUT',
     headers,
     body: new URLSearchParams({ quantity: String(quantity) }),
