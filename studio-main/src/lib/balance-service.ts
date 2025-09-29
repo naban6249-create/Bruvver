@@ -66,6 +66,8 @@ export async function getOpeningBalance(branchId: string, date?: string): Promis
     const params = new URLSearchParams();
 
     if (date) params.append('date', date);
+    // Cache busting
+    params.append('_t', Date.now().toString());
 
     if (params.toString()) {
       url += `?${params.toString()}`;
@@ -74,6 +76,7 @@ export async function getOpeningBalance(branchId: string, date?: string): Promis
     const response = await fetch(url, {
       headers,
       cache: 'no-store',
+      next: { revalidate: 0 },
     });
 
     const data = await handleResponse(response);
@@ -101,6 +104,7 @@ export async function updateOpeningBalance(branchId: string, amount: number, dat
     headers,
     body: JSON.stringify(requestBody),
     cache: 'no-store',
+    next: { revalidate: 0 },
   });
 
   return handleResponse(response);
@@ -113,17 +117,24 @@ export async function getDailyBalanceSummary(branchId: string, date?: string): P
     const params = new URLSearchParams();
 
     if (date) params.append('date', date);
+    // CRITICAL: Add timestamp to force cache bust
+    params.append('_t', Date.now().toString());
 
     if (params.toString()) {
       url += `?${params.toString()}`;
     }
 
+    console.log(`[Balance Service] Fetching balance for branch ${branchId}, date: ${date || 'today'}`);
+
     const response = await fetch(url, {
       headers,
       cache: 'no-store',
+      next: { revalidate: 0 },
     });
 
     const data = await handleResponse(response);
+
+    console.log(`[Balance Service] Received data:`, data);
 
     return {
       openingBalance: data.opening_balance || 0,
@@ -143,4 +154,3 @@ export async function getDailyBalanceSummary(branchId: string, date?: string): P
     };
   }
 }
-
