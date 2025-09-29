@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { useAuth } from "@/components/admin/contexts/auth-context";
+import { useAuth } from "@/lib/auth-context";
 import { useSearchParams } from "next/navigation";
 import { PlusCircle, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
