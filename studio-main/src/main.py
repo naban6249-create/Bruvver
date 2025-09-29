@@ -504,6 +504,13 @@ async def create_branch(
     db.commit()
     db.refresh(db_branch)
     return db_branch
+# Add this new endpoint to main.py after the existing branch endpoints:
+
+@app.get("/api/public/branches", response_model=List[BranchResponse])
+async def get_public_branches(db: Session = Depends(get_database)):
+    """Get all active branches for public access (no auth required)"""
+    branches = db.query(Branch).filter(Branch.is_active == True).all()
+    return branches
 
 @app.put("/api/branches/{branch_id}", response_model=BranchResponse)
 async def update_branch(
