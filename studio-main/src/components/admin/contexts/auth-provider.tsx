@@ -31,22 +31,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadUser();
   }, []);
 
-  const login = async (email: string, password: string): Promise<User> => {
-    try {
-      const response = await loginUser(email, password);
-      if (response) {
-        setUser(response.user);
-        localStorage.setItem('token', response.access_token);
-        localStorage.setItem('currentUser', JSON.stringify(response.user));
-        return response.user;
-      } else {
-        throw new Error('Login failed');
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
+  // In auth-provider.tsx, replace the login function:
+const login = async (email: string, password: string): Promise<User> => {
+  try {
+    // Call backend API directly, not server action
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
+    
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: email, // Your backend expects 'username', not 'email'
+        password: password
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('Login failed:', errorData);
+      throw new Error('Login failed');
     }
-  };
+
+    const data = await response.json();
+    
+    // Store token in both localStorage and cookies for compatibility
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('token', data.access_token);
+      localStorage.setItem('currentUser', JSON.stringify(data.user));
+    }
+    
+    setUser(data.user);
+    return data.user;
+  } catch (error) {
+    console.error('Login error:', error);
+    throw error;
+  }
+};
 
   const logout = async () => {
     try {
