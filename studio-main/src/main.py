@@ -1039,6 +1039,8 @@ async def get_menu_item(item_id: str, db: Session = Depends(get_database)):
         raise HTTPException(status_code=404, detail="Menu item not found")
     return item
 
+# In main.py, update the create_menu_item endpoint (around line 1200):
+
 @app.post("/api/menu", response_model=MenuItemResponse)
 async def create_menu_item(
     name: str = Form(...),
@@ -1052,6 +1054,26 @@ async def create_menu_item(
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
+    # Auto-assign branch_id if not provided
+    if branch_id is None:
+        if hasattr(current_user, 'role') and current_user.role == "worker":
+            # For workers, use their first assigned branch
+            first_permission = db.query(UserBranchPermission).filter(
+                UserBranchPermission.user_id == current_user.id
+            ).first()
+            if first_permission:
+                branch_id = first_permission.branch_id
+            else:
+                raise HTTPException(status_code=400, detail="No branch assigned to worker")
+        else:
+            # For admins, default to branch 1 (Coimbatore Main)
+            branch_id = 1
+    
+    # Verify branch exists
+    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    if not branch:
+        raise HTTPException(status_code=400, detail=f"Branch {branch_id} not found")
+    
     # Generate new numeric id string
     max_id_query = db.query(func.max(MenuItem.id)).scalar()
     max_id = 0
@@ -1061,17 +1083,27 @@ async def create_menu_item(
         except (ValueError, TypeError):
             max_id = 0
     new_id = str(max_id + 1)
+    
     image_path = None
     if image and image.filename:
         image_path = f"/static/images/{new_id}_{image.filename}"
         with open(f"static/images/{new_id}_{image.filename}", "wb") as buffer:
             shutil.copyfileobj(image.file, buffer)
+    
     db_item = MenuItem(
-        id=new_id, name=name, price=price, description=description,
-        category=category, branch_id=branch_id, image_url=image_path, is_available=is_available
+        id=new_id, 
+        name=name, 
+        price=price, 
+        description=description,
+        category=category, 
+        branch_id=branch_id, 
+        image_url=image_path, 
+        is_available=is_available
     )
     db.add(db_item)
     db.flush()
+    
+    # Add ingredients
     ingredients_list = json.loads(ingredients)
     for ingredient in ingredients_list:
         db_ingredient = Ingredient(
@@ -1082,6 +1114,7 @@ async def create_menu_item(
             image_url=ingredient.get('image_url')
         )
         db.add(db_ingredient)
+    
     db.commit()
     db.refresh(db_item)
     return db_item
