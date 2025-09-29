@@ -840,16 +840,28 @@ async def login_admin_enhanced(
     form_data: AdminLogin,
     db: Session = Depends(get_database)
 ):
+    logger.info(f"Login attempt for username: {form_data.username}")
+    
     admin = authenticate_user(db, username=form_data.username, password=form_data.password)
     if not admin:
+        logger.warning(f"Authentication failed for username: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if not admin.is_active:
+        logger.warning(f"Inactive user attempted login: {form_data.username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is inactive",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     # Load branch permissions
     permissions = db.query(UserBranchPermission).filter(UserBranchPermission.user_id == admin.id).all()
+    logger.info(f"User {admin.username} has {len(permissions)} branch permissions")
     
     user_data = {
         "id": admin.id,
@@ -869,6 +881,7 @@ async def login_admin_enhanced(
         expires_delta=access_token_expires
     )
 
+    logger.info(f"Successful login for user: {admin.username}")
     return Token(access_token=access_token, token_type="bearer", user=user_data)
 
 # -------------------------
@@ -2645,21 +2658,47 @@ async def create_user(
 ):
     if not (hasattr(current_user, 'role') and current_user.role == "admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
-    existing_user = db.query(Admin).filter((Admin.username == user.username) | (Admin.email == user.email)).first()
+    
+    existing_user = db.query(Admin).filter(
+        (Admin.username == user.username) | (Admin.email == user.email)
+    ).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Username or email already registered")
+    
     hashed_password = get_password_hash(user.password)
     role_value = getattr(user.role, 'value', user.role)
+    
     db_user = Admin(
         username=user.username,
         email=user.email,
         full_name=user.full_name or user.username,
         password_hash=hashed_password,
         role=role_value,
+        is_active=True,  # CRITICAL: Ensure user is active
     )
     db.add(db_user)
+    db.flush()  # Get the user ID before adding permissions
+    
+    # AUTO-ASSIGN BRANCH PERMISSIONS FOR WORKERS
+    if role_value == "worker":
+        branches = db.query(Branch).filter(Branch.is_active == True).all()
+        for branch in branches:
+            permission = UserBranchPermission(
+                user_id=db_user.id,
+                branch_id=branch.id,
+                permission_level=PermissionLevel.FULL_ACCESS  # Give full access by default
+            )
+            db.add(permission)
+        logger.info(f"Assigned {len(branches)} branch permissions to worker {db_user.username}")
+    
     db.commit()
     db.refresh(db_user)
+    
+    # Load permissions for response
+    db_user.branch_permissions = db.query(UserBranchPermission).filter(
+        UserBranchPermission.user_id == db_user.id
+    ).all()
+    
     return db_user
 
 @app.post("/api/admin/users/{user_id}/password")
