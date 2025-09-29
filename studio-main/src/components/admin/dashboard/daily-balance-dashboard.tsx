@@ -29,6 +29,7 @@ export function DailyBalanceDashboard() {
   const [newOpeningBalance, setNewOpeningBalance] = useState<string | number>('');
   const [currentDate, setCurrentDate] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
 
   // Set current date on component mount
   useEffect(() => {
@@ -42,23 +43,40 @@ export function DailyBalanceDashboard() {
     setCurrentDate(today.toLocaleDateString('en-US', options));
   }, []);
 
-  const fetchSummary = async (branchId: string, date?: Date) => {
+  const fetchSummary = useCallback(async (branchId: string, date?: Date) => {
     const dateString = date ? date.toISOString().split('T')[0] : undefined;
+    console.log(`[Dashboard] Fetching summary for branch ${branchId}, date: ${dateString}`);
+    
     const summaryData = await getDailyBalanceSummary(branchId, dateString);
+    
+    console.log(`[Dashboard] Received summary:`, summaryData);
+    
     setSummary(summaryData);
     setNewOpeningBalance(summaryData.openingBalance);
-  };
-
-  const fetchData = useCallback(async () => {
-    if (!branchId) return;
-    await fetchSummary(branchId, selectedDate);
-  }, [branchId, selectedDate]);
+    setLastFetchTime(Date.now());
+  }, []);
 
   useEffect(() => {
     if (branchId) {
       fetchSummary(branchId, selectedDate);
     }
-  }, [branchId, selectedDate]);
+  }, [branchId, selectedDate, fetchSummary]);
+
+  // Listen for external refresh events (when sales are updated)
+  useEffect(() => {
+    const handleRefreshEvent = () => {
+      console.log('[Dashboard] External refresh event received');
+      if (branchId && selectedDate) {
+        fetchSummary(branchId, selectedDate);
+      }
+    };
+
+    window.addEventListener('refreshBalance', handleRefreshEvent);
+    
+    return () => {
+      window.removeEventListener('refreshBalance', handleRefreshEvent);
+    };
+  }, [branchId, selectedDate, fetchSummary]);
 
   const handleDateChange = (date?: Date) => {
     setSelectedDate(date);
@@ -67,7 +85,6 @@ export function DailyBalanceDashboard() {
     }
   };
 
-  // ADD THIS: Manual refresh function
   const handleRefresh = async () => {
     if (!branchId) return;
     setIsRefreshing(true);
@@ -123,6 +140,11 @@ export function DailyBalanceDashboard() {
             <CardTitle className="font-headline">Daily Balance Sheet</CardTitle>
             <CardDescription>
               An overview of your daily financial transactions for the selected branch.
+              {lastFetchTime > 0 && (
+                <span className="text-xs block mt-1 text-muted-foreground">
+                  Last updated: {new Date(lastFetchTime).toLocaleTimeString()}
+                </span>
+              )}
             </CardDescription>
           </div>
           <div className="flex items-center gap-4">
