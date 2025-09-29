@@ -1,19 +1,19 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/lib/auth-context';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { getOpeningBalance, updateOpeningBalance, getDailyBalanceSummary } from '@/lib/balance-service';
-import { DollarSign, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
+import { getDailyBalanceSummary, updateOpeningBalance } from '@/lib/balance-service';
+import { DollarSign, TrendingUp, TrendingDown, Wallet, RefreshCw, Loader2 } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
 
 export function DailyBalanceDashboard() {
-  const { user } = useAuth(); // Get the user from the auth context
-  const role = user?.role; // Get the role from the user object
+  const { user } = useAuth();
+  const role = user?.role;
   const searchParams = useSearchParams();
   const branchId = searchParams.get('branchId');
   const { toast } = useToast();
@@ -27,9 +27,8 @@ export function DailyBalanceDashboard() {
   });
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [newOpeningBalance, setNewOpeningBalance] = useState<string | number>('');
-
-  // Add current date state
   const [currentDate, setCurrentDate] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Set current date on component mount
   useEffect(() => {
@@ -43,7 +42,6 @@ export function DailyBalanceDashboard() {
     setCurrentDate(today.toLocaleDateString('en-US', options));
   }, []);
 
-  // Add the 'date' parameter to the fetchSummary function
   const fetchSummary = async (branchId: string, date?: Date) => {
     const dateString = date ? date.toISOString().split('T')[0] : undefined;
     const summaryData = await getDailyBalanceSummary(branchId, dateString);
@@ -62,7 +60,6 @@ export function DailyBalanceDashboard() {
     }
   }, [branchId, selectedDate]);
 
-  // ... inside the handleDateChange function, call fetchSummary
   const handleDateChange = (date?: Date) => {
     setSelectedDate(date);
     if (branchId && date) {
@@ -70,10 +67,31 @@ export function DailyBalanceDashboard() {
     }
   };
 
+  // ADD THIS: Manual refresh function
+  const handleRefresh = async () => {
+    if (!branchId) return;
+    setIsRefreshing(true);
+    try {
+      await fetchSummary(branchId, selectedDate);
+      toast({
+        title: 'Refreshed',
+        description: 'Daily balance updated successfully.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to refresh data.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleUpdateOpeningBalance = async () => {
     if (!branchId || typeof newOpeningBalance !== 'number') return;
     try {
-      await updateOpeningBalance(branchId, newOpeningBalance);
+      await updateOpeningBalance(branchId, newOpeningBalance, selectedDate?.toISOString().split('T')[0]);
       toast({
         title: 'Success',
         description: 'Opening balance updated successfully.',
@@ -107,9 +125,29 @@ export function DailyBalanceDashboard() {
               An overview of your daily financial transactions for the selected branch.
             </CardDescription>
           </div>
-          <div className="text-right">
-            <p className="font-semibold text-lg text-foreground/90">{currentDate.split(',')[0]}</p>
-            <p className="font-medium text-foreground/80">{currentDate.split(',').slice(1).join(',')}</p>
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+            >
+              {isRefreshing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Refreshing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </>
+              )}
+            </Button>
+            <div className="text-right">
+              <p className="font-semibold text-lg text-foreground/90">{currentDate.split(',')[0]}</p>
+              <p className="font-medium text-foreground/80">{currentDate.split(',').slice(1).join(',')}</p>
+            </div>
           </div>
         </div>
       </CardHeader>
