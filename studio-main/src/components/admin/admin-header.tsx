@@ -17,7 +17,7 @@ interface AdminHeaderProps {
 }
 
 export function AdminHeader({ currentUser }: AdminHeaderProps) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const effectiveUser = currentUser ?? user ?? null;
   const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [availableBranches, setAvailableBranches] = useState<Branch[]>([]);
@@ -247,11 +247,9 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
         {/* Desktop User Info and Logout */}
         <div className="hidden md:flex items-center gap-4">
           <UserInfo />
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/">
-              <LogOut className="mr-2 h-4 w-4" />
-              Logout
-            </Link>
+          <Button variant="outline" size="sm" onClick={logout}>
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
           </Button>
         </div>
 
@@ -290,11 +288,9 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
 
               {/* Actions */}
               <div className="space-y-2 pt-4 border-t">
-                <Button variant="outline" size="sm" className="w-full justify-start" asChild>
-                  <Link href="/" onClick={() => setIsMobileMenuOpen(false)}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Logout
-                  </Link>
+                <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => { logout(); setIsMobileMenuOpen(false); }}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Logout
                 </Button>
               </div>
             </div>
@@ -304,3 +300,4 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
     </header>
   );
 }
+
