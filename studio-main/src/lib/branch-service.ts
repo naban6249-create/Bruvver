@@ -1,7 +1,6 @@
-// lib/branch-service.ts
+// lib/branch-service.ts - REPLACE ENTIRE FILE
 import type { Branch } from './types';
 
-// Use unified API base (must include '/api')
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
 const getAuthHeader = (): Record<string, string> => {
@@ -10,8 +9,26 @@ const getAuthHeader = (): Record<string, string> => {
 };
 
 export async function getBranches(): Promise<Branch[]> {
+  // Try public endpoint first for branch listings
+  try {
+    const response = await fetch(`${API_BASE_URL}/public/branches`, {
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+    });
+    
+    if (response.ok) {
+      return response.json();
+    }
+  } catch (error) {
+    console.warn('Public branches endpoint failed, trying authenticated endpoint');
+  }
+
+  // Fallback to authenticated endpoint
   const response = await fetch(`${API_BASE_URL}/branches`, {
-    headers: { ...getAuthHeader() },
+    headers: { 
+      'Content-Type': 'application/json',
+      ...getAuthHeader() 
+    },
     cache: 'no-store',
   });
   
@@ -22,6 +39,7 @@ export async function getBranches(): Promise<Branch[]> {
   return response.json();
 }
 
+// Rest of the functions remain the same...
 export async function addBranch(branchData: Omit<Branch, 'id' | 'created_at' | 'updated_at'>): Promise<Branch> {
   const response = await fetch(`${API_BASE_URL}/branches`, {
     method: 'POST',
