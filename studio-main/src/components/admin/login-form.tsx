@@ -31,14 +31,7 @@ export function LoginForm() {
 
       // ### FIX: ROLE-BASED REDIRECT ###
       // Check the user's role and redirect to the appropriate dashboard.
-      if (loggedInUser.role === 'admin') {
-        router.push('/admin/dashboard');
-      } else if (loggedInUser.role === 'worker') {
-        router.push('/worker/dashboard'); // Redirect workers to their dashboard
-      } else {
-        // Fallback for any other roles, though you might want a default error page
-        router.push('/'); 
-      }
+      router.push('/admin/dashboard');
 
     } catch (error) {
       console.error("Login error:", error);
