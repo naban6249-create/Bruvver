@@ -246,92 +246,179 @@ export function DailySalesBreakdown() {
                             <p className="text-muted-foreground">No menu items found for this branch.</p>
                         </div>
                     ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[100px]">Image</TableHead>
-                                    <TableHead>Menu Item</TableHead>
-                                    <TableHead className="text-right">Price</TableHead>
-                                    <TableHead className="w-[150px] text-right">Quantity Sold</TableHead>
-                                    <TableHead className="text-right">Revenue</TableHead>
-                                    {hasFullAccess && (
-                                        <TableHead className="w-[100px] text-right">Actions</TableHead>
-                                    )}
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
+                        <>
+                            {/* Mobile Card Layout */}
+                            <div className="block md:hidden space-y-4">
                                 {salesDetails.map(item => (
-                                    <TableRow key={item.id}>
-                                        <TableCell>
-                                            {(() => {
-                                                const imgSrc = item.imageUrl && item.imageUrl.trim().length > 0
-                                                    ? item.imageUrl
-                                                    : 'https://picsum.photos/64/64';
-                                                const isRemote = !imgSrc.startsWith('/');
-                                                return (
-                                                    <Image
-                                                        alt={item.name}
-                                                        className="aspect-square rounded-md object-cover"
-                                                        height="64"
-                                                        src={imgSrc}
-                                                        width="64"
-                                                        unoptimized={isRemote}
-                                                        data-ai-hint="coffee drink"
-                                                    />
-                                                );
-                                            })()}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="font-medium">{item.name}</div>
-                                            {item.description && (
-                                                <div className="text-sm text-muted-foreground">{item.description}</div>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            ₹{item.price.toFixed(2)}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                {hasFullAccess ? (
-                                                    <>
-                                                        <Button 
-                                                            variant="outline" 
-                                                            size="icon" 
-                                                            className="h-8 w-8"
-                                                            onClick={() => handleQuantityChange(item.id, item.quantitySold - 1)}
-                                                            disabled={item.quantitySold === 0}
-                                                        >
-                                                            <Minus className="h-4 w-4" />
-                                                        </Button>
-                                                        <span className="text-center w-8 font-medium">{item.quantitySold}</span>
-                                                        <Button 
-                                                            variant="outline" 
-                                                            size="icon" 
-                                                            className="h-8 w-8"
-                                                            onClick={() => handleQuantityChange(item.id, item.quantitySold + 1)}
-                                                        >
-                                                            <Plus className="h-4 w-4" />
-                                                        </Button>
-                                                    </>
-                                                ) : (
-                                                    <span className="text-center font-medium">{item.quantitySold}</span>
-                                                )}
+                                    <Card key={item.id} className="p-4">
+                                        <div className="flex items-start gap-3">
+                                            <div className="flex-shrink-0">
+                                                {(() => {
+                                                    const imgSrc = item.imageUrl && item.imageUrl.trim().length > 0
+                                                        ? item.imageUrl
+                                                        : 'https://picsum.photos/64/64';
+                                                    const isRemote = !imgSrc.startsWith('/');
+                                                    return (
+                                                        <Image
+                                                            alt={item.name}
+                                                            className="aspect-square rounded-md object-cover"
+                                                            height="48"
+                                                            src={imgSrc}
+                                                            width="48"
+                                                            unoptimized={isRemote}
+                                                            data-ai-hint="coffee drink"
+                                                        />
+                                                    );
+                                                })()}
                                             </div>
-                                        </TableCell>
-                                        <TableCell className="text-right font-medium">
-                                            ₹{(item.price * item.quantitySold).toFixed(2)}
-                                        </TableCell>
-                                        {hasFullAccess && (
-                                            <TableCell className="text-right">
-                                                <Button variant="outline" size="sm" onClick={() => handleEditItem(item)}>
-                                                    <Pencil className="mr-2 h-4 w-4" /> Edit
-                                                </Button>
-                                            </TableCell>
-                                        )}
-                                    </TableRow>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-start justify-between">
+                                                    <div className="min-w-0 flex-1">
+                                                        <h4 className="font-medium text-sm truncate">{item.name}</h4>
+                                                        {item.description && (
+                                                            <p className="text-xs text-muted-foreground line-clamp-2">{item.description}</p>
+                                                        )}
+                                                    </div>
+                                                    {hasFullAccess && (
+                                                        <Button variant="ghost" size="sm" onClick={() => handleEditItem(item)} className="ml-2">
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                
+                                                <div className="mt-2 space-y-1">
+                                                    <div className="flex justify-between text-sm">
+                                                        <span className="text-muted-foreground">Price:</span>
+                                                        <span>₹{item.price.toFixed(2)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-sm text-muted-foreground">Quantity:</span>
+                                                        {hasFullAccess ? (
+                                                            <div className="flex items-center gap-1">
+                                                                <Button 
+                                                                    variant="outline" 
+                                                                    size="icon" 
+                                                                    className="h-6 w-6"
+                                                                    onClick={() => handleQuantityChange(item.id, item.quantitySold - 1)}
+                                                                    disabled={item.quantitySold === 0}
+                                                                >
+                                                                    <Minus className="h-3 w-3" />
+                                                                </Button>
+                                                                <span className="text-sm font-medium min-w-[2rem] text-center">{item.quantitySold}</span>
+                                                                <Button 
+                                                                    variant="outline" 
+                                                                    size="icon" 
+                                                                    className="h-6 w-6"
+                                                                    onClick={() => handleQuantityChange(item.id, item.quantitySold + 1)}
+                                                                >
+                                                                    <Plus className="h-3 w-3" />
+                                                                </Button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-sm font-medium">{item.quantitySold}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex justify-between text-sm font-medium">
+                                                        <span>Revenue:</span>
+                                                        <span className="text-green-600">₹{(item.price * item.quantitySold).toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </Card>
                                 ))}
-                            </TableBody>
-                        </Table>
+                            </div>
+
+                            {/* Desktop Table Layout */}
+                            <div className="hidden md:block">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-[100px]">Image</TableHead>
+                                            <TableHead>Menu Item</TableHead>
+                                            <TableHead className="text-right">Price</TableHead>
+                                            <TableHead className="w-[150px] text-right">Quantity Sold</TableHead>
+                                            <TableHead className="text-right">Revenue</TableHead>
+                                            {hasFullAccess && (
+                                                <TableHead className="w-[100px] text-right">Actions</TableHead>
+                                            )}
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {salesDetails.map(item => (
+                                            <TableRow key={item.id}>
+                                                <TableCell>
+                                                    {(() => {
+                                                        const imgSrc = item.imageUrl && item.imageUrl.trim().length > 0
+                                                            ? item.imageUrl
+                                                            : 'https://picsum.photos/64/64';
+                                                        const isRemote = !imgSrc.startsWith('/');
+                                                        return (
+                                                            <Image
+                                                                alt={item.name}
+                                                                className="aspect-square rounded-md object-cover"
+                                                                height="64"
+                                                                src={imgSrc}
+                                                                width="64"
+                                                                unoptimized={isRemote}
+                                                                data-ai-hint="coffee drink"
+                                                            />
+                                                        );
+                                                    })()}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="font-medium">{item.name}</div>
+                                                    {item.description && (
+                                                        <div className="text-sm text-muted-foreground">{item.description}</div>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    ₹{item.price.toFixed(2)}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        {hasFullAccess ? (
+                                                            <>
+                                                                <Button 
+                                                                    variant="outline" 
+                                                                    size="icon" 
+                                                                    className="h-8 w-8"
+                                                                    onClick={() => handleQuantityChange(item.id, item.quantitySold - 1)}
+                                                                    disabled={item.quantitySold === 0}
+                                                                >
+                                                                    <Minus className="h-4 w-4" />
+                                                                </Button>
+                                                                <span className="text-center w-8 font-medium">{item.quantitySold}</span>
+                                                                <Button 
+                                                                    variant="outline" 
+                                                                    size="icon" 
+                                                                    className="h-8 w-8"
+                                                                    onClick={() => handleQuantityChange(item.id, item.quantitySold + 1)}
+                                                                >
+                                                                    <Plus className="h-4 w-4" />
+                                                                </Button>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-center font-medium">{item.quantitySold}</span>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right font-medium">
+                                                    ₹{(item.price * item.quantitySold).toFixed(2)}
+                                                </TableCell>
+                                                {hasFullAccess && (
+                                                    <TableCell className="text-right">
+                                                        <Button variant="outline" size="sm" onClick={() => handleEditItem(item)}>
+                                                            <Pencil className="mr-2 h-4 w-4" /> Edit
+                                                        </Button>
+                                                    </TableCell>
+                                                )}
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </>
                     )}
                 </CardContent>
                 <CardFooter>
