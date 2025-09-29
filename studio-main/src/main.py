@@ -16,6 +16,13 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import uuid
 import cloudinary
 from cloudinary import uploader
+from zoneinfo import ZoneInfo
+
+IST = ZoneInfo('Asia/Kolkata')
+
+def get_current_date_ist():
+    """Get current date in IST timezone"""
+    return datetime.now(IST).date()
 # Set up detailed logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -1546,9 +1553,9 @@ async def get_daily_balance_summary(
 ):
     """Get the daily balance summary for a specific branch and date."""
     try:
-        target_date = datetime.strptime(date, "%Y-%m-%d").date() if date else datetime.utcnow().date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    target_date = datetime.strptime(date, "%Y-%m-%d").date() if date else get_current_date_ist()
+except ValueError:
+    raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
 
     # Get opening balance for the specified date
     opening_balance_obj = db.query(OpeningBalance).filter(
@@ -1835,13 +1842,12 @@ async def set_branch_daily_sale_quantity(
         ).first()
         if not perm:
             raise HTTPException(status_code=403, detail="No access to this branch")
-        # Normalize to string for comparison in case of enum instance
         pl = getattr(perm, "permission_level", None)
         if hasattr(pl, "value"):
             pl = pl.value
         if pl != "full_access":
             raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
-
+    
     # Verify menu item exists for this branch
     menu_item = db.query(MenuItem).filter(
         MenuItem.id == item_id,
@@ -1849,26 +1855,27 @@ async def set_branch_daily_sale_quantity(
     ).first()
     if not menu_item:
         raise HTTPException(status_code=404, detail="Menu item not found for this branch")
-
+    
     if quantity < 0:
         raise HTTPException(status_code=400, detail="Quantity cannot be negative")
-
+    
     revenue = float(menu_item.price) * int(quantity)
-    # Determine target date for upsert (default to server today; allow explicit override)
-    target_date = date.today()
+    
+    # Determine target date (use IST timezone)
+    target_date = get_current_date_ist()
     if date_filter:
         try:
             target_date = datetime.strptime(date_filter, "%Y-%m-%d").date()
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-
+    
     # Upsert: update existing sale for today or create new
     existing_sale = db.query(DailySale).filter(
         DailySale.menu_item_id == item_id,
         DailySale.branch_id == branch_id,
         func.date(DailySale.sale_date) == target_date
     ).first()
-
+    
     if existing_sale:
         existing_sale.quantity = quantity
         existing_sale.revenue = revenue
@@ -1876,13 +1883,14 @@ async def set_branch_daily_sale_quantity(
         db.refresh(existing_sale)
         return existing_sale
     else:
-        # When creating a new record, set sale_date to the target_date with current time
+        # When creating a new record, use IST time
+        ist_now = datetime.now(IST)
         db_sale = DailySale(
             menu_item_id=item_id,
             quantity=quantity,
             revenue=revenue,
             branch_id=branch_id,
-            sale_date=datetime.combine(target_date, datetime.now().time())
+            sale_date=datetime.combine(target_date, ist_now.time())
         )
         db.add(db_sale)
         db.commit()
