@@ -1,15 +1,12 @@
-// app/api/public/menu/route.ts - Fixed to match backend endpoints
+// app/api/public/menu/route.ts - REPLACE ENTIRE FILE
 import { NextRequest, NextResponse } from 'next/server';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
 const SERVICE_API_KEY = process.env.SERVICE_API_KEY || process.env.FASTAPI_API_KEY;
 
-// Helper function to wait/retry
 async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
-
-// studio-main/src/app/api/public/menu/route.ts
 
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries: number = 5) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -17,31 +14,25 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries: num
       console.log(`Fetch attempt ${attempt}/${maxRetries} to: ${url}`);
       const response = await fetch(url, options);
 
-      // If the response is a server error OR an auth error, treat it as retryable
       if (response.status >= 500 || response.status === 401 || response.status === 403) {
         console.log(`Attempt ${attempt} failed with status ${response.status}. Retrying...`);
-        // Throw an error to trigger the catch block for a retry
         throw new Error(`Retryable status code: ${response.status}`);
       }
       
-      // If the response is ok, we can return it
       return response;
 
     } catch (error: any) {
       console.log(`Attempt ${attempt} failed:`, error.message);
       
       if (attempt === maxRetries) {
-        // If we've exhausted retries, throw the final error
         throw error;
       }
       
-      // Wait before the next attempt
-      const waitTime = attempt * 1000; // 1s, 2s, 3s...
+      const waitTime = attempt * 1000;
       console.log(`Waiting ${waitTime}ms before next retry...`);
       await sleep(waitTime);
     }
   }
-  // This line should not be reachable, but is included for type safety
   throw new Error("Fetch with retry failed unexpectedly.");
 }
 
@@ -63,7 +54,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // FIXED: Use the correct backend endpoint that actually exists
+    // FIXED: Use the correct backend endpoint
     const apiUrl = `${API_BASE_URL}/branches/${branchId}/menu?available_only=true`;
     
     console.log('Fetching from:', apiUrl);
@@ -73,7 +64,6 @@ export async function GET(request: NextRequest) {
       'X-API-Key': SERVICE_API_KEY,
     };
 
-    // Use retry logic to handle backend startup timing
     const response = await fetchWithRetry(apiUrl, {
       method: 'GET',
       headers,
@@ -81,13 +71,11 @@ export async function GET(request: NextRequest) {
     });
 
     console.log('FastAPI Response Status:', response.status);
-    console.log('FastAPI Response Headers:', Object.fromEntries(response.headers.entries()));
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('FastAPI response not ok:', response.status, errorText);
       
-      // Handle specific error cases
       if (response.status === 404) {
         return NextResponse.json(
           { error: 'Menu not found for this branch', details: errorText },
@@ -104,14 +92,27 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
     console.log('Successfully fetched data, item count:', Array.isArray(data) ? data.length : 'Not an array');
     
-    // Transform the data to ensure consistency with frontend expectations
+    // Transform data for frontend consistency (Cloudinary-aware)
     const transformedData = Array.isArray(data) ? data.map((item: any) => {
       let imageUrl = item.image_url || item.imageUrl;
       
-      // If the image URL is a relative path, make it absolute
-      if (imageUrl && !imageUrl.startsWith('http')) {
-        const serverBase = API_BASE_URL.replace('/api', '');
-        imageUrl = `${serverBase}${imageUrl}`;
+      // Handle Cloudinary URLs and local static files
+      if (imageUrl) {
+        if (imageUrl.startsWith('https://res.cloudinary.com/')) {
+          // Already a valid Cloudinary URL
+          // Do nothing
+        } else if (imageUrl.startsWith('/static/')) {
+          // Local static file - convert to full URL
+          const serverBase = API_BASE_URL.replace('/api', '');
+          imageUrl = `${serverBase}${imageUrl}`;
+        } else if (!imageUrl.startsWith('http')) {
+          // Relative path - assume static file
+          const serverBase = API_BASE_URL.replace('/api', '');
+          imageUrl = `${serverBase}${imageUrl}`;
+        }
+      } else {
+        // Default fallback image
+        imageUrl = 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&h=400&fit=crop';
       }
       
       return {
@@ -119,9 +120,9 @@ export async function GET(request: NextRequest) {
         name: item.name,
         price: Number(item.price || 0),
         description: item.description || '',
-        imageUrl: imageUrl || 'https://picsum.photos/600/400',
+        imageUrl: imageUrl,
         category: item.category || 'hot',
-        is_available: Boolean(item.is_available !== false), // Default to true if undefined
+        is_available: Boolean(item.is_available !== false),
         ingredients: Array.isArray(item.ingredients) ? item.ingredients : [],
         branchId: item.branch_id || item.branchId || branchId,
       };
