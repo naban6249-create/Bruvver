@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { Suspense, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { DailyBalanceDashboard } from "./dashboard/daily-balance-dashboard";
@@ -24,6 +25,9 @@ export function DashboardClient() {
     const searchParams = useSearchParams();
     const role = searchParams.get('role') || user?.role;
     const branchId = searchParams.get('branchId');
+    
+    // Add state for controlled tabs
+    const [activeTab, setActiveTab] = React.useState("dashboard");
 
     useEffect(() => {
         // Redirect to login if the auth check is done and there's no user
@@ -48,7 +52,7 @@ export function DashboardClient() {
     
     if (role === 'worker') {
         return (
-            <div className="container mx-auto p-6">
+            <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
                 <Suspense fallback={<div>Loading worker dashboard...</div>}>
                     <WorkerDashboard />
                 </Suspense>
@@ -57,18 +61,35 @@ export function DashboardClient() {
     }
     
     return (
-        <div className="container mx-auto p-6">
-            <Tabs defaultValue="dashboard">
+        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <div className="flex items-center justify-between mb-6">
-                    <TabsList>
-                        <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                        <TabsTrigger value="balance">Daily Balance</TabsTrigger>
-                        <TabsTrigger value="menu">Menu</TabsTrigger>
-                        <TabsTrigger value="expenses">Daily Expenses</TabsTrigger>
-                        <TabsTrigger value="branches">Branches</TabsTrigger>
-                        <TabsTrigger value="permissions">User Permissions</TabsTrigger>
-                        <TabsTrigger value="reports">Reports</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-3 sm:grid-cols-7 h-auto p-1 gap-1 sm:gap-0">
+                        <TabsTrigger value="dashboard" className="text-xs sm:text-sm px-2 sm:px-3">Sales</TabsTrigger>
+                        <TabsTrigger value="balance" className="text-xs sm:text-sm px-2 sm:px-3 hidden sm:inline-flex">Balance</TabsTrigger>
+                        <TabsTrigger value="menu" className="text-xs sm:text-sm px-2 sm:px-3 hidden sm:inline-flex">Menu</TabsTrigger>
+                        <TabsTrigger value="expenses" className="text-xs sm:text-sm px-2 sm:px-3">Expenses</TabsTrigger>
+                        <TabsTrigger value="branches" className="text-xs sm:text-sm px-2 sm:px-3 hidden sm:inline-flex">Branches</TabsTrigger>
+                        <TabsTrigger value="permissions" className="text-xs sm:text-sm px-2 sm:px-3 hidden lg:inline-flex">Users</TabsTrigger>
+                        <TabsTrigger value="reports" className="text-xs sm:text-sm px-2 sm:px-3 hidden lg:inline-flex">Reports</TabsTrigger>
                     </TabsList>
+                    
+                    {/* Mobile Menu Button */}
+                    <div className="sm:hidden ml-2">
+                        <select 
+                            className="text-sm border rounded-md px-2 py-1 bg-background"
+                            value={activeTab}
+                            onChange={(e) => setActiveTab(e.target.value)}
+                        >
+                            <option value="dashboard">Sales</option>
+                            <option value="balance">Balance</option>
+                            <option value="menu">Menu</option>
+                            <option value="expenses">Expenses</option>
+                            <option value="branches">Branches</option>
+                            <option value="permissions">Users</option>
+                            <option value="reports">Reports</option>
+                        </select>
+                    </div>
                 </div>
                 
                 <TabsContent value="dashboard">
