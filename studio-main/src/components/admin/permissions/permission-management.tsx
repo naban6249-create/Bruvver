@@ -138,8 +138,8 @@ export function PermissionManagement() {
   return (
     <>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div>
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 pb-4">
+          <div className="flex-1">
             <CardTitle className="flex items-center gap-2">
               <UserCheck className="h-5 w-5" />
               User Permissions Management
@@ -148,12 +148,19 @@ export function PermissionManagement() {
               Manage worker access permissions to different branches. You can assign view-only or full access permissions.
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setIsCreateOpen(true)}>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsCreateOpen(true)}
+              className="w-full sm:w-auto justify-center sm:justify-start"
+            >
               <PlusCircle className="mr-2 h-4 w-4" />
               Create Worker
             </Button>
-            <Button onClick={() => setIsDialogOpen(true)}>
+            <Button 
+              onClick={() => setIsDialogOpen(true)}
+              className="w-full sm:w-auto justify-center sm:justify-start"
+            >
               <PlusCircle className="mr-2 h-4 w-4" />
               Assign Permission
             </Button>
@@ -173,48 +180,71 @@ export function PermissionManagement() {
               {users.map((user: UserPermissionSummary) => (
                 <Card key={user.user_id} className="border-l-4 border-l-primary">
                   <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div>
                         <CardTitle className="text-lg">{user.full_name}</CardTitle>
                         <CardDescription className="text-sm">{user.username}</CardDescription>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+                        <Badge variant="outline" className="self-start">
                           {user.branches.length} branch{user.branches.length !== 1 ? 'es' : ''}
                         </Badge>
-                        {/* Admin actions */}
-                        <Button size="sm" variant="outline" onClick={async () => {
-                          try {
-                            await grantAllBranchesFullAccess(user.user_id);
-                            toast({ title: 'Granted', description: 'Worker now has full access on all branches.' });
-                            fetchData();
-                          } catch (e) {
-                            toast({ title: 'Error', description: 'Failed to grant full access.', variant: 'destructive' });
-                          }
-                        }}>Full Access (All Branches)</Button>
-                        <Button size="sm" variant="secondary" onClick={() => { setEditingUser(user); setIsEditOpen(true); }}>
-                          <Edit2 className="mr-2 h-4 w-4" /> Edit
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={async () => {
-                          if (!confirm(`Deactivate ${user.full_name}? They won't be able to log in.`)) return;
-                          try {
-                            await deactivateUser(user.user_id);
-                            toast({ title: 'Deactivated', description: 'User has been deactivated.' });
-                            fetchData();
-                          } catch (e: any) {
-                            toast({ title: 'Error', description: e?.message || 'Failed to deactivate user.', variant: 'destructive' });
-                          }
-                        }}>Deactivate</Button>
-                        <Select onValueChange={async (val) => {
-                          try {
-                            await limitToSingleBranch(user.user_id, parseInt(val));
-                            toast({ title: 'Limited', description: 'Worker limited to selected branch.' });
-                            fetchData();
-                          } catch (e) {
-                            toast({ title: 'Error', description: 'Failed to limit to single branch.', variant: 'destructive' });
-                          }
-                        }}>
-                          <SelectTrigger className="w-48">
+                        {/* Admin actions - responsive layout */}
+                        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3"
+                            onClick={async () => {
+                              try {
+                                await grantAllBranchesFullAccess(user.user_id);
+                                toast({ title: 'Granted', description: 'Worker now has full access on all branches.' });
+                                fetchData();
+                              } catch (e) {
+                                toast({ title: 'Error', description: 'Failed to grant full access.', variant: 'destructive' });
+                              }
+                            }}
+                          >
+                            Full Access (All)
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="secondary" 
+                            className="text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3"
+                            onClick={() => { setEditingUser(user); setIsEditOpen(true); }}
+                          >
+                            <Edit2 className="mr-1 sm:mr-2 h-3 sm:h-4 w-3 sm:w-4" /> Edit
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="destructive" 
+                            className="text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3"
+                            onClick={async () => {
+                              if (!confirm(`Deactivate ${user.full_name}? They won't be able to log in.`)) return;
+                              try {
+                                await deactivateUser(user.user_id);
+                                toast({ title: 'Deactivated', description: 'User has been deactivated.' });
+                                fetchData();
+                              } catch (e: any) {
+                                toast({ title: 'Error', description: e?.message || 'Failed to deactivate user.', variant: 'destructive' });
+                              }
+                            }}
+                          >
+                            Deactivate
+                          </Button>
+                        </div>
+                        <Select 
+                          onValueChange={async (val) => {
+                            try {
+                              await limitToSingleBranch(user.user_id, parseInt(val));
+                              toast({ title: 'Limited', description: 'Worker limited to selected branch.' });
+                              fetchData();
+                            } catch (e) {
+                              toast({ title: 'Error', description: 'Failed to limit to single branch.', variant: 'destructive' });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-full sm:w-48 h-8 sm:h-9 text-xs sm:text-sm">
                             <SelectValue placeholder="Limit to branch" />
                           </SelectTrigger>
                           <SelectContent>
