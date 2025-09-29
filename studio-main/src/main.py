@@ -78,6 +78,7 @@ default_origins = [
     "http://localhost:3000",
     "http://localhost:9002",
     "https://bruvver-frontend.onrender.com",  # production frontend
+    "https://bruvver.onrender.com"
 ]
 
 allowed_origins = os.getenv("ALLOWED_ORIGINS")
@@ -1021,17 +1022,45 @@ async def get_menu_enhanced(
     current_user: Admin = Depends(get_current_active_user)
 ):
     query = db.query(MenuItem)
-    if current_user and hasattr(current_user, 'role') and current_user.role == "worker" and current_user.branch_id:
-        query = query.filter(MenuItem.branch_id == current_user.branch_id)
-    elif branch_id:
-        query = query.filter(MenuItem.branch_id == branch_id)
+    
+    # Handle branch selection logic
+    target_branch_id = branch_id
+    
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        # Workers are restricted to their assigned branches
+        user_branch_ids = [p.branch_id for p in db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == current_user.id
+        ).all()]
+        
+        if not user_branch_ids:
+            raise HTTPException(status_code=403, detail="No branch access assigned")
+            
+        if target_branch_id and target_branch_id not in user_branch_ids:
+            raise HTTPException(status_code=403, detail="No access to specified branch")
+            
+        # If no specific branch requested, use first assigned branch
+        if not target_branch_id:
+            target_branch_id = user_branch_ids[0]
+            
+        query = query.filter(MenuItem.branch_id == target_branch_id)
+        
+    elif hasattr(current_user, 'role') and current_user.role == "admin":
+        # Admins can access all branches
+        if target_branch_id:
+            query = query.filter(MenuItem.branch_id == target_branch_id)
+        else:
+            # If no branch specified, get first available branch's items
+            first_branch = db.query(Branch).filter(Branch.is_active == True).first()
+            if first_branch:
+                query = query.filter(MenuItem.branch_id == first_branch.id)
+    
     if available_only:
         query = query.filter(MenuItem.is_available == True)
     if category:
         query = query.filter(MenuItem.category == category)
+        
     items = query.offset(skip).limit(limit).all()
     return items
-
 @app.get("/api/menu/{item_id}", response_model=MenuItemResponse)
 async def get_menu_item(item_id: str, db: Session = Depends(get_database)):
     item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
@@ -2296,13 +2325,20 @@ async def get_admin_dashboard(
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
-    """Get admin dashboard data"""
+    """Get admin dashboard data with proper branch handling"""
     if not (hasattr(current_user, 'role') and current_user.role == "admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    # Use the same logic as get_dashboard_data_enhanced but for admin access
-    return await get_dashboard_data_enhanced(branch_id=branch_id, db=db, current_user=current_user)
+    # For admins without a specific branch selected, default to first available branch
+    target_branch_id = branch_id
+    
+    if not target_branch_id:
+        # Get the first active branch as default
+        first_branch = db.query(Branch).filter(Branch.is_active == True).first()
+        if first_branch:
+            target_branch_id = first_branch.id
 
+    return await get_dashboard_data_enhanced(branch_id=target_branch_id, db=db, current_user=current_user)
 # -------------------------
 # WORKER-SPECIFIC (read-only) endpoints
 # -------------------------
