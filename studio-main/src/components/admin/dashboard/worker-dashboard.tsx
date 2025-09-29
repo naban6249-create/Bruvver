@@ -25,9 +25,9 @@ export function WorkerDashboard() {
 
     if (!user) {
         return (
-            <div className="container mx-auto p-6">
+            <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
                 <Card>
-                    <CardContent className="p-6">
+                    <CardContent className="p-4 sm:p-6">
                         <p>Loading user information...</p>
                     </CardContent>
                 </Card>
@@ -37,7 +37,7 @@ export function WorkerDashboard() {
 
     if (!currentBranchId) {
         return (
-            <div className="container mx-auto p-6">
+            <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
@@ -70,7 +70,7 @@ export function WorkerDashboard() {
 
     if (!hasViewAccess) {
         return (
-            <div className="container mx-auto p-6">
+            <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
@@ -87,21 +87,21 @@ export function WorkerDashboard() {
     }
 
     return (
-        <div className="container mx-auto p-6">
+        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
             {/* Access Level Indicator */}
-            <div className="mb-6">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold font-headline">
+            <div className="mb-4 sm:mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                        <h1 className="text-xl sm:text-2xl font-bold font-headline truncate">
                             Worker Dashboard - {currentBranch?.name}
                         </h1>
-                        <p className="text-muted-foreground">
+                        <p className="text-muted-foreground text-sm sm:text-base truncate">
                             {currentBranch?.location && `Location: ${currentBranch.location}`}
                         </p>
                     </div>
                     <Badge
                         variant={hasFullAccess ? 'default' : 'secondary'}
-                        className="flex items-center gap-1"
+                        className="flex items-center gap-1 w-fit"
                     >
                         {hasFullAccess ? (
                             <>
@@ -119,11 +119,11 @@ export function WorkerDashboard() {
             </div>
 
             <Tabs defaultValue="dashboard">
-                <div className="flex items-center mb-6">
-                    <TabsList>
-                        <TabsTrigger value="dashboard">Daily Sales</TabsTrigger>
-                        <TabsTrigger value="expenses">Daily Expenses</TabsTrigger>
-                        <TabsTrigger value="balance">Daily Balance</TabsTrigger>
+                <div className="flex items-center mb-4 sm:mb-6">
+                    <TabsList className="grid w-full grid-cols-3 h-auto p-1 gap-1">
+                        <TabsTrigger value="dashboard" className="text-xs sm:text-sm px-2 sm:px-3">Sales</TabsTrigger>
+                        <TabsTrigger value="expenses" className="text-xs sm:text-sm px-2 sm:px-3">Expenses</TabsTrigger>
+                        <TabsTrigger value="balance" className="text-xs sm:text-sm px-2 sm:px-3">Balance</TabsTrigger>
                     </TabsList>
                 </div>
 
