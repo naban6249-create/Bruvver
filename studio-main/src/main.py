@@ -840,28 +840,16 @@ async def login_admin_enhanced(
     form_data: AdminLogin,
     db: Session = Depends(get_database)
 ):
-    logger.info(f"Login attempt for username: {form_data.username}")
-    
     admin = authenticate_user(db, username=form_data.username, password=form_data.password)
     if not admin:
-        logger.warning(f"Authentication failed for username: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not admin.is_active:
-        logger.warning(f"Inactive user attempted login: {form_data.username}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Account is inactive",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
     # Load branch permissions
     permissions = db.query(UserBranchPermission).filter(UserBranchPermission.user_id == admin.id).all()
-    logger.info(f"User {admin.username} has {len(permissions)} branch permissions")
     
     user_data = {
         "id": admin.id,
@@ -881,7 +869,6 @@ async def login_admin_enhanced(
         expires_delta=access_token_expires
     )
 
-    logger.info(f"Successful login for user: {admin.username}")
     return Token(access_token=access_token, token_type="bearer", user=user_data)
 
 # -------------------------
