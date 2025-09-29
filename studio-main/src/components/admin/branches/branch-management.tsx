@@ -97,14 +97,14 @@ export function BranchManagement() {
   return (
     <>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Branch Management</CardTitle>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={fetchBranches} disabled={isLoading}>
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 pb-4">
+          <CardTitle className="flex-1">Branch Management</CardTitle>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Button size="sm" variant="outline" onClick={fetchBranches} disabled={isLoading} className="w-full sm:w-auto justify-center sm:justify-start">
               <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Button size="sm" onClick={handleAddNew}>
+            <Button size="sm" onClick={handleAddNew} className="w-full sm:w-auto justify-center sm:justify-start">
               <PlusCircle className="mr-2 h-4 w-4" />
               Add New Branch
             </Button>
@@ -124,37 +124,69 @@ export function BranchManagement() {
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Mobile Card Layout */}
+              <div className="block md:hidden space-y-4">
                 {branches.map((branch) => (
-                  <TableRow key={branch.id}>
-                    <TableCell className="font-medium">{branch.name}</TableCell>
-                    <TableCell>{branch.location}</TableCell>
-                    <TableCell>
-                      <Badge variant={branch.is_active ? "default" : "secondary"}>
-                        {branch.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(branch)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(branch)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                  <Card key={branch.id} className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-medium text-sm truncate">{branch.name}</h4>
+                        <p className="text-xs text-muted-foreground">{branch.location}</p>
+                        <div className="mt-2">
+                          <Badge variant={branch.is_active ? "default" : "secondary"}>
+                            {branch.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="flex gap-1 ml-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleEdit(branch)} className="h-8 w-8 p-0">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(branch)} className="h-8 w-8 p-0">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+
+              {/* Desktop Table Layout */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {branches.map((branch) => (
+                      <TableRow key={branch.id}>
+                        <TableCell className="font-medium">{branch.name}</TableCell>
+                        <TableCell>{branch.location}</TableCell>
+                        <TableCell>
+                          <Badge variant={branch.is_active ? "default" : "secondary"}>
+                            {branch.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(branch)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDelete(branch)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
