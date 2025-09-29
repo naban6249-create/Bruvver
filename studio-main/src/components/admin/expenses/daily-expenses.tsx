@@ -231,8 +231,8 @@ export function DailyExpenses() {
         <>
             <Card className="mt-8">
                 <CardHeader>
-                    <div className="flex justify-between items-start">
-                        <div>
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+                        <div className="flex-1">
                             <CardTitle className="font-headline">Daily Expenses</CardTitle>
                             <CardDescription>
                                 Track and manage all expenses for the selected branch today.
@@ -241,18 +241,20 @@ export function DailyExpenses() {
                                 )}
                             </CardDescription>
                         </div>
-                        <div className="text-right">
-                            <p className="font-semibold text-lg text-foreground/90">{currentDate.split(',')[0]}</p>
-                            <p className="font-medium text-foreground/80">{currentDate.split(',').slice(1).join(',')}</p>
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+                            <div className="text-left sm:text-right order-2 sm:order-1">
+                                <p className="font-semibold text-sm sm:text-lg text-foreground/90">{currentDate.split(',')[0]}</p>
+                                <p className="font-medium text-xs sm:text-sm text-foreground/80">{currentDate.split(',').slice(1).join(',')}</p>
+                            </div>
+                            {hasFullAccess && (
+                                <Button size="sm" className="gap-1 order-1 sm:order-2 self-start" onClick={handleAddNewItem}>
+                                    <PlusCircle className="h-3.5 w-3.5" />
+                                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+                                        Add Expense
+                                    </span>
+                                </Button>
+                            )}
                         </div>
-                        {hasFullAccess && (
-                            <Button size="sm" className="gap-1" onClick={handleAddNewItem}>
-                                <PlusCircle className="h-3.5 w-3.5" />
-                                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                                    Add Expense
-                                </span>
-                            </Button>
-                        )}
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -271,74 +273,144 @@ export function DailyExpenses() {
                             )}
                         </div>
                     ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Item</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead>Quantity</TableHead>
-                                    <TableHead className="text-right">Amount</TableHead>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead className="w-[100px] text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
+                        <>
+                            {/* Mobile Card Layout */}
+                            <div className="block md:hidden space-y-4">
                                 {expenses.map(item => (
-                                    <TableRow key={item.id}>
-                                        <TableCell>
-                                            <div>
-                                                <div className="font-medium">{item.item_name}</div>
-                                                {item.description && (
-                                                    <div className="text-sm text-muted-foreground">{item.description}</div>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline">{item.category}</Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            {item.quantity ? `${item.quantity} ${item.unit || ''}` : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-right font-medium">
-                                            {formatCurrency(item.total_amount)}
-                                        </TableCell>
-                                        <TableCell className="text-sm text-muted-foreground">
-                                            {formatDate(item.expense_date)}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button aria-haspopup="true" size="icon" variant="ghost">
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                        <span className="sr-only">Toggle menu</span>
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                    {hasFullAccess ? (
-                                                        <>
-                                                            <DropdownMenuItem onClick={() => handleEditItem(item)}>
-                                                                <Pencil className="mr-2 h-4 w-4" /> Edit
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem 
-                                                                className="text-destructive" 
-                                                                onClick={() => handleDeleteItem(item)}
-                                                            >
-                                                                <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                                            </DropdownMenuItem>
-                                                        </>
-                                                    ) : (
-                                                        <DropdownMenuItem onClick={() => handleViewItem(item)}>
-                                                            <Eye className="mr-2 h-4 w-4" /> View Details
-                                                        </DropdownMenuItem>
+                                    <Card key={item.id} className="p-4">
+                                        <div className="space-y-3">
+                                            <div className="flex items-start justify-between">
+                                                <div className="min-w-0 flex-1">
+                                                    <h4 className="font-medium text-sm truncate">{item.item_name}</h4>
+                                                    {item.description && (
+                                                        <p className="text-xs text-muted-foreground line-clamp-2">{item.description}</p>
                                                     )}
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
+                                                </div>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button aria-haspopup="true" size="sm" variant="ghost" className="h-8 w-8 p-0">
+                                                            <MoreHorizontal className="h-4 w-4" />
+                                                            <span className="sr-only">Toggle menu</span>
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                        {hasFullAccess ? (
+                                                            <>
+                                                                <DropdownMenuItem onClick={() => handleEditItem(item)}>
+                                                                    <Pencil className="mr-2 h-4 w-4" /> Edit
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem 
+                                                                    className="text-destructive" 
+                                                                    onClick={() => handleDeleteItem(item)}
+                                                                >
+                                                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                                                </DropdownMenuItem>
+                                                            </>
+                                                        ) : (
+                                                            <DropdownMenuItem onClick={() => handleViewItem(item)}>
+                                                                <Eye className="mr-2 h-4 w-4" /> View Details
+                                                            </DropdownMenuItem>
+                                                        )}
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                                <div>
+                                                    <span className="text-muted-foreground">Category:</span>
+                                                    <div><Badge variant="outline" className="text-xs">{item.category}</Badge></div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-muted-foreground">Date:</span>
+                                                    <div className="text-xs">{formatDate(item.expense_date)}</div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-muted-foreground">Quantity:</span>
+                                                    <div>{item.quantity ? `${item.quantity} ${item.unit || ''}` : '-'}</div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-muted-foreground">Amount:</span>
+                                                    <div className="font-medium text-green-600">{formatCurrency(item.total_amount)}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </Card>
                                 ))}
-                            </TableBody>
-                        </Table>
+                            </div>
+
+                            {/* Desktop Table Layout */}
+                            <div className="hidden md:block">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Item</TableHead>
+                                            <TableHead>Category</TableHead>
+                                            <TableHead>Quantity</TableHead>
+                                            <TableHead className="text-right">Amount</TableHead>
+                                            <TableHead>Date</TableHead>
+                                            <TableHead className="w-[100px] text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {expenses.map(item => (
+                                            <TableRow key={item.id}>
+                                                <TableCell>
+                                                    <div>
+                                                        <div className="font-medium">{item.item_name}</div>
+                                                        {item.description && (
+                                                            <div className="text-sm text-muted-foreground">{item.description}</div>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline">{item.category}</Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {item.quantity ? `${item.quantity} ${item.unit || ''}` : '-'}
+                                                </TableCell>
+                                                <TableCell className="text-right font-medium">
+                                                    {formatCurrency(item.total_amount)}
+                                                </TableCell>
+                                                <TableCell className="text-sm text-muted-foreground">
+                                                    {formatDate(item.expense_date)}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button aria-haspopup="true" size="icon" variant="ghost">
+                                                                <MoreHorizontal className="h-4 w-4" />
+                                                                <span className="sr-only">Toggle menu</span>
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                            {hasFullAccess ? (
+                                                                <>
+                                                                    <DropdownMenuItem onClick={() => handleEditItem(item)}>
+                                                                        <Pencil className="mr-2 h-4 w-4" /> Edit
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem 
+                                                                        className="text-destructive" 
+                                                                        onClick={() => handleDeleteItem(item)}
+                                                                    >
+                                                                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                                                    </DropdownMenuItem>
+                                                                </>
+                                                            ) : (
+                                                                <DropdownMenuItem onClick={() => handleViewItem(item)}>
+                                                                    <Eye className="mr-2 h-4 w-4" /> View Details
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </>
                     )}
                 </CardContent>
                 <CardFooter>
