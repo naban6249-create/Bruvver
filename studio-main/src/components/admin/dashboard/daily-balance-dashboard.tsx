@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/components/admin/contexts/auth-context';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,9 +12,10 @@ import { getOpeningBalance, updateOpeningBalance, getDailyBalanceSummary } from 
 import { DollarSign, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 
 export function DailyBalanceDashboard() {
+  const { user } = useAuth(); // Get the user from the auth context
+  const role = user?.role; // Get the role from the user object
   const searchParams = useSearchParams();
   const branchId = searchParams.get('branchId');
-  const role = searchParams.get('role');
   const { toast } = useToast();
 
   const [summary, setSummary] = useState({
