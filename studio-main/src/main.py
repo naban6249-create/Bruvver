@@ -77,7 +77,7 @@ import os
 default_origins = [
     "http://localhost:3000",
     "http://localhost:9002",
-    "https://bruvver.onrender.com",  # production frontend
+    "https://bruvver-frontend.onrender.com",  # production frontend
 ]
 
 allowed_origins = os.getenv("ALLOWED_ORIGINS")
