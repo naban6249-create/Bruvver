@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import type { Branch, User, UserBranchPermission } from '@/lib/types';
+import type { Branch, User } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
- 
+import { getBranches } from '@/lib/branch-service'; // Correctly import the service
+
 interface AdminHeaderProps {
   currentUser?: User;
 }
@@ -21,123 +22,93 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
   const [currentPermission, setCurrentPermission] = useState<'view_only' | 'full_access' | null>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [authToken, setAuthToken] = useState<string | null>(null);
-  
 
-  // Track token in localStorage and react to changes
+  // Load available branches on component mount or when the user changes
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const loadToken = () => setAuthToken(localStorage.getItem('token'));
-    loadToken();
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'token') loadToken();
+    const loadBranches = async () => {
+      if (!effectiveUser) return;
+
+      try {
+        let branches: Branch[] = [];
+        if (effectiveUser.role === 'admin') {
+          // Admins can see all branches
+          branches = await getBranches();
+        } else if (effectiveUser.role === 'worker' && effectiveUser.branch_permissions) {
+          // Workers see branches from their permissions
+          branches = effectiveUser.branch_permissions
+            .filter(permission => permission.branch)
+            .map(permission => permission.branch!);
+        }
+        setAvailableBranches(branches || []);
+      } catch (error) {
+        console.error("Failed to load branches:", error);
+        setAvailableBranches([]);
+      }
     };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
 
-  // Load branches for admin users from API using client token
-  useEffect(() => {
-    const role = effectiveUser?.role;
-    if (role === 'admin') {
-      const token = typeof window !== 'undefined' ? (authToken ?? localStorage.getItem('token')) : null;
-      if (!token) return;
-      fetch('/api/branches', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-        .then(async (res) => {
-          if (!res.ok) throw new Error(await res.text());
-          return res.json();
-        })
-        .then((branches: Branch[]) => {
-          setAvailableBranches(branches || []);
-        })
-        .catch(() => {
-          setAvailableBranches([]);
-        });
-    }
-  }, [effectiveUser?.role, authToken]);
+    loadBranches();
+  }, [effectiveUser]);
 
+  // Effect to set the initially selected branch from URL or localStorage
   useEffect(() => {
-    if (effectiveUser) {
-      // For workers, extract branches from user permissions
-      if (effectiveUser.role === 'worker') {
-        const branches = effectiveUser.branch_permissions
-          .filter(permission => permission.branch)
-          .map(permission => permission.branch!);
-        // Avoid infinite loops: only update if the list actually changed
-        const same =
-          branches.length === availableBranches.length &&
-          branches.every((b, i) => b.id === availableBranches[i]?.id);
-        if (!same) {
-          setAvailableBranches(branches);
-        }
+    if (availableBranches.length === 0 || !effectiveUser) return;
+
+    const currentBranchId = searchParams.get('branchId');
+    const findBranch = (id: string | null) => id ? availableBranches.find(b => b.id.toString() === id) : undefined;
+
+    // 1. Prioritize URL parameter
+    if (currentBranchId && findBranch(currentBranchId)) {
+      setSelectedBranch(currentBranchId);
+    } 
+    // 2. Fallback to localStorage
+    else {
+      const savedBranchId = typeof window !== 'undefined' ? localStorage.getItem('selectedBranchId') : null;
+      if (savedBranchId && findBranch(savedBranchId)) {
+        setSelectedBranch(savedBranchId);
       }
-      
-      // Set initial branch selection
-      const currentBranchId = searchParams.get('branchId');
-      if (currentBranchId && availableBranches.find(b => b.id.toString() === currentBranchId)) {
-        setSelectedBranch(currentBranchId);
-        
-        // Set current permission level
-        const permission = effectiveUser.branch_permissions.find(
-          p => p.branch_id.toString() === currentBranchId
-        );
-        setCurrentPermission(permission?.permission_level || null);
-      } else if (availableBranches.length > 0) {
-        // Try to use persisted branch from localStorage (only on client)
-        const savedBranchId = typeof window !== 'undefined' ? localStorage.getItem('selectedBranchId') : null;
-        const savedValid = savedBranchId && availableBranches.find(b => b.id.toString() === savedBranchId);
-
-        const initialBranchId = savedValid ? savedBranchId! : availableBranches[0].id.toString();
-
-        // Auto-select first available branch (only if different)
-        const current = searchParams.get('branchId');
-        if (current !== initialBranchId) {
-          const newUrl = new URLSearchParams(searchParams.toString());
-          newUrl.set('branchId', initialBranchId);
-          router.replace(`?${newUrl.toString()}`);
-        }
-        setSelectedBranch(initialBranchId);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('selectedBranchId', initialBranchId);
-        }
-        
-        const permission = effectiveUser.branch_permissions.find(
-          p => p.branch_id.toString() === initialBranchId
-        );
-        setCurrentPermission(permission?.permission_level || null);
+      // 3. Default to the first available branch
+      else {
+        setSelectedBranch(availableBranches[0].id.toString());
       }
     }
-  }, [effectiveUser, searchParams, router, availableBranches]);
+  }, [availableBranches, effectiveUser, searchParams]);
+
+  // Effect to synchronize the selected branch with the URL and update permissions
+  useEffect(() => {
+    if (!selectedBranch || !effectiveUser) return;
+
+    // Update URL if it's out of sync
+    const currentUrlBranchId = searchParams.get('branchId');
+    if (selectedBranch !== currentUrlBranchId) {
+      const newUrl = new URLSearchParams(searchParams.toString());
+      newUrl.set('branchId', selectedBranch);
+      router.replace(`?${newUrl.toString()}`);
+    }
+
+    // Persist to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('selectedBranchId', selectedBranch);
+    }
+    
+    // Update the current permission level based on the selected branch
+    if (effectiveUser.role === 'worker' && effectiveUser.branch_permissions) {
+      const permission = effectiveUser.branch_permissions.find(
+        p => p.branch_id.toString() === selectedBranch
+      );
+      setCurrentPermission(permission?.permission_level || null);
+    } else if (effectiveUser.role === 'admin') {
+      // Admins always have full access
+      setCurrentPermission('full_access');
+    }
+
+  }, [selectedBranch, effectiveUser, router, searchParams]);
 
   const handleBranchChange = (branchId: string) => {
     setSelectedBranch(branchId);
-    
-    // Update URL with selected branch
-    const newUrl = new URLSearchParams(searchParams.toString());
-    newUrl.set('branchId', branchId);
-    router.replace(`?${newUrl.toString()}`);
-    // Persist selection for future routes
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('selectedBranchId', branchId);
-    }
-    
-    // Update permission level
-    const permission = effectiveUser?.branch_permissions.find(
-      p => p.branch_id.toString() === branchId
-    );
-    setCurrentPermission(permission?.permission_level || null);
   };
 
   const renderBranchSelector = () => {
-    if (!effectiveUser) {
-      return null;
-    }
-
-    if (availableBranches.length === 0) {
+    if (!effectiveUser || availableBranches.length === 0) {
       return (
         <div className="text-sm text-muted-foreground">
           No branch access assigned
@@ -146,7 +117,6 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
     }
 
     if (availableBranches.length === 1) {
-      // Single branch - show as static text
       const branch = availableBranches[0];
       return (
         <div className="flex flex-col">
@@ -158,7 +128,6 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
       );
     }
 
-    // Multiple branches - show dropdown
     return (
       <div className="flex flex-col gap-1">
         <Select value={selectedBranch} onValueChange={handleBranchChange}>
@@ -195,7 +164,6 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
           </h1>
         </div>
         
-        {/* Branch Selector */}
         <div className="flex items-center gap-2 ml-8">
           <span className="text-sm text-muted-foreground">Branch:</span>
           {renderBranchSelector()}
