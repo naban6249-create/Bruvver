@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Image from "next/image";
+import { useAuth } from "@/components/admin/contexts/auth-context";
 import { useSearchParams } from "next/navigation";
 import { PlusCircle, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -36,9 +37,10 @@ import { getMenuItems, addMenuItem, updateMenuItem, deleteMenuItem } from "@/lib
 import { v4 as uuidv4 } from 'uuid';
 
 export function MenuManagement() {
+  const { user } = useAuth(); // Get the user from the auth context
+  const role = user?.role; // Get the role from the user object
   const searchParams = useSearchParams();
   const branchId = searchParams.get('branchId');
-  const role = searchParams.get('role');
   const [items, setItems] = React.useState<MenuItem[]>([]);
   const [isNewItemDialogOpen, setIsNewItemDialogOpen] = React.useState(false);
   const [isEditItemDialogOpen, setIsEditItemDialogOpen] = React.useState(false);
