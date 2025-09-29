@@ -1552,10 +1552,10 @@ async def get_daily_balance_summary(
     current_user: Admin = Depends(get_current_active_user)
 ):
     """Get the daily balance summary for a specific branch and date."""
-try:
-    target_date = datetime.strptime(date, "%Y-%m-%d").date() if date else get_current_date_ist()
-except ValueError:
-    raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    try:
+        target_date = datetime.strptime(date, "%Y-%m-%d").date() if date else get_current_date_ist()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
 
     # Get opening balance for the specified date
     opening_balance_obj = db.query(OpeningBalance).filter(
