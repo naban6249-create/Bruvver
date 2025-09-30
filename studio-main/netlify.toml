@@ -1,14 +1,21 @@
 [build]
-  publish = ".next"
-  command = "npm run build"
+  publish = "out" # next export output folder
+  command = "npm run build && npm run export"
 
 [[redirects]]
+  # Handle single-page app routing
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  # Proxy API requests to your backend
   from = "/api/*"
-  to = "https://coffee-shop-backend.onrender.com/api/:splat"
+  to = "https://bruvver-backend.onrender.com/api/:splat"
   status = 200
 
 [build.environment]
-  NEXT_PUBLIC_API_BASE_URL = "https://coffee-shop-backend.onrender.com/api"
-  NEXT_PUBLIC_API_SERVER_URL = "https://coffee-shop-backend.onrender.com"
+  NEXT_PUBLIC_API_BASE_URL = "https://bruvver-backend.onrender.com/api"
+  NEXT_PUBLIC_API_SERVER_URL = "https://bruvver-backend.onrender.com"
   NEXT_PUBLIC_COIMBATORE_BRANCH_ID = "1"
   NODE_ENV = "production"
