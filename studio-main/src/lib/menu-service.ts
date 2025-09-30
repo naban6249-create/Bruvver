@@ -17,7 +17,7 @@ async function getAuthToken(): Promise<string | null> {
 
   // Option 2: Cookies (for server-side fetch in Next.js)
   try {
-    const cookieStore = await cookies();
+    const cookieStore = cookies();
     const token =
       cookieStore.get('token')?.value || // <-- ADD THIS LINE
       cookieStore.get('authToken')?.value ||
@@ -111,6 +111,19 @@ export async function getMenuItems(branchId?: string | number): Promise<MenuItem
   const data = await handleResponse(response);
   return Array.isArray(data) ? data.map(normalizeMenuItem) : [];
 }
+
+
+export async function getBranchMenu(branchId: string): Promise<MenuItem[]> {
+    const response = await fetch(`${API_BASE_URL}/branches/${branchId}/menu?available_only=true`, {
+        headers: {
+            'X-API-Key': process.env.SERVICE_API_KEY || '',
+        },
+        cache: 'no-store',
+    });
+    const data = await handleResponse(response);
+    return Array.isArray(data) ? data.map(normalizeMenuItem) : [];
+}
+
 
 // ### CORRECTED VERSION ###
 // Add a new menu item (with optional file upload)
