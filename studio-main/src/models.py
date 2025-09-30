@@ -5,7 +5,7 @@ from database import Base
 import enum
 
 # Permission levels enum
-class PermissionLevel(enum.Enum):
+class PermissionLevel(str, enum.Enum):
     VIEW_ONLY = "view_only"
     FULL_ACCESS = "full_access"
 
@@ -22,7 +22,7 @@ class Branch(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Updated relationships - removed cascade delete for admins
+    # Updated relationships
     user_permissions = relationship("UserBranchPermission", back_populates="branch", cascade="all, delete-orphan")
     menu_items = relationship("MenuItem", back_populates="branch", cascade="all, delete-orphan")
     sales = relationship("DailySale", back_populates="branch", cascade="all, delete-orphan")
@@ -40,7 +40,6 @@ class Admin(Base):
     full_name = Column(String, nullable=False)
     password_hash = Column(String, nullable=False)
     role = Column(String, default="worker")  # "admin" or "worker"
-    # Removed branch_id - workers can now be assigned to multiple branches
     
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
@@ -225,3 +224,4 @@ class OpeningBalance(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     branch = relationship("Branch", back_populates="opening_balances")
+
