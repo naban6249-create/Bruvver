@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  output: 'export', // static export
+  trailingSlash: true,
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -9,14 +11,11 @@ const nextConfig: NextConfig = {
   },
   images: {
     dangerouslyAllowSVG: true,
+    unoptimized: true, // disable Next.js optimization for static builds
     remotePatterns: [
       {
         protocol: 'https',
         hostname: 'res.cloudinary.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**',
       },
       {
         protocol: 'http',
