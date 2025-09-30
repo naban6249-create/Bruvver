@@ -1,16 +1,6 @@
 // lib/user-service.ts
 import type { User } from './types';
-import Cookies from 'js-cookie';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000/api';
-
-const getAuthHeader = (): Record<string, string> => {
-  let token: string | null = null;
-  if (typeof window !== 'undefined') {
-    token = Cookies.get('token') || Cookies.get('authToken') || Cookies.get('access_token') || Cookies.get('jwt') || localStorage.getItem('token');
-  }
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
-};
+import { ApiClient } from './api-client';
 
 export interface CreateWorkerInput {
   full_name: string;
@@ -29,21 +19,7 @@ export async function createWorker(input: CreateWorkerInput): Promise<User> {
     role: input.role || 'worker'
   } as Record<string, any>;
 
-  const response = await fetch(`${API_BASE_URL}/admin/users`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-    },
-    body: JSON.stringify(payload),
-    cache: 'no-store',
-  });
-
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Failed to create worker: ${err}`);
-  }
-  return response.json();
+  return ApiClient.post('/admin/users', payload);
 }
 
 export async function updateUser(userId: number, data: Partial<Pick<User, 'full_name' | 'username' | 'email' | 'role' | 'is_active'>>): Promise<User> {
@@ -55,55 +31,17 @@ export async function updateUser(userId: number, data: Partial<Pick<User, 'full_
   if (typeof data.role === 'string' && (data.role === 'admin' || data.role === 'worker')) payload.role = data.role;
   if (typeof data.is_active === 'boolean') payload.is_active = data.is_active;
 
-  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-    },
-    body: JSON.stringify(payload),
-    cache: 'no-store',
-  });
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Failed to update user: ${err}`);
-  }
-  return response.json();
+  return ApiClient.put(`/admin/users/${userId}`, payload);
 }
 
 export async function setUserPassword(userId: number, newPassword: string): Promise<void> {
-  const url = `${API_BASE_URL}/admin/users/${userId}/password?new_password=${encodeURIComponent(newPassword)}`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { ...getAuthHeader() },
-    cache: 'no-store',
-  });
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Failed to set password: ${err}`);
-  }
+  await ApiClient.post(`/admin/users/${userId}/password?new_password=${encodeURIComponent(newPassword)}`);
 }
 
 export async function deactivateUser(userId: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
-    method: 'DELETE',
-    headers: { ...getAuthHeader() },
-    cache: 'no-store',
-  });
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Failed to deactivate user: ${err}`);
-  }
+  await ApiClient.delete(`/admin/users/${userId}`);
 }
 
 export async function getAllUsers(): Promise<User[]> {
-  const response = await fetch(`${API_BASE_URL}/admin/users-lite`, {
-    headers: { ...getAuthHeader() },
-    cache: 'no-store',
-  });
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Failed to load users: ${err}`);
-  }
-  return response.json();
+  return ApiClient.get('/admin/users-lite');
 }
