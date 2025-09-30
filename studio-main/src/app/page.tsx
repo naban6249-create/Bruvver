@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { MenuCard } from '@/components/menu-card';
+import { Button } from '../components/ui/button';
+import { MenuCard } from '../components/menu-card';
 import { Coffee, Loader2 } from 'lucide-react';
-import type { MenuItem } from '@/lib/types';
+import type { MenuItem } from '../lib/types';
 import { useEffect, useState } from 'react';
 
 // Public site should showcase the Coimbatore branch menu
@@ -62,7 +62,7 @@ export default function Home() {
   const handleRetry = () => {
     setError(null);
     setLoading(true);
-    // Re-trigger the useEffect by changing the dependency array
+    // Re-trigger the useEffect by reloading the page
     window.location.reload();
   };
 
@@ -173,8 +173,9 @@ export default function Home() {
         </section>
       </main>
       <footer className="flex flex-col gap-2 sm:flex-row py-6 w-full shrink-0 items-center px-4 md:px-6 border-t">
-        <p className="text-xs text-foreground/60">&copy; 2024 Coffee Command Center. All rights reserved.</p>
+        <p className="text-xs text-foreground/60">&copy; 2025 Bruvver Coffee. All rights reserved.</p>
       </footer>
     </div>
   );
 }
+
