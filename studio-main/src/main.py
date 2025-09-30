@@ -111,6 +111,33 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and start automation"""
+    # Configure Cloudinary
+    cloudinary_url = os.getenv("CLOUDINARY_URL")
+    if cloudinary_url:
+        try:
+            # Parse the URL to configure Cloudinary explicitly
+            # URL format: cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+            parts = cloudinary_url.replace('cloudinary://', '').split('@')
+            if len(parts) == 2:
+                credentials = parts[0].split(':')
+                cloud_name = parts[1]
+                if len(credentials) == 2:
+                    api_key = credentials[0]
+                    api_secret = credentials[1]
+                    cloudinary.config(
+                        cloud_name=cloud_name,
+                        api_key=api_key,
+                        api_secret=api_secret
+                    )
+                    logger.info("Cloudinary configured successfully")
+                else:
+                    logger.error("Invalid Cloudinary credentials format")
+            else:
+                logger.error("Invalid Cloudinary URL format")
+        except Exception as e:
+            logger.error(f"Failed to configure Cloudinary: {e}")
+    else:
+        logger.warning("CLOUDINARY_URL not found in environment variables")
     await initialize_sample_data()
     try:
         start_automation()
@@ -1368,6 +1395,29 @@ async def create_branch_menu_item(
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
+    # Process image upload if provided
+    image_path = None
+    if image:
+        try:
+            allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg']
+            if image.content_type not in allowed_types:
+                raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, PNG, and WEBP are allowed.")
+
+            MAX_SIZE = 2 * 1024 * 1024  # 2MB
+            contents = await image.read()
+            if len(contents) > MAX_SIZE:
+                raise HTTPException(status_code=400, detail="Image is too large. Please upload an image under 2MB.")
+
+            # Upload to Cloudinary
+            result = uploader.upload(contents, folder="menu_items")
+            image_path = result.get("secure_url")
+            if not image_path:
+                raise HTTPException(status_code=500, detail="Cloudinary upload failed.")
+            
+            logger.info(f"Image uploaded to Cloudinary: {image_path}")
+        except Exception as e:
+            logger.error(f"Error uploading image: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
     # Generate new numeric id string
     max_id_query = db.query(func.max(MenuItem.id)).scalar()
     max_id = 0
