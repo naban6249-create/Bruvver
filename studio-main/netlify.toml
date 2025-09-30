@@ -1,21 +1,27 @@
 [build]
-  publish = "out" # next export output folder
-  command = "npm run build && npm run export"
+  # The folder where your Next.js build output goes
+  publish = ".next"
+  # Build command
+  command = "npm run build"
 
+# Redirects for frontend routing and API proxy
 [[redirects]]
-  # Handle single-page app routing
+  # Redirect all frontend routes to index.html for SPA behavior
   from = "/*"
   to = "/index.html"
   status = 200
 
 [[redirects]]
-  # Proxy API requests to your backend
+  # Proxy API requests to your Render backend
   from = "/api/*"
   to = "https://bruvver-backend.onrender.com/api/:splat"
   status = 200
+  force = true
 
 [build.environment]
+  # Backend API URL
   NEXT_PUBLIC_API_BASE_URL = "https://bruvver-backend.onrender.com/api"
   NEXT_PUBLIC_API_SERVER_URL = "https://bruvver-backend.onrender.com"
+  # Branch ID for default Coimbatore branch
   NEXT_PUBLIC_COIMBATORE_BRANCH_ID = "1"
   NODE_ENV = "production"
