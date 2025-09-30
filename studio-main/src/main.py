@@ -86,6 +86,7 @@ default_origins = [
     "http://localhost:9002",
     "https://bruvver-frontend.onrender.com",  # production frontend
     "https://bruvver.onrender.com"
+    "https://bruvver.netlify.app"
 ]
 
 allowed_origins = os.getenv("ALLOWED_ORIGINS")
