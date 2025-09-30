@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { MenuCard } from '@/components/menu-card';
+import { Button } from '../components/ui/button';
+import { MenuCard } from '../components/menu-card';
 import { Coffee, Loader2 } from 'lucide-react';
-import type { MenuItem } from '@/lib/types';
+import type { MenuItem } from '../lib/types';
 import { useEffect, useState } from 'react';
 
 // Public site should showcase the Coimbatore branch menu
@@ -23,9 +23,9 @@ export default function Home() {
         
         console.log('Fetching menu items for branch:', COIMBATORE_BRANCH_ID);
         
-        // Fetch via public proxy route to avoid requiring auth on the public home page
+        // Updated to use the correct endpoint structure that matches your backend
         const res = await fetch(
-          `/api/public/menu?branchId=${encodeURIComponent(COIMBATORE_BRANCH_ID)}`, 
+          `/api/public/menu?branchId=${COIMBATORE_BRANCH_ID}`, 
           { 
             cache: 'no-store',
             headers: {
@@ -62,14 +62,14 @@ export default function Home() {
   const handleRetry = () => {
     setError(null);
     setLoading(true);
-    // Re-trigger the useEffect by changing the dependency array
+    // Re-trigger the useEffect by reloading the page
     window.location.reload();
   };
 
   return (
     <div className="flex min-h-screen w-full flex-col">
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background/80 backdrop-blur-sm px-4 md:px-6 z-50">
-        <nav className="flex flex-col gap-6 text-lg font-medium md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6 w-full">
+        <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6 w-full">
           <Link
             href="/"
             className="flex items-center gap-2 text-lg font-semibold md:text-base font-headline"
@@ -178,3 +178,4 @@ export default function Home() {
     </div>
   );
 }
+
