@@ -19,7 +19,6 @@ from cloudinary import uploader
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo('Asia/Kolkata')
-logger.info(f"ALLOWED_ORIGINS = {settings.ALLOWED_ORIGINS}")
 
 
 def get_current_date_ist():
