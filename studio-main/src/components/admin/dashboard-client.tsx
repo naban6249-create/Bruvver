@@ -17,6 +17,8 @@ import { useToast } from "../../hooks/use-toast";
 import { MenuManagement } from "./menu/menu-management";
 import { WorkerDashboard } from './dashboard/worker-dashboard';
 import { PermissionManagement } from './permissions/permission-management';
+import { BalanceDashboardClient } from "./dashboard/balance-dashboard-client";
+import { ExpensesDashboardClient } from "./expenses/expenses-dashboard-client";
 
 export function DashboardClient() {
     const { toast } = useToast();
@@ -103,7 +105,7 @@ export function DashboardClient() {
                 
                 <TabsContent value="balance">
                     <Suspense fallback={<div>Loading balance data...</div>}>
-                        <DailyBalanceDashboard />
+                        <BalanceDashboardClient />
                     </Suspense>
                 </TabsContent>
                 
@@ -112,7 +114,9 @@ export function DashboardClient() {
                 </TabsContent>
                 
                 <TabsContent value="expenses">
-                    <DailyExpenses />
+                    <Suspense fallback={<div>Loading expenses data...</div>}>
+                        <ExpensesDashboardClient />
+                    </Suspense>
                 </TabsContent>
                 
                 <TabsContent value="branches">
