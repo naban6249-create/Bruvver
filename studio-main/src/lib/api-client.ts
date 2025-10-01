@@ -1,5 +1,7 @@
 'use client';
 
+import Cookies from 'js-cookie';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 /**
@@ -9,38 +11,22 @@ export class ApiClient {
   private static getAuthToken(): string | null {
     if (typeof window === 'undefined') return null;
 
-    // Try multiple token sources
-    const tokenSources = [
-      // Cookies (server-side auth)
-      () => {
-        const cookies = document.cookie.split(';').map(c => c.trim());
-        for (const cookie of cookies) {
-          if (cookie.startsWith('token=')) return cookie.split('=')[1];
-          if (cookie.startsWith('authToken=')) return cookie.split('=')[1];
-          if (cookie.startsWith('access_token=')) return cookie.split('=')[1];
-          if (cookie.startsWith('jwt=')) return cookie.split('=')[1];
-        }
-        return null;
-      },
-      // localStorage (client-side auth)
-      () => {
-        try {
-          return localStorage.getItem('token') ||
-                 localStorage.getItem('authToken') ||
-                 localStorage.getItem('access_token') ||
-                 localStorage.getItem('jwt');
-        } catch {
-          return null;
-        }
-      }
-    ];
+    // Prioritize the cookie, as it's the primary source for server-side auth
+    const token = Cookies.get('token');
+    if (token) {
+      console.log('[ApiClient] Found token from cookie');
+      return token;
+    }
 
-    for (const source of tokenSources) {
-      const token = source();
-      if (token) {
-        console.log('[ApiClient] Found token from source');
-        return token;
+    // Fallback to localStorage for any legacy client-side sessions
+    try {
+      const localToken = localStorage.getItem('token');
+      if (localToken) {
+        console.log('[ApiClient] Found token from localStorage');
+        return localToken;
       }
+    } catch {
+      // Ignore localStorage errors (e.g., in private browsing)
     }
 
     console.warn('[ApiClient] No auth token found');
@@ -49,7 +35,7 @@ export class ApiClient {
 
   private static getApiKey(): string | null {
     if (typeof window === 'undefined') return null;
-    return process.env.NEXT_PUBLIC_API_KEY || 
+    return process.env.NEXT_PUBLIC_API_KEY ||
            process.env.API_KEY ||
            null;
   }
@@ -61,23 +47,18 @@ export class ApiClient {
       headers['Content-Type'] = 'application/json';
     }
 
-    // Try JWT token first
     const token = this.getAuthToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-      console.log('[ApiClient] Using JWT token');
       return headers;
     }
 
-    // Fallback to X-API-Key
     const apiKey = this.getApiKey();
     if (apiKey) {
       headers['X-API-Key'] = apiKey;
-      console.log('[ApiClient] Using API Key');
       return headers;
     }
 
-    console.warn('[ApiClient] No authentication method available');
     return headers;
   }
 
@@ -88,8 +69,6 @@ export class ApiClient {
     const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
     const isFormData = options.body instanceof FormData;
 
-    console.log(`[ApiClient] ${options.method || 'GET'} ${url}`);
-
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -99,26 +78,10 @@ export class ApiClient {
       cache: 'no-store',
     });
 
-    // Handle 401 Unauthorized
     if (response.status === 401) {
       console.error('[ApiClient] 401 Unauthorized - clearing auth and redirecting');
-      
+      this.setAuthToken(null); // Clear tokens
       if (typeof window !== 'undefined') {
-        // Clear all auth storage
-        try {
-          ['token', 'authToken', 'access_token', 'jwt', 'currentUser'].forEach(key => {
-            localStorage.removeItem(key);
-          });
-        } catch (e) {
-          console.error('[ApiClient] Error clearing localStorage:', e);
-        }
-
-        // Clear auth cookies
-        ['token', 'authToken', 'access_token', 'jwt'].forEach(cookieName => {
-          document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-        });
-
-        // Redirect to login
         window.location.href = '/admin/login';
       }
       throw new Error('Authentication failed');
@@ -144,7 +107,6 @@ export class ApiClient {
       method: 'POST',
       body: isFormData ? data : JSON.stringify(data),
     });
-
     const text = await response.text();
     return text ? JSON.parse(text) : null;
   }
@@ -155,7 +117,6 @@ export class ApiClient {
       method: 'PUT',
       body: isFormData ? data : JSON.stringify(data),
     });
-
     const text = await response.text();
     return text ? JSON.parse(text) : null;
   }
@@ -166,7 +127,6 @@ export class ApiClient {
       method: 'PATCH',
       body: isFormData ? data : JSON.stringify(data),
     });
-
     const text = await response.text();
     return text ? JSON.parse(text) : null;
   }
@@ -177,26 +137,29 @@ export class ApiClient {
   }
 
   /**
-   * Set authentication token
+   * Set authentication token using js-cookie for server-side compatibility
    */
   static setAuthToken(token: string | null): void {
     if (typeof window === 'undefined') return;
 
     if (token) {
       try {
+        // Use js-cookie to set a cookie that's accessible server-side
+        Cookies.set('token', token, { expires: 7, path: '/', sameSite: 'Strict' });
+        // Also set in localStorage for any client-side logic that might need it
         localStorage.setItem('token', token);
-        const expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 7);
-        document.cookie = `token=${token}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Strict`;
-        console.log('[ApiClient] Auth token set');
+        console.log('[ApiClient] Auth token set via js-cookie');
       } catch (e) {
         console.error('[ApiClient] Error setting token:', e);
       }
     } else {
       try {
+        // Use js-cookie to remove the cookie
+        Cookies.remove('token', { path: '/' });
+        // Also clear from localStorage and other legacy keys
         ['token', 'authToken', 'access_token', 'jwt'].forEach(key => {
           localStorage.removeItem(key);
-          document.cookie = `${key}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+          Cookies.remove(key, { path: '/' });
         });
         console.log('[ApiClient] Auth token cleared');
       } catch (e) {
@@ -209,7 +172,8 @@ export class ApiClient {
    * Check if user is authenticated
    */
   static isAuthenticated(): boolean {
-    const hasToken = Boolean(this.getAuthToken() || this.getApiKey());
+    // Check for the presence of the cookie as the primary method
+    const hasToken = !!Cookies.get('token');
     console.log('[ApiClient] Is authenticated:', hasToken);
     return hasToken;
   }
