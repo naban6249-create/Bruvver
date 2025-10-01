@@ -6,8 +6,18 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8
 
 // Helper to get authenticated headers
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const cookieStore = cookies();
+  const cookieStore = cookies(); // Correct: No 'await'
   const token = cookieStore.get('token')?.value;
+
+  // --- Debugging ---
+  console.log('[Balance Service] All cookies received:', cookieStore.getAll());
+  if (token) {
+    console.log('[Balance Service] Auth token FOUND.');
+  } else {
+    console.log('[Balance Service] Auth token NOT FOUND.');
+  }
+  // --- End Debugging ---
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -17,7 +27,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-// Helper to handle API responses (supports 204 and empty bodies)
+// Helper to handle API responses
 async function handleResponse(response: Response) {
   if (!response.ok) {
     const errorText = await response.text();
@@ -28,11 +38,10 @@ async function handleResponse(response: Response) {
         throw new Error(errorJson.detail);
       }
     } catch (e) {
-      // fall through to generic error
+      // fall through
     }
     throw new Error(`API call failed with status ${response.status}: ${errorText}`);
   }
-  // No content
   if (response.status === 204) return null;
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
@@ -66,7 +75,6 @@ export async function getOpeningBalance(branchId: string, date?: string): Promis
     const params = new URLSearchParams();
 
     if (date) params.append('date', date);
-    // Cache busting
     params.append('_t', Date.now().toString());
 
     if (params.toString()) {
@@ -76,26 +84,18 @@ export async function getOpeningBalance(branchId: string, date?: string): Promis
     const response = await fetch(url, {
       headers,
       cache: 'no-store',
-      next: { revalidate: 0 },
     });
 
     const data = await handleResponse(response);
-
-    // If no opening balance exists, return 0
-    if (!data || !data.amount) {
-      return 0;
-    }
-
-    return data.amount;
+    return data?.amount || 0;
   } catch (error) {
     console.error("Failed to get opening balance:", error);
-    return 0; // Return 0 as fallback
+    return 0;
   }
 }
 
 export async function updateOpeningBalance(branchId: string, amount: number, date?: string): Promise<OpeningBalance> {
   const headers = await getAuthHeaders();
-
   const requestBody: any = { amount };
   if (date) requestBody.date = date;
 
@@ -104,7 +104,6 @@ export async function updateOpeningBalance(branchId: string, amount: number, dat
     headers,
     body: JSON.stringify(requestBody),
     cache: 'no-store',
-    next: { revalidate: 0 },
   });
 
   return handleResponse(response);
@@ -117,24 +116,18 @@ export async function getDailyBalanceSummary(branchId: string, date?: string): P
     const params = new URLSearchParams();
 
     if (date) params.append('date', date);
-    // CRITICAL: Add timestamp to force cache bust
     params.append('_t', Date.now().toString());
 
     if (params.toString()) {
       url += `?${params.toString()}`;
     }
-
-    console.log(`[Balance Service] Fetching balance for branch ${branchId}, date: ${date || 'today'}`);
-
+    
     const response = await fetch(url, {
       headers,
       cache: 'no-store',
-      next: { revalidate: 0 },
     });
 
     const data = await handleResponse(response);
-
-    console.log(`[Balance Service] Received data:`, data);
 
     return {
       openingBalance: data.opening_balance || 0,
