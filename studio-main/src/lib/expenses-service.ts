@@ -6,17 +6,19 @@ import { cookies } from 'next/headers';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 // Helper to get authenticated headers
-"use server";
-
-import type { DailyExpense } from './types';
-import { cookies } from 'next/headers';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
-
-// Helper to get authenticated headers
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const cookieStore = cookies(); // Corrected: removed await
+  const cookieStore = cookies(); // Correct: No 'await'
   const token = cookieStore.get('token')?.value;
+
+  // --- Debugging ---
+  console.log('[Expenses Service] All cookies received:', cookieStore.getAll());
+  if (token) {
+    console.log('[Expenses Service] Auth token FOUND.');
+  } else {
+    console.log('[Expenses Service] Auth token NOT FOUND.');
+  }
+  // --- End Debugging ---
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -41,7 +43,6 @@ async function handleResponse(response: Response) {
     }
     throw new Error(`API call failed with status ${response.status}: ${errorText}`);
   }
-  // No content
   if (response.status === 204) return null;
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
@@ -51,7 +52,9 @@ async function handleResponse(response: Response) {
   return text ? JSON.parse(text) : null;
 }
 
-// Real expense summary for day/week/month
+// ... (rest of the functions: getRealExpenseSummary, getDailyExpenses, etc.)
+// No changes needed in the functions below, as they all use getAuthHeaders()
+
 export interface RealExpenseBucket { total_expenses: number; expense_count: number }
 export interface RealExpenseSummary {
   branch_id: number | null;
@@ -121,7 +124,7 @@ export async function addQuickExpense(expenseData: {
   item_name: string;
   quantity: number;
   unit: string;
-  unit_cost: number;  // Add this field
+  unit_cost: number;
   branch_id: number;
   expense_date?: string;
 }): Promise<DailyExpense> {
