@@ -6,8 +6,16 @@ import { cookies } from 'next/headers';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 // Helper to get authenticated headers
+"use server";
+
+import type { DailyExpense } from './types';
+import { cookies } from 'next/headers';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
+
+// Helper to get authenticated headers
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const cookieStore = await cookies();
+  const cookieStore = cookies(); // Corrected: removed await
   const token = cookieStore.get('token')?.value;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
