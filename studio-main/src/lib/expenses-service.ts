@@ -57,13 +57,13 @@ export interface RealExpenseSummary {
   month: RealExpenseBucket;
 }
 
-export async function getRealExpenseSummary(branchId?: string, token?: string): Promise<RealExpenseSummary> {
+export async function getRealExpenseSummary(branchId?: string): Promise<RealExpenseSummary> {
+  const headers = await getAuthHeaders();
   const params = new URLSearchParams();
   if (branchId) params.append('branch_id', branchId);
-  const url = `/reports/expense-summary${params.toString() ? `?${params.toString()}` : ''}`;
-  
-  // ✅ Pass token to ApiClient
-  return ApiClient.get(url, token);
+  const url = `${API_BASE_URL}/reports/expense-summary${params.toString() ? `?${params.toString()}` : ''}`;
+  const response = await fetch(url, { headers, cache: 'no-store' });
+  return handleResponse(response);
 }
 
 export async function getDailyExpenses(branchId?: string, date?: string, category?: string, token?: string): Promise<DailyExpense[]> {
