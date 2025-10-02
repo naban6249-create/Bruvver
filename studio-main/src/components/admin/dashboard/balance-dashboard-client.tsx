@@ -7,13 +7,14 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/lib/auth-context';
 import { getOpeningBalance, updateOpeningBalance, getDailyBalanceSummary } from '@/lib/balance-service';
 import { DollarSign, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 
 export function BalanceDashboardClient() {
   const searchParams = useSearchParams();
   const branchId = searchParams.get('branchId');
-  const role = searchParams.get('role');
+  const { user } = useAuth(); // Get user from auth context
   const { toast } = useToast();
 
   const [summary, setSummary] = React.useState({
@@ -121,7 +122,7 @@ export function BalanceDashboardClient() {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {role === 'admin' && (
+        {user?.role === 'admin' && (
           <div className="flex items-end gap-4 p-4 border rounded-lg bg-muted/40">
             <div className='flex-grow'>
               <Label htmlFor="openingBalance" className="text-sm font-medium">Set Today's Opening Balance</Label>
