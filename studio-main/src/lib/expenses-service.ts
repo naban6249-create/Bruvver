@@ -58,12 +58,12 @@ export interface RealExpenseSummary {
 }
 
 export async function getRealExpenseSummary(branchId?: string, token?: string): Promise<RealExpenseSummary> {
-  const headers = await getAuthHeaders(token);
   const params = new URLSearchParams();
   if (branchId) params.append('branch_id', branchId);
-  const url = `${API_BASE_URL}/reports/expense-summary${params.toString() ? `?${params.toString()}` : ''}`;
-  const response = await fetch(url, { headers, cache: 'no-store' });
-  return handleResponse(response);
+  const url = `/reports/expense-summary${params.toString() ? `?${params.toString()}` : ''}`;
+  
+  // ✅ Pass token to ApiClient
+  return ApiClient.get(url, token);
 }
 
 export async function getDailyExpenses(branchId?: string, date?: string, category?: string, token?: string): Promise<DailyExpense[]> {
