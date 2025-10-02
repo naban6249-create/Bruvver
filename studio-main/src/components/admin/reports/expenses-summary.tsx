@@ -21,9 +21,8 @@ export function ExpensesSummary() {
 
   const fetchReal = useCallback(async (): Promise<RealExpenseSummary | null> => {
     try {
-      // ✅ Get token from localStorage (client-side only)
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      return await getRealExpenseSummary(branchId || undefined, token || undefined);
+      // ✅ ApiClient handles token automatically from cookies
+      return await getRealExpenseSummary(branchId || undefined);
     } catch (error) {
       console.error('Error fetching expense summary:', error);
       toast({ 
