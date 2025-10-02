@@ -49,9 +49,11 @@ export function ExpensesDashboardClient() {
 
     setIsLoading(true);
     try {
+      // Get token from localStorage for authentication
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined;
       const [expensesData, categoriesData] = await Promise.all([
-        getDailyExpenses(branchId),
-        getExpenseCategories()
+        getDailyExpenses(branchId, undefined, undefined, token || undefined),
+        getExpenseCategories(token || undefined)
       ]);
       setExpenses(expensesData || []);
       setCategories(categoriesData || []);
@@ -84,7 +86,9 @@ export function ExpensesDashboardClient() {
     }
 
     try {
-      await deleteDailyExpense(expenseId);
+      // Get token from localStorage for authentication
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined;
+      await deleteDailyExpense(expenseId, token || undefined);
       toast({
         title: "Success",
         description: "Expense deleted successfully.",
