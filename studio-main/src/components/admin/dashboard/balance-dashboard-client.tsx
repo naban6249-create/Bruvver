@@ -42,7 +42,9 @@ export function BalanceDashboardClient() {
   // Add the 'date' parameter to the fetchSummary function
   const fetchSummary = React.useCallback(async (branchId: string, date?: Date) => {
     const dateString = date ? date.toISOString().split('T')[0] : undefined;
-    const summaryData = await getDailyBalanceSummary(branchId, dateString);
+    // Get token from localStorage for authentication
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined;
+    const summaryData = await getDailyBalanceSummary(branchId, dateString, token || undefined);
     setSummary(summaryData);
     setNewOpeningBalance(summaryData.openingBalance);
   }, []);
@@ -56,7 +58,9 @@ export function BalanceDashboardClient() {
   const handleUpdateOpeningBalance = React.useCallback(async () => {
     if (!branchId || typeof newOpeningBalance !== 'number') return;
     try {
-      await updateOpeningBalance(branchId, newOpeningBalance);
+      // Get token from localStorage for authentication
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined;
+      await updateOpeningBalance(branchId, newOpeningBalance, undefined, token || undefined);
       toast({
         title: 'Success',
         description: 'Opening balance updated successfully.',
