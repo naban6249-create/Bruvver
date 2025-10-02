@@ -50,10 +50,10 @@ export function ExpensesDashboardClient() {
 
     setIsLoading(true);
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      // CORRECTED: Token removed from calls
       const [expensesData, categoriesData] = await Promise.all([
-        getDailyExpenses(branchId, undefined, undefined, token || undefined),
-        getExpenseCategories(token || undefined)
+        getDailyExpenses(branchId, undefined, undefined),
+        getExpenseCategories()
       ]);
       setExpenses(expensesData || []);
       setCategories(categoriesData || []);
@@ -86,8 +86,8 @@ export function ExpensesDashboardClient() {
     }
 
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      await deleteDailyExpense(expenseId, token || undefined);
+      // CORRECTED: Token removed from call
+      await deleteDailyExpense(expenseId);
       toast({
         title: "Success",
         description: "Expense deleted successfully.",
@@ -134,20 +134,21 @@ export function ExpensesDashboardClient() {
 
     setIsSaving(true);
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       const isNew = !selectedExpense?.id;
 
       if (isNew) {
+        // CORRECTED: Token removed from call
         await addDailyExpense({
           ...expenseData,
           branch_id: parseInt(branchId)
-        }, token || undefined);
+        });
         toast({
           title: "Success",
           description: "Expense added successfully.",
         });
       } else {
-        await updateDailyExpense(selectedExpense.id, expenseData, token || undefined);
+        // CORRECTED: Token removed from call
+        await updateDailyExpense(selectedExpense.id, expenseData);
         toast({
           title: "Success",
           description: "Expense updated successfully.",
