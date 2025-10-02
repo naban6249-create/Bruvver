@@ -6,24 +6,18 @@ import { cookies } from 'next/headers';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 // Helper to get authenticated headers
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const cookieStore = cookies(); // Correct: No 'await'
-  const token = cookieStore.get('token')?.value;
+async function getAuthHeaders(token?: string): Promise<Record<string, string>> {
+  const cookieStore = await cookies();
+  const cookieToken = cookieStore.get('token')?.value;
+  const authToken = token || cookieToken;
 
-  // --- Debugging ---
-  console.log('[Expenses Service] All cookies received:', cookieStore.getAll());
-  if (token) {
-    console.log('[Expenses Service] Auth token FOUND.');
-  } else {
-    console.log('[Expenses Service] Auth token NOT FOUND.');
-  }
-  // --- End Debugging ---
+  console.log('[Expenses Service] Auth token:', authToken ? 'FOUND' : 'NOT FOUND');
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
   }
   return headers;
 }
@@ -63,8 +57,8 @@ export interface RealExpenseSummary {
   month: RealExpenseBucket;
 }
 
-export async function getRealExpenseSummary(branchId?: string): Promise<RealExpenseSummary> {
-  const headers = await getAuthHeaders();
+export async function getRealExpenseSummary(branchId?: string, token?: string): Promise<RealExpenseSummary> {
+  const headers = await getAuthHeaders(token);
   const params = new URLSearchParams();
   if (branchId) params.append('branch_id', branchId);
   const url = `${API_BASE_URL}/reports/expense-summary${params.toString() ? `?${params.toString()}` : ''}`;
@@ -72,9 +66,9 @@ export async function getRealExpenseSummary(branchId?: string): Promise<RealExpe
   return handleResponse(response);
 }
 
-export async function getDailyExpenses(branchId?: string, date?: string, category?: string): Promise<DailyExpense[]> {
+export async function getDailyExpenses(branchId?: string, date?: string, category?: string, token?: string): Promise<DailyExpense[]> {
   try {
-    const headers = await getAuthHeaders();
+    const headers = await getAuthHeaders(token);
     let url = `${API_BASE_URL}/expenses`;
     const params = new URLSearchParams();
     
@@ -110,8 +104,8 @@ export async function addDailyExpense(expenseData: {
   expense_date?: string;
   receipt_number?: string;
   vendor?: string;
-}): Promise<DailyExpense> {
-  const headers = await getAuthHeaders();
+}, token?: string): Promise<DailyExpense> {
+  const headers = await getAuthHeaders(token);
   const response = await fetch(`${API_BASE_URL}/expenses`, {
     method: 'POST',
     headers,
@@ -127,8 +121,8 @@ export async function addQuickExpense(expenseData: {
   unit_cost: number;
   branch_id: number;
   expense_date?: string;
-}): Promise<DailyExpense> {
-  const headers = await getAuthHeaders();
+}, token?: string): Promise<DailyExpense> {
+  const headers = await getAuthHeaders(token);
   const response = await fetch(`${API_BASE_URL}/expenses/quick-add`, {
     method: 'POST',
     headers,
@@ -137,8 +131,8 @@ export async function addQuickExpense(expenseData: {
   return handleResponse(response);
 }
 
-export async function updateDailyExpense(expenseId: number, expenseData: Partial<DailyExpense>): Promise<DailyExpense> {
-  const headers = await getAuthHeaders();
+export async function updateDailyExpense(expenseId: number, expenseData: Partial<DailyExpense>, token?: string): Promise<DailyExpense> {
+  const headers = await getAuthHeaders(token);
   const response = await fetch(`${API_BASE_URL}/expenses/${expenseId}`, {
     method: 'PUT',
     headers,
@@ -147,8 +141,8 @@ export async function updateDailyExpense(expenseId: number, expenseData: Partial
   return handleResponse(response);
 }
 
-export async function deleteDailyExpense(expenseId: number): Promise<void> {
-  const headers = await getAuthHeaders();
+export async function deleteDailyExpense(expenseId: number, token?: string): Promise<void> {
+  const headers = await getAuthHeaders(token);
   const response = await fetch(`${API_BASE_URL}/expenses/${expenseId}`, {
     method: 'DELETE',
     headers,
@@ -156,9 +150,9 @@ export async function deleteDailyExpense(expenseId: number): Promise<void> {
   await handleResponse(response);
 }
 
-export async function getExpenseSummary(branchId?: string, date?: string): Promise<any> {
+export async function getExpenseSummary(branchId?: string, date?: string, token?: string): Promise<any> {
   try {
-    const headers = await getAuthHeaders();
+    const headers = await getAuthHeaders(token);
     let url = `${API_BASE_URL}/expenses/summary`;
     const params = new URLSearchParams();
     
@@ -181,9 +175,9 @@ export async function getExpenseSummary(branchId?: string, date?: string): Promi
   }
 }
 
-export async function getExpenseCategories(): Promise<any[]> {
+export async function getExpenseCategories(token?: string): Promise<any[]> {
   try {
-    const headers = await getAuthHeaders();
+    const headers = await getAuthHeaders(token);
     const response = await fetch(`${API_BASE_URL}/expense-categories`, {
       headers,
       cache: 'no-store',
