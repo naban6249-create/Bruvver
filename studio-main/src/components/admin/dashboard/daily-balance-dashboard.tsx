@@ -52,7 +52,7 @@ export function DailyBalanceDashboard() {
     
     setIsLoading(true);
     try {
-      const summaryData = await getDailyBalanceSummary(branchId, dateString, token || undefined);
+      const summaryData = await getDailyBalanceSummary(branchId, dateString);
       setSummary(summaryData);
       setNewOpeningBalance(summaryData.openingBalance);
     } catch (error) {
@@ -113,7 +113,7 @@ export function DailyBalanceDashboard() {
     setIsUpdating(true);
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      await updateOpeningBalance(branchId, newOpeningBalance, undefined, token || undefined);
+      await updateOpeningBalance(branchId, newOpeningBalance, undefined);
       
       toast({
         title: 'Success',
