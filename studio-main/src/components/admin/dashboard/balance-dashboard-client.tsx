@@ -45,7 +45,7 @@ export function BalanceDashboardClient() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     
     try {
-      const summaryData = await getDailyBalanceSummary(branchId, dateString, token || undefined);
+      const summaryData = await getDailyBalanceSummary(branchId, dateString);
       setSummary(summaryData);
       setNewOpeningBalance(summaryData.openingBalance);
     } catch (error) {
