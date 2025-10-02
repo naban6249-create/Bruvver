@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { getDailyExpenses, getExpenseCategories, deleteDailyExpense } from '@/lib/expenses-service';
+import { getDailyExpenses, getExpenseCategories, deleteDailyExpense, addDailyExpense, updateDailyExpense } from '@/lib/expenses-service';
 import { useAuth } from '@/lib/auth-context';
 import { ExpenseDialog } from './expense-dialog';
 import type { DailyExpense } from '@/lib/types';
@@ -24,6 +24,7 @@ export function ExpensesDashboardClient() {
   const [isExpenseDialogOpen, setIsExpenseDialogOpen] = React.useState(false);
   const [selectedExpense, setSelectedExpense] = React.useState<DailyExpense | null>(null);
   const [currentDate, setCurrentDate] = React.useState('');
+  const [isSaving, setIsSaving] = React.useState(false);
 
   const currentBranchId = branchId ? parseInt(branchId) : null;
   const hasViewAccess = currentBranchId ? hasPermission(currentBranchId, 'view_only') : false;
@@ -49,8 +50,7 @@ export function ExpensesDashboardClient() {
 
     setIsLoading(true);
     try {
-      // Get token from localStorage for authentication
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined;
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       const [expensesData, categoriesData] = await Promise.all([
         getDailyExpenses(branchId, undefined, undefined, token || undefined),
         getExpenseCategories(token || undefined)
@@ -86,14 +86,13 @@ export function ExpensesDashboardClient() {
     }
 
     try {
-      // Get token from localStorage for authentication
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined;
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       await deleteDailyExpense(expenseId, token || undefined);
       toast({
         title: "Success",
         description: "Expense deleted successfully.",
       });
-      fetchExpenses();
+      await fetchExpenses(); // Refresh the list
     } catch (error) {
       console.error('Error deleting expense:', error);
       toast({
@@ -130,10 +129,44 @@ export function ExpensesDashboardClient() {
     setIsExpenseDialogOpen(true);
   };
 
-  const handleSaveExpense = async () => {
-    fetchExpenses();
-    setIsExpenseDialogOpen(false);
-    setSelectedExpense(null);
+  const handleSaveExpense = async (expenseData: Omit<DailyExpense, 'id' | 'created_at' | 'created_by'>) => {
+    if (!branchId || !hasFullAccess) return;
+
+    setIsSaving(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const isNew = !selectedExpense?.id;
+
+      if (isNew) {
+        await addDailyExpense({
+          ...expenseData,
+          branch_id: parseInt(branchId)
+        }, token || undefined);
+        toast({
+          title: "Success",
+          description: "Expense added successfully.",
+        });
+      } else {
+        await updateDailyExpense(selectedExpense.id, expenseData, token || undefined);
+        toast({
+          title: "Success",
+          description: "Expense updated successfully.",
+        });
+      }
+
+      setIsExpenseDialogOpen(false);
+      setSelectedExpense(null);
+      await fetchExpenses(); // Refresh the list
+    } catch (error) {
+      console.error('Error saving expense:', error);
+      toast({
+        title: "Error",
+        description: "Could not save expense.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const formatCurrency = (amount: number) => {

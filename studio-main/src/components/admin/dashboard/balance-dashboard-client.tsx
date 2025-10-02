@@ -26,8 +26,8 @@ export function BalanceDashboardClient() {
   const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(new Date());
   const [newOpeningBalance, setNewOpeningBalance] = React.useState<string | number>('');
   const [currentDate, setCurrentDate] = React.useState('');
+  const [isUpdating, setIsUpdating] = React.useState(false);
 
-  // Set current date on component mount
   React.useEffect(() => {
     const today = new Date();
     const options: Intl.DateTimeFormatOptions = {
@@ -39,15 +39,23 @@ export function BalanceDashboardClient() {
     setCurrentDate(today.toLocaleDateString('en-US', options));
   }, []);
 
-  // Add the 'date' parameter to the fetchSummary function
   const fetchSummary = React.useCallback(async (branchId: string, date?: Date) => {
     const dateString = date ? date.toISOString().split('T')[0] : undefined;
-    // Get token from localStorage for authentication
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined;
-    const summaryData = await getDailyBalanceSummary(branchId, dateString, token || undefined);
-    setSummary(summaryData);
-    setNewOpeningBalance(summaryData.openingBalance);
-  }, []);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    
+    try {
+      const summaryData = await getDailyBalanceSummary(branchId, dateString, token || undefined);
+      setSummary(summaryData);
+      setNewOpeningBalance(summaryData.openingBalance);
+    } catch (error) {
+      console.error('Error fetching summary:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load balance data.',
+        variant: 'destructive',
+      });
+    }
+  }, [toast]);
 
   React.useEffect(() => {
     if (branchId) {
@@ -56,24 +64,36 @@ export function BalanceDashboardClient() {
   }, [branchId, selectedDate, fetchSummary]);
 
   const handleUpdateOpeningBalance = React.useCallback(async () => {
-    if (!branchId || typeof newOpeningBalance !== 'number') return;
+    if (!branchId || typeof newOpeningBalance !== 'number') {
+      toast({
+        title: 'Invalid Input',
+        description: 'Please enter a valid opening balance amount.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsUpdating(true);
     try {
-      // Get token from localStorage for authentication
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined;
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       await updateOpeningBalance(branchId, newOpeningBalance, undefined, token || undefined);
+      
       toast({
         title: 'Success',
         description: 'Opening balance updated successfully.',
       });
-      if (branchId && selectedDate) {
-        await fetchSummary(branchId, selectedDate);
-      }
+      
+      // Force refresh the summary after update
+      await fetchSummary(branchId, selectedDate);
     } catch (error) {
+      console.error('Error updating balance:', error);
       toast({
         title: 'Error',
         description: 'Failed to update opening balance.',
         variant: 'destructive',
       });
+    } finally {
+      setIsUpdating(false);
     }
   }, [branchId, newOpeningBalance, selectedDate, fetchSummary, toast]);
 
@@ -108,12 +128,16 @@ export function BalanceDashboardClient() {
               <Input
                 id="openingBalance"
                 type="number"
+                step="0.01"
                 value={newOpeningBalance}
                 onChange={(e) => setNewOpeningBalance(Number(e.target.value))}
                 className="mt-2"
+                disabled={isUpdating}
               />
             </div>
-            <Button onClick={handleUpdateOpeningBalance}>Update Balance</Button>
+            <Button onClick={handleUpdateOpeningBalance} disabled={isUpdating}>
+              {isUpdating ? 'Updating...' : 'Update Balance'}
+            </Button>
           </div>
         )}
 
