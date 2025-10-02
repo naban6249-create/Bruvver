@@ -14,7 +14,7 @@ import { DollarSign, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 export function BalanceDashboardClient() {
   const searchParams = useSearchParams();
   const branchId = searchParams.get('branchId');
-  const { user } = useAuth(); // Get user from auth context
+  const { user } = useAuth();
   const { toast } = useToast();
 
   const [summary, setSummary] = React.useState({
@@ -42,9 +42,9 @@ export function BalanceDashboardClient() {
 
   const fetchSummary = React.useCallback(async (branchId: string, date?: Date) => {
     const dateString = date ? date.toISOString().split('T')[0] : undefined;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     
     try {
+      // ✅ FIXED: Removed token parameter - ApiClient handles it
       const summaryData = await getDailyBalanceSummary(branchId, dateString);
       setSummary(summaryData);
       setNewOpeningBalance(summaryData.openingBalance);
@@ -76,15 +76,14 @@ export function BalanceDashboardClient() {
 
     setIsUpdating(true);
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      await updateOpeningBalance(branchId, newOpeningBalance, undefined, token || undefined);
+      // ✅ FIXED: Removed token parameter - ApiClient handles it
+      await updateOpeningBalance(branchId, newOpeningBalance, undefined);
       
       toast({
         title: 'Success',
         description: 'Opening balance updated successfully.',
       });
       
-      // Force refresh the summary after update
       await fetchSummary(branchId, selectedDate);
     } catch (error) {
       console.error('Error updating balance:', error);
