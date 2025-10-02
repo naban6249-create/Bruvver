@@ -7,15 +7,14 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { getDailyBalanceSummary, updateOpeningBalance } from '@/lib/balance-service';
-import { DollarSign, TrendingUp, TrendingDown, Wallet, RefreshCw, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { getOpeningBalance, updateOpeningBalance, getDailyBalanceSummary } from '@/lib/balance-service';
+import { DollarSign, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 
 export function DailyBalanceDashboard() {
-  const { user } = useAuth();
-  const role = user?.role;
   const searchParams = useSearchParams();
   const branchId = searchParams.get('branchId');
+  const { user, hasPermission } = useAuth();
   const { toast } = useToast();
 
   const [summary, setSummary] = useState({
@@ -28,10 +27,14 @@ export function DailyBalanceDashboard() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [newOpeningBalance, setNewOpeningBalance] = useState<string | number>('');
   const [currentDate, setCurrentDate] = useState('');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Set current date on component mount
+  // Check permissions
+  const currentBranchId = branchId ? parseInt(branchId) : null;
+  const hasFullAccess = currentBranchId ? hasPermission(currentBranchId, 'full_access') : false;
+  const canUpdateBalance = user?.role === 'admin' || hasFullAccess;
+
   useEffect(() => {
     const today = new Date();
     const options: Intl.DateTimeFormatOptions = {
@@ -45,16 +48,24 @@ export function DailyBalanceDashboard() {
 
   const fetchSummary = useCallback(async (branchId: string, date?: Date) => {
     const dateString = date ? date.toISOString().split('T')[0] : undefined;
-    console.log(`[Dashboard] Fetching summary for branch ${branchId}, date: ${dateString}`);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     
-    const summaryData = await getDailyBalanceSummary(branchId, dateString);
-    
-    console.log(`[Dashboard] Received summary:`, summaryData);
-    
-    setSummary(summaryData);
-    setNewOpeningBalance(summaryData.openingBalance);
-    setLastFetchTime(Date.now());
-  }, []);
+    setIsLoading(true);
+    try {
+      const summaryData = await getDailyBalanceSummary(branchId, dateString, token || undefined);
+      setSummary(summaryData);
+      setNewOpeningBalance(summaryData.openingBalance);
+    } catch (error) {
+      console.error('Error fetching summary:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load balance data.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (branchId) {
@@ -62,20 +73,15 @@ export function DailyBalanceDashboard() {
     }
   }, [branchId, selectedDate, fetchSummary]);
 
-  // Listen for external refresh events (when sales are updated)
+  // Auto-refresh every 30 seconds to catch updates from other users
   useEffect(() => {
-    const handleRefreshEvent = () => {
-      console.log('[Dashboard] External refresh event received');
-      if (branchId && selectedDate) {
-        fetchSummary(branchId, selectedDate);
-      }
-    };
-
-    window.addEventListener('refreshBalance', handleRefreshEvent);
+    if (!branchId) return;
     
-    return () => {
-      window.removeEventListener('refreshBalance', handleRefreshEvent);
-    };
+    const interval = setInterval(() => {
+      fetchSummary(branchId, selectedDate);
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
   }, [branchId, selectedDate, fetchSummary]);
 
   const handleDateChange = (date?: Date) => {
@@ -85,43 +91,46 @@ export function DailyBalanceDashboard() {
     }
   };
 
-  const handleRefresh = async () => {
-    if (!branchId) return;
-    setIsRefreshing(true);
-    try {
-      await fetchSummary(branchId, selectedDate);
+  const handleUpdateOpeningBalance = async () => {
+    if (!branchId || typeof newOpeningBalance !== 'number') {
       toast({
-        title: 'Refreshed',
-        description: 'Daily balance updated successfully.',
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to refresh data.',
+        title: 'Invalid Input',
+        description: 'Please enter a valid opening balance amount.',
         variant: 'destructive',
       });
-    } finally {
-      setIsRefreshing(false);
+      return;
     }
-  };
 
-  const handleUpdateOpeningBalance = async () => {
-    if (!branchId || typeof newOpeningBalance !== 'number') return;
+    if (!canUpdateBalance) {
+      toast({
+        title: 'Access Denied',
+        description: 'You don\'t have permission to update the opening balance.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsUpdating(true);
     try {
-      await updateOpeningBalance(branchId, newOpeningBalance, selectedDate?.toISOString().split('T')[0]);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      await updateOpeningBalance(branchId, newOpeningBalance, undefined, token || undefined);
+      
       toast({
         title: 'Success',
         description: 'Opening balance updated successfully.',
       });
-      if (branchId && selectedDate) {
-        await fetchSummary(branchId, selectedDate);
-      }
+      
+      // Force refresh after update
+      await fetchSummary(branchId, selectedDate);
     } catch (error) {
+      console.error('Error updating balance:', error);
       toast({
         title: 'Error',
         description: 'Failed to update opening balance.',
         variant: 'destructive',
       });
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -132,6 +141,16 @@ export function DailyBalanceDashboard() {
     }).format(amount);
   };
 
+  if (isLoading && summary.openingBalance === 0) {
+    return (
+      <Card className="mt-8">
+        <CardContent className="flex justify-center items-center h-40">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="mt-8">
       <CardHeader>
@@ -140,53 +159,33 @@ export function DailyBalanceDashboard() {
             <CardTitle className="font-headline">Daily Balance Sheet</CardTitle>
             <CardDescription>
               An overview of your daily financial transactions for the selected branch.
-              {lastFetchTime > 0 && (
-                <span className="text-xs block mt-1 text-muted-foreground">
-                  Last updated: {new Date(lastFetchTime).toLocaleTimeString()}
-                </span>
-              )}
             </CardDescription>
           </div>
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-            >
-              {isRefreshing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Refreshing...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Refresh
-                </>
-              )}
-            </Button>
-            <div className="text-right">
-              <p className="font-semibold text-lg text-foreground/90">{currentDate.split(',')[0]}</p>
-              <p className="font-medium text-foreground/80">{currentDate.split(',').slice(1).join(',')}</p>
-            </div>
+          <div className="text-right">
+            <p className="font-semibold text-lg text-foreground/90">{currentDate.split(',')[0]}</p>
+            <p className="font-medium text-foreground/80">{currentDate.split(',').slice(1).join(',')}</p>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {role === 'admin' && (
+        {canUpdateBalance && (
           <div className="flex items-end gap-4 p-4 border rounded-lg bg-muted/40">
             <div className='flex-grow'>
               <Label htmlFor="openingBalance" className="text-sm font-medium">Set Today's Opening Balance</Label>
               <Input
                 id="openingBalance"
                 type="number"
+                step="0.01"
                 value={newOpeningBalance}
                 onChange={(e) => setNewOpeningBalance(Number(e.target.value))}
                 className="mt-2"
+                disabled={isUpdating}
+                placeholder="Enter opening balance (₹)"
               />
             </div>
-            <Button onClick={handleUpdateOpeningBalance}>Update Balance</Button>
+            <Button onClick={handleUpdateOpeningBalance} disabled={isUpdating}>
+              {isUpdating ? 'Updating...' : 'Update Balance'}
+            </Button>
           </div>
         )}
 
@@ -228,10 +227,18 @@ export function DailyBalanceDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(summary.calculatedBalance)}</div>
-              <p className="text-xs text-muted-foreground">Net cash in hand</p>
+              <p className="text-xs text-muted-foreground">
+                Opening + Collections - Expenses
+              </p>
             </CardContent>
           </Card>
         </div>
+
+        {isLoading && (
+          <div className="text-center text-sm text-muted-foreground">
+            Refreshing data...
+          </div>
+        )}
       </CardContent>
     </Card>
   );
