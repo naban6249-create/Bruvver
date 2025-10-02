@@ -5,24 +5,18 @@ import { cookies } from 'next/headers';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 // Helper to get authenticated headers
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const cookieStore = cookies(); // Correct: No 'await'
-  const token = cookieStore.get('token')?.value;
+async function getAuthHeaders(token?: string): Promise<Record<string, string>> {
+  const cookieStore = await cookies();
+  const cookieToken = cookieStore.get('token')?.value;
+  const authToken = token || cookieToken;
 
-  // --- Debugging ---
-  console.log('[Balance Service] All cookies received:', cookieStore.getAll());
-  if (token) {
-    console.log('[Balance Service] Auth token FOUND.');
-  } else {
-    console.log('[Balance Service] Auth token NOT FOUND.');
-  }
-  // --- End Debugging ---
+  console.log('[Balance Service] Auth token:', authToken ? 'FOUND' : 'NOT FOUND');
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
   }
   return headers;
 }
@@ -68,9 +62,9 @@ export interface DailyBalanceSummary {
   transactionCount: number;
 }
 
-export async function getOpeningBalance(branchId: string, date?: string): Promise<number> {
+export async function getOpeningBalance(branchId: string, date?: string, token?: string): Promise<number> {
   try {
-    const headers = await getAuthHeaders();
+    const headers = await getAuthHeaders(token);
     let url = `${API_BASE_URL}/branches/${branchId}/opening-balance`;
     const params = new URLSearchParams();
 
@@ -94,8 +88,8 @@ export async function getOpeningBalance(branchId: string, date?: string): Promis
   }
 }
 
-export async function updateOpeningBalance(branchId: string, amount: number, date?: string): Promise<OpeningBalance> {
-  const headers = await getAuthHeaders();
+export async function updateOpeningBalance(branchId: string, amount: number, date?: string, token?: string): Promise<OpeningBalance> {
+  const headers = await getAuthHeaders(token);
   const requestBody: any = { amount };
   if (date) requestBody.date = date;
 
@@ -109,9 +103,9 @@ export async function updateOpeningBalance(branchId: string, amount: number, dat
   return handleResponse(response);
 }
 
-export async function getDailyBalanceSummary(branchId: string, date?: string): Promise<DailyBalanceSummary> {
+export async function getDailyBalanceSummary(branchId: string, date?: string, token?: string): Promise<DailyBalanceSummary> {
   try {
-    const headers = await getAuthHeaders();
+    const headers = await getAuthHeaders(token);
     let url = `${API_BASE_URL}/branches/${branchId}/daily-balance`;
     const params = new URLSearchParams();
 
