@@ -14,7 +14,6 @@ import json
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 import uuid
-import cloudinary
 from cloudinary import uploader
 from zoneinfo import ZoneInfo
 
@@ -30,6 +29,39 @@ logger = logging.getLogger(__name__)
 
 # Ensure upload directory exists
 os.makedirs("static/images", exist_ok=True)
+
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+
+def verify_cloudinary_config():
+    """Verify Cloudinary configuration on startup"""
+    try:
+        cloudinary_url = os.getenv("CLOUDINARY_URL")
+        if cloudinary_url:
+            logger.info("Cloudinary configured via CLOUDINARY_URL")
+        else:
+            cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
+            api_key = os.getenv("CLOUDINARY_API_KEY")
+            api_secret = os.getenv("CLOUDINARY_API_SECRET")
+
+            if cloud_name and api_key and api_secret:
+                cloudinary.config(
+                    cloud_name=cloud_name,
+                    api_key=api_key,
+                    api_secret=api_secret
+                )
+                logger.info("Cloudinary configured via individual env vars")
+            else:
+                logger.warning("Cloudinary configuration incomplete - image uploads may fail")
+
+        # Test configuration
+        cloudinary.api.ping()
+        logger.info("Cloudinary connection test successful")
+        return True
+    except Exception as e:
+        logger.error(f"Cloudinary configuration error: {e}")
+        return False
 
 # Import our modules (based on your uploaded files)
 from database import engine, get_database
@@ -111,47 +143,27 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Startup/shutdown
+# In main.py, this is the correct startup function
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and start automation"""
-    # Configure Cloudinary
-    cloudinary_url = os.getenv("CLOUDINARY_URL")
-    if cloudinary_url:
-        try:
-            # Parse the URL to configure Cloudinary explicitly
-            # URL format: cloudinary://API_KEY:API_SECRET@CLOUD_NAME
-            parts = cloudinary_url.replace('cloudinary://', '').split('@')
-            if len(parts) == 2:
-                credentials = parts[0].split(':')
-                cloud_name = parts[1]
-                if len(credentials) == 2:
-                    api_key = credentials[0]
-                    api_secret = credentials[1]
-                    cloudinary.config(
-                        cloud_name=cloud_name,
-                        api_key=api_key,
-                        api_secret=api_secret
-                    )
-                    logger.info("Cloudinary configured successfully")
-                else:
-                    logger.error("Invalid Cloudinary credentials format")
-            else:
-                logger.error("Invalid Cloudinary URL format")
-        except Exception as e:
-            logger.error(f"Failed to configure Cloudinary: {e}")
-    else:
-        logger.warning("CLOUDINARY_URL not found in environment variables")
+    # This single line replaces the old configuration block
+    verify_cloudinary_config() 
+    
+    # Initialize data just once
     await initialize_sample_data()
+    
+    # The rest of the startup tasks
     try:
         start_automation()
     except Exception:
         logger.exception("Failed to start automation service on startup.")
-    # Start daily export scheduler (runs at 00:05 local time, exports yesterday)
+    
     try:
         start_daily_export_scheduler()
     except Exception:
         logger.exception("Failed to start daily export scheduler")
-    # Best-effort catch-up run on startup (idempotent export clears date rows first)
+
     try:
         export_yesterday_job()
     except Exception:
@@ -1136,7 +1148,6 @@ async def create_menu_item(
     # Auto-assign branch_id if not provided
     if branch_id is None:
         if hasattr(current_user, 'role') and current_user.role == "worker":
-            # For workers, use their first assigned branch
             first_permission = db.query(UserBranchPermission).filter(
                 UserBranchPermission.user_id == current_user.id
             ).first()
@@ -1145,14 +1156,13 @@ async def create_menu_item(
             else:
                 raise HTTPException(status_code=400, detail="No branch assigned to worker")
         else:
-            # For admins, default to branch 1 (Coimbatore Main)
-            branch_id = 1
-    
+            branch_id = 1  # Default to Coimbatore Main
+
     # Verify branch exists
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
     if not branch:
         raise HTTPException(status_code=400, detail=f"Branch {branch_id} not found")
-    
+
     # Generate new numeric id string
     max_id_query = db.query(func.max(MenuItem.id)).scalar()
     max_id = 0
@@ -1162,26 +1172,51 @@ async def create_menu_item(
         except (ValueError, TypeError):
             max_id = 0
     new_id = str(max_id + 1)
-    
-    image_path = None
+
+    # Handle image upload to Cloudinary
+    cloudinary_url = None
     if image and image.filename:
-        image_path = f"/static/images/{new_id}_{image.filename}"
-        with open(f"static/images/{new_id}_{image.filename}", "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
-    
+        try:
+            # Read image content
+            contents = await image.read()
+
+            # Upload to Cloudinary with organized folder structure
+            result = cloudinary.uploader.upload(
+                contents,
+                folder=f"bruvver/menu_items/branch_{branch_id}",
+                public_id=f"item_{new_id}_{name.lower().replace(' ', '_')}",
+                overwrite=True,
+                resource_type="image",
+                format="webp",  # Convert to WebP for better compression
+                quality="auto:good",
+                fetch_format="auto"
+            )
+
+            cloudinary_url = result.get("secure_url")
+            logger.info(f"Successfully uploaded image to Cloudinary: {cloudinary_url}")
+
+        except Exception as e:
+            logger.error(f"Cloudinary upload failed for menu item {new_id}: {e}")
+            # Don't fail the entire request, just log the error
+            cloudinary_url = 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&h=400&fit=crop'
+    else:
+        # Default image if no upload
+        cloudinary_url = 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&h=400&fit=crop'
+
+    # Create menu item with Cloudinary URL
     db_item = MenuItem(
-        id=new_id, 
-        name=name, 
-        price=price, 
+        id=new_id,
+        name=name,
+        price=price,
         description=description,
-        category=category, 
-        branch_id=branch_id, 
-        image_url=image_path, 
+        category=category,
+        branch_id=branch_id,
+        image_url=cloudinary_url,  # Store Cloudinary URL
         is_available=is_available
     )
     db.add(db_item)
     db.flush()
-    
+
     # Add ingredients
     ingredients_list = json.loads(ingredients)
     for ingredient in ingredients_list:
@@ -1193,7 +1228,7 @@ async def create_menu_item(
             image_url=ingredient.get('image_url')
         )
         db.add(db_ingredient)
-    
+
     db.commit()
     db.refresh(db_item)
     return db_item
@@ -1208,7 +1243,6 @@ async def update_menu_item_api(
     is_available: str = Form("True"),
     ingredients: str = Form("[]"),
     image: Optional[UploadFile] = File(None),
-    image_url: Optional[str] = Form(None),
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
@@ -1216,19 +1250,62 @@ async def update_menu_item_api(
     db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Menu item not found")
+
     try:
-        image_path = db_item.image_url
+        # Keep existing image URL by default
+        final_image_url = db_item.image_url
+
+        # If new image uploaded, upload to Cloudinary
         if image and image.filename:
-            image_path = f"/static/images/{item_id}_{image.filename}"
-            save_path = f"static/images/{item_id}_{image.filename}"
-            with open(save_path, "wb") as buffer:
-                shutil.copyfileobj(image.file, buffer)
+            try:
+                # Read image content
+                contents = await image.read()
+
+                # Get branch info for organized folder structure
+                branch_id = db_item.branch_id or 1
+
+                # Delete old Cloudinary image if it exists
+                if db_item.image_url and "cloudinary.com" in db_item.image_url:
+                    try:
+                        # Extract public_id from URL
+                        url_parts = db_item.image_url.split("/")
+                        if "bruvver" in db_item.image_url:
+                            # Find the public_id (everything after version number)
+                            version_index = next(i for i, part in enumerate(url_parts) if part.startswith("v"))
+                            public_id = "/".join(url_parts[version_index + 1:]).split(".")[0]
+                            cloudinary.uploader.destroy(public_id)
+                            logger.info(f"Deleted old Cloudinary image: {public_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete old Cloudinary image: {e}")
+
+                # Upload new image to Cloudinary
+                result = cloudinary.uploader.upload(
+                    contents,
+                    folder=f"bruvver/menu_items/branch_{branch_id}",
+                    public_id=f"item_{item_id}_{name.lower().replace(' ', '_')}",
+                    overwrite=True,
+                    resource_type="image",
+                    format="webp",
+                    quality="auto:good",
+                    fetch_format="auto"
+                )
+
+                final_image_url = result.get("secure_url")
+                logger.info(f"Successfully updated image in Cloudinary: {final_image_url}")
+
+            except Exception as e:
+                logger.error(f"Cloudinary upload failed during update: {e}")
+                # Keep existing image on upload failure
+                pass
+
+        # Update menu item fields
         db_item.name = name
         db_item.price = price
         db_item.description = description
         db_item.category = category
         db_item.is_available = is_available.lower() in ['true', '1', 't', 'y', 'yes']
-        db_item.image_url = image_path
+        db_item.image_url = final_image_url
+
         # Replace ingredients
         db.query(Ingredient).filter(Ingredient.menu_item_id == item_id).delete(synchronize_session=False)
         ingredients_list = json.loads(ingredients)
@@ -1241,10 +1318,12 @@ async def update_menu_item_api(
                 image_url=ingredient_data.get("image_url")
             )
             db.add(db_ingredient)
+
         db.commit()
         db.refresh(db_item)
         logger.info(f"Successfully updated item_id: {item_id}")
         return db_item
+
     except Exception as e:
         db.rollback()
         logger.exception("Error updating menu item")
