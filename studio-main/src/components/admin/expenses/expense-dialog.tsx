@@ -35,25 +35,25 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
     unit_cost: '',
     total_amount: '',
     expense_date: '',
-    
   });
 
   // Load expense categories
   useEffect(() => {
     const loadCategories = async () => {
       try {
-        // Get token from localStorage for authentication
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined;
-        const cats = await getExpenseCategories(token || undefined);
+        // --- THIS IS THE FIX ---
+        // Removed the token argument from the function call.
+        const cats = await getExpenseCategories();
+        // --- END OF FIX ---
         setCategories(cats);
       } catch (error) {
         console.error('Failed to load categories:', error);
         // Use default categories as fallback
-        setCategories(DEFAULT_CATEGORIES.map((name, index) => ({ 
-          id: index, 
-          name, 
-          is_active: true, 
-          created_at: new Date().toISOString() 
+        setCategories(DEFAULT_CATEGORIES.map((name, index) => ({
+          id: index,
+          name,
+          is_active: true,
+          created_at: new Date().toISOString()
         })));
       }
     };
@@ -73,7 +73,6 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
           unit_cost: expense.unit_cost.toString(),
           total_amount: expense.total_amount.toString(),
           expense_date: expense.expense_date ? expense.expense_date.split('T')[0] : '',
-          
         });
       } else {
         // Reset form for new expense
@@ -87,7 +86,6 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
           unit_cost: '',
           total_amount: '',
           expense_date: today,
-          
         });
       }
     }
@@ -99,7 +97,6 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
     const unitCost = parseFloat(formData.unit_cost) || 0;
     const total = quantity * unitCost;
     
-    // Always update total when quantity or unit cost changes (unless in read-only mode)
     if (!readOnly) {
       setFormData(prev => ({ ...prev, total_amount: total.toFixed(2) }));
     }
@@ -113,7 +110,6 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
   const handleSave = () => {
     if (readOnly || !onSave) return;
 
-    // Ensure expense_date is always a string (required by type)
     const dateStr = formData.expense_date && formData.expense_date.length > 0
       ? new Date(formData.expense_date).toISOString()
       : new Date().toISOString();
@@ -127,7 +123,6 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
       unit_cost: parseFloat(formData.unit_cost) || 0,
       total_amount: parseFloat(formData.total_amount) || 0,
       expense_date: dateStr,
-      
       branch_id: 0 // This will be set by the parent component
     };
 
@@ -163,8 +158,8 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="category">Category *</Label>
-              <Select 
-                value={formData.category} 
+              <Select
+                value={formData.category}
                 onValueChange={(value) => handleInputChange('category', value)}
                 disabled={readOnly}
               >
@@ -279,8 +274,6 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
               />
             </div>
           </div>
-
-          {/* Removed Receipt Number and Vendor fields as requested */}
         </div>
 
         <DialogFooter>
