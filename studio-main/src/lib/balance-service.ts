@@ -1,49 +1,6 @@
-"use server";
+'use client';
 
-import { cookies } from 'next/headers';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
-
-// Helper to get authenticated headers
-async function getAuthHeaders(token?: string): Promise<Record<string, string>> {
-  const cookieStore = await cookies();
-  const cookieToken = cookieStore.get('token')?.value;
-  const authToken = token || cookieToken;
-
-  console.log('[Balance Service] Auth token:', authToken ? 'FOUND' : 'NOT FOUND');
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
-  }
-  return headers;
-}
-
-// Helper to handle API responses
-async function handleResponse(response: Response) {
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("API Error:", errorText);
-    try {
-      const errorJson = errorText ? JSON.parse(errorText) : null;
-      if (errorJson?.detail) {
-        throw new Error(errorJson.detail);
-      }
-    } catch (e) {
-      // fall through
-    }
-    throw new Error(`API call failed with status ${response.status}: ${errorText}`);
-  }
-  if (response.status === 204) return null;
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    return response.json();
-  }
-  const text = await response.text();
-  return text ? JSON.parse(text) : null;
-}
+import { ApiClient } from './api-client'; // ✅ Use ApiClient
 
 export interface OpeningBalance {
   id: number;
@@ -62,10 +19,12 @@ export interface DailyBalanceSummary {
   transactionCount: number;
 }
 
-export async function getOpeningBalance(branchId: string, date?: string, token?: string): Promise<number> {
+export async function getOpeningBalance(
+  branchId: string, 
+  date?: string
+): Promise<number> {
   try {
-    const headers = await getAuthHeaders(token);
-    let url = `${API_BASE_URL}/branches/${branchId}/opening-balance`;
+    let url = `/branches/${branchId}/opening-balance`;
     const params = new URLSearchParams();
 
     if (date) params.append('date', date);
@@ -75,12 +34,7 @@ export async function getOpeningBalance(branchId: string, date?: string, token?:
       url += `?${params.toString()}`;
     }
 
-    const response = await fetch(url, {
-      headers,
-      cache: 'no-store',
-    });
-
-    const data = await handleResponse(response);
+    const data = await ApiClient.get(url);
     return data?.amount || 0;
   } catch (error) {
     console.error("Failed to get opening balance:", error);
@@ -88,25 +42,23 @@ export async function getOpeningBalance(branchId: string, date?: string, token?:
   }
 }
 
-export async function updateOpeningBalance(branchId: string, amount: number, date?: string, token?: string): Promise<OpeningBalance> {
-  const headers = await getAuthHeaders(token);
+export async function updateOpeningBalance(
+  branchId: string, 
+  amount: number, 
+  date?: string
+): Promise<OpeningBalance> {
   const requestBody: any = { amount };
   if (date) requestBody.date = date;
 
-  const response = await fetch(`${API_BASE_URL}/branches/${branchId}/opening-balance`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(requestBody),
-    cache: 'no-store',
-  });
-
-  return handleResponse(response);
+  return ApiClient.post(`/branches/${branchId}/opening-balance`, requestBody);
 }
 
-export async function getDailyBalanceSummary(branchId: string, date?: string, token?: string): Promise<DailyBalanceSummary> {
+export async function getDailyBalanceSummary(
+  branchId: string, 
+  date?: string
+): Promise<DailyBalanceSummary> {
   try {
-    const headers = await getAuthHeaders(token);
-    let url = `${API_BASE_URL}/branches/${branchId}/daily-balance`;
+    let url = `/branches/${branchId}/daily-balance`;
     const params = new URLSearchParams();
 
     if (date) params.append('date', date);
@@ -116,12 +68,7 @@ export async function getDailyBalanceSummary(branchId: string, date?: string, to
       url += `?${params.toString()}`;
     }
     
-    const response = await fetch(url, {
-      headers,
-      cache: 'no-store',
-    });
-
-    const data = await handleResponse(response);
+    const data = await ApiClient.get(url);
 
     return {
       openingBalance: data.opening_balance || 0,
