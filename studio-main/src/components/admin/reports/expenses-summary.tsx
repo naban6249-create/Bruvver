@@ -1,4 +1,3 @@
-// expenses-summary.tsx - FIXED VERSION
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
