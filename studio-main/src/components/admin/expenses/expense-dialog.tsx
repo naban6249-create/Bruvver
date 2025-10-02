@@ -42,7 +42,9 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
   useEffect(() => {
     const loadCategories = async () => {
       try {
-        const cats = await getExpenseCategories();
+        // Get token from localStorage for authentication
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined;
+        const cats = await getExpenseCategories(token || undefined);
         setCategories(cats);
       } catch (error) {
         console.error('Failed to load categories:', error);
