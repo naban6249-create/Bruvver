@@ -1,11 +1,8 @@
 'use client';
-
 import type { MenuItem } from './types';
 import { ApiClient } from './api-client';
 
-// This is a helper function to ensure the data from the API matches your MenuItem type.
-// In your src/lib/menu-service.ts file, update the normalizeMenuItem function:
-
+// Helper function to normalize API response to MenuItem type
 function normalizeMenuItem(raw: any): MenuItem {
   if (!raw) return raw as MenuItem;
   return {
@@ -38,13 +35,12 @@ export async function addMenuItem(formData: FormData): Promise<MenuItem> {
   return normalizeMenuItem(data);
 }
 
-// ✅ CORRECTED: Update an existing menu item. Now accepts FormData and itemId.
+// Update an existing menu item using FormData and itemId
 export async function updateMenuItem(formData: FormData, itemId: string): Promise<MenuItem> {
   const branchId = formData.get('branch_id');
   if (!branchId) {
     throw new Error('Branch ID is required to update a menu item.');
   }
-  // The backend endpoint requires the item ID in the URL.
   const data = await ApiClient.put(`/branches/${branchId}/menu/${itemId}`, formData);
   return normalizeMenuItem(data);
 }
