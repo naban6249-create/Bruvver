@@ -1165,6 +1165,10 @@ async def get_menu_item(item_id: str, db: Session = Depends(get_database)):
 
 # In main.py, update the create_menu_item endpoint (around line 1200):
 
+# In src/main.py
+
+# ... (keep all your other imports: json, cloudinary, Depends, Form, etc.)
+
 @app.post("/api/menu", response_model=MenuItemResponse)
 async def create_menu_item(
     name: str = Form(...),
@@ -1174,11 +1178,16 @@ async def create_menu_item(
     is_available: bool = Form(True),
     branch_id: Optional[int] = Form(None),
     ingredients: str = Form("[]"),
-    image: Optional[UploadFile] = File(None),
+    
+    # --- MODIFICATION START ---
+    image_url: Optional[str] = Form(None), # Accept an image URL directly
+    image: Optional[UploadFile] = File(None), # Keep file upload optional
+    # --- MODIFICATION END ---
+
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
-    # Auto-assign branch_id if not provided
+    # ... (keep your existing logic for branch_id and new_id generation)
     if branch_id is None:
         if hasattr(current_user, 'role') and current_user.role == "worker":
             first_permission = db.query(UserBranchPermission).filter(
@@ -1189,14 +1198,12 @@ async def create_menu_item(
             else:
                 raise HTTPException(status_code=400, detail="No branch assigned to worker")
         else:
-            branch_id = 1  # Default to Coimbatore Main
-
-    # Verify branch exists
+            branch_id = 1
+    
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
     if not branch:
         raise HTTPException(status_code=400, detail=f"Branch {branch_id} not found")
 
-    # Generate new numeric id string
     max_id_query = db.query(func.max(MenuItem.id)).scalar()
     max_id = 0
     if max_id_query:
@@ -1205,38 +1212,36 @@ async def create_menu_item(
         except (ValueError, TypeError):
             max_id = 0
     new_id = str(max_id + 1)
+    # --- End of existing logic ---
 
-    # Handle image upload to Cloudinary
-    cloudinary_url = None
-    if image and image.filename:
+    final_image_url = None
+
+    # --- MODIFICATION START ---
+    # Priority 1: Use the provided URL if it exists and is valid.
+    if image_url and image_url.strip():
+        final_image_url = image_url.strip()
+    # Priority 2: Fallback to uploading the file if no URL is given.
+    elif image and image.filename:
         try:
-            # Read image content
             contents = await image.read()
-
-            # Upload to Cloudinary with organized folder structure
             result = cloudinary.uploader.upload(
                 contents,
                 folder=f"bruvver/menu_items/branch_{branch_id}",
                 public_id=f"item_{new_id}_{name.lower().replace(' ', '_')}",
                 overwrite=True,
                 resource_type="image",
-                format="webp",  # Convert to WebP for better compression
+                format="webp",
                 quality="auto:good",
                 fetch_format="auto"
             )
-
-            cloudinary_url = result.get("secure_url")
-            logger.info(f"Successfully uploaded image to Cloudinary: {cloudinary_url}")
-
+            final_image_url = result.get("secure_url")
+            logger.info(f"Successfully uploaded image to Cloudinary: {final_image_url}")
         except Exception as e:
             logger.error(f"Cloudinary upload failed for menu item {new_id}: {e}")
-            # Don't fail the entire request, just log the error
-            cloudinary_url = 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&h=400&fit=crop'
-    else:
-        # Default image if no upload
-        cloudinary_url = 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&h=400&fit=crop'
+            final_image_url = None # Set to None on failure
+    # --- MODIFICATION END ---
 
-    # Create menu item with Cloudinary URL
+    # Create menu item with the final URL
     db_item = MenuItem(
         id=new_id,
         name=name,
@@ -1244,13 +1249,12 @@ async def create_menu_item(
         description=description,
         category=category,
         branch_id=branch_id,
-        image_url=cloudinary_url,  # Store Cloudinary URL
+        image_url=final_image_url, # Store the final URL (could be from URL input or upload)
         is_available=is_available
     )
+    # ... (keep the rest of your ingredient and commit logic)
     db.add(db_item)
     db.flush()
-
-    # Add ingredients
     ingredients_list = json.loads(ingredients)
     for ingredient in ingredients_list:
         db_ingredient = Ingredient(
@@ -1261,10 +1265,10 @@ async def create_menu_item(
             image_url=ingredient.get('image_url')
         )
         db.add(db_ingredient)
-
     db.commit()
     db.refresh(db_item)
     return db_item
+
 
 @app.put("/api/menu/{item_id}", response_model=MenuItemResponse)
 async def update_menu_item_api(
@@ -1275,43 +1279,32 @@ async def update_menu_item_api(
     category: Optional[str] = Form(None),
     is_available: str = Form("True"),
     ingredients: str = Form("[]"),
-    image: Optional[UploadFile] = File(None),
+    
+    # --- MODIFICATION START ---
+    image_url: Optional[str] = Form(None), # Accept an image URL directly
+    image: Optional[UploadFile] = File(None), # Keep file upload optional
+    # --- MODIFICATION END ---
+    
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
-    logger.info(f"Attempting to update item_id: {item_id}")
     db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Menu item not found")
 
     try:
-        # Keep existing image URL by default
+        # Start with the existing image URL
         final_image_url = db_item.image_url
 
-        # If new image uploaded, upload to Cloudinary
-        if image and image.filename:
+        # --- MODIFICATION START ---
+        # Priority 1: Use the provided URL if it exists.
+        if image_url and image_url.strip():
+            final_image_url = image_url.strip()
+        # Priority 2: Fallback to uploading a new file.
+        elif image and image.filename:
             try:
-                # Read image content
                 contents = await image.read()
-
-                # Get branch info for organized folder structure
                 branch_id = db_item.branch_id or 1
-
-                # Delete old Cloudinary image if it exists
-                if db_item.image_url and "cloudinary.com" in db_item.image_url:
-                    try:
-                        # Extract public_id from URL
-                        url_parts = db_item.image_url.split("/")
-                        if "bruvver" in db_item.image_url:
-                            # Find the public_id (everything after version number)
-                            version_index = next(i for i, part in enumerate(url_parts) if part.startswith("v"))
-                            public_id = "/".join(url_parts[version_index + 1:]).split(".")[0]
-                            cloudinary.uploader.destroy(public_id)
-                            logger.info(f"Deleted old Cloudinary image: {public_id}")
-                    except Exception as e:
-                        logger.warning(f"Failed to delete old Cloudinary image: {e}")
-
-                # Upload new image to Cloudinary
                 result = cloudinary.uploader.upload(
                     contents,
                     folder=f"bruvver/menu_items/branch_{branch_id}",
@@ -1322,24 +1315,22 @@ async def update_menu_item_api(
                     quality="auto:good",
                     fetch_format="auto"
                 )
-
                 final_image_url = result.get("secure_url")
                 logger.info(f"Successfully updated image in Cloudinary: {final_image_url}")
-
             except Exception as e:
                 logger.error(f"Cloudinary upload failed during update: {e}")
-                # Keep existing image on upload failure
-                pass
-
+                pass # Keep existing image on upload failure
+        # --- MODIFICATION END ---
+        
         # Update menu item fields
         db_item.name = name
         db_item.price = price
         db_item.description = description
         db_item.category = category
         db_item.is_available = is_available.lower() in ['true', '1', 't', 'y', 'yes']
-        db_item.image_url = final_image_url
-
-        # Replace ingredients
+        db_item.image_url = final_image_url # Store the final determined URL
+        
+        # ... (keep the rest of your ingredient and commit logic)
         db.query(Ingredient).filter(Ingredient.menu_item_id == item_id).delete(synchronize_session=False)
         ingredients_list = json.loads(ingredients)
         for ingredient_data in ingredients_list:
@@ -1351,10 +1342,8 @@ async def update_menu_item_api(
                 image_url=ingredient_data.get("image_url")
             )
             db.add(db_ingredient)
-
         db.commit()
         db.refresh(db_item)
-        logger.info(f"Successfully updated item_id: {item_id}")
         return db_item
 
     except Exception as e:
