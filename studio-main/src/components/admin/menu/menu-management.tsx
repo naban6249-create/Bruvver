@@ -101,24 +101,21 @@ export function MenuManagement() {
     }
   };
 
-  // ✅ FIXED: Now properly handles FormData from the dialog
   const handleSaveItem = async (formData: FormData) => {
     if (!branchId) return;
     
     try {
       const itemId = formData.get('id') as string;
       
-      // Ensure branch_id is in the FormData
-      if (!formData.has('branch_id')) {
-        formData.append('branch_id', branchId);
-      }
+      // Always ensure branch_id is in FormData
+      formData.set('branch_id', branchId);
       
       if (!itemId) {
         // Create new item
         await addMenuItem(formData);
         toast({ title: "Success", description: "Menu item created." });
       } else {
-        // Update existing item - pass FormData and itemId separately
+        // Update existing item
         await updateMenuItem(formData, itemId);
         toast({ title: "Success", description: "Menu item updated." });
       }
