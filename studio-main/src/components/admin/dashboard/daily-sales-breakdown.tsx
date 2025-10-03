@@ -12,7 +12,7 @@ import type { MenuItem } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { MenuItemDialog } from "@/components/admin/menu/menu-item-dialog";
 import { getMenuItems, updateMenuItem } from "@/lib/menu-service";
-import { getDailySales, updateDailySale, getSalesSummary } from "@/lib/sales-service";
+import { getDailySales, updateDailySale } from "@/lib/sales-service";
 import { useAuth } from "@/lib/auth-context";
 
 interface SaleWithDetails extends MenuItem {
@@ -32,7 +32,6 @@ export function DailySalesBreakdown() {
     const [totalRevenue, setTotalRevenue] = React.useState(0);
     const { toast } = useToast();
 
-    // Check permissions for current branch
     const currentBranchId = branchId ? parseInt(branchId) : null;
     const hasViewAccess = currentBranchId ? hasPermission(currentBranchId, 'view_only') : false;
     const hasFullAccess = currentBranchId ? hasPermission(currentBranchId, 'full_access') : false;
@@ -68,16 +67,13 @@ export function DailySalesBreakdown() {
 
         setIsLoading(true);
         try {
-            // Align with server 'today' by omitting date_filter; backend defaults to server-local date
             const [menuItems, dailySales] = await Promise.all([
                 getMenuItems(branchId),
                 getDailySales(branchId)
             ]);
             
-            // Create a map of sales by item ID for quick lookup
             const salesMap = new Map(dailySales.map(sale => [sale.itemId, sale]));
             
-            // Combine menu items with their sales data
             const itemsWithSales = menuItems.map(item => {
                 const sale = salesMap.get(item.id);
                 const quantitySold = sale ? sale.quantity : 0;
@@ -89,7 +85,6 @@ export function DailySalesBreakdown() {
             
             setSalesDetails(itemsWithSales);
             
-            // Calculate total revenue from displayed items to match table sum
             const revenue = itemsWithSales.reduce((sum, item) => sum + item.price * item.quantitySold, 0);
             setTotalRevenue(revenue);
             
@@ -114,7 +109,6 @@ export function DailySalesBreakdown() {
     const handleQuantityChange = async (itemId: string, newQuantity: number) => {
         if (newQuantity < 0 || !branchId || !hasFullAccess) return;
 
-        // Optimistic UI update for snappy UX
         const prev = salesDetails;
         const updated = salesDetails.map((it) =>
             it.id === itemId ? { ...it, quantitySold: newQuantity } : it
@@ -125,7 +119,6 @@ export function DailySalesBreakdown() {
 
         try {
             await updateDailySale(branchId, itemId, newQuantity);
-            // Refetch from server to ensure UI matches backend
             await fetchSalesSummary();
             toast({
                 title: "Quantity Updated",
@@ -133,7 +126,6 @@ export function DailySalesBreakdown() {
             });
         } catch (error) {
             console.error("Failed to update quantity:", error);
-            // Revert UI on error
             setSalesDetails(prev);
             const revertedRevenue = prev.reduce((sum, it) => sum + it.price * it.quantitySold, 0);
             setTotalRevenue(revertedRevenue);
@@ -158,15 +150,16 @@ export function DailySalesBreakdown() {
         setIsEditDialogOpen(true);
     };
 
+    // === START: CORRECTED FUNCTION ===
     const handleSaveItem = async (itemData: FormData) => {
         if (!branchId) return;
 
-        // The dialog passes FormData, which is what the service function expects.
         try {
-            const itemId = itemData.get('id') as string;
-            // The service function `updateMenuItem` is expecting FormData and the item ID.
-            await updateMenuItem(itemData, itemId); 
-            await fetchSalesSummary(); // Refetch all sales data to reflect potential price changes etc.
+            // The service function now likely extracts the ID from the FormData itself.
+            // We only need to pass the single FormData object.
+            await updateMenuItem(itemData); 
+            
+            await fetchSalesSummary(); // Refetch all data to reflect changes.
             toast({ title: "Success", description: `Menu item updated.` });
         } catch (error) {
             console.error('Error updating menu item:', error);
@@ -177,10 +170,10 @@ export function DailySalesBreakdown() {
             setSelectedItem(null);
         }
     };
+    // === END: CORRECTED FUNCTION ===
 
     const overallTotalItemsSold = salesDetails.reduce((acc, item) => acc + item.quantitySold, 0);
 
-    // Show loading state
     if (isLoading) {
         return (
             <Card className="mt-8">
@@ -191,7 +184,6 @@ export function DailySalesBreakdown() {
         );
     }
 
-    // Show branch selection prompt
     if (!branchId) {
         return (
             <Card className="mt-8">
@@ -208,7 +200,6 @@ export function DailySalesBreakdown() {
         );
     }
 
-    // Show access denied
     if (!hasViewAccess) {
         return (
             <Card className="mt-8">
@@ -258,23 +249,15 @@ export function DailySalesBreakdown() {
                                     <Card key={item.id} className="p-4">
                                         <div className="flex items-start gap-3">
                                             <div className="flex-shrink-0">
-                                                {(() => {
-                                                    const imgSrc = item.imageUrl && item.imageUrl.trim().length > 0
-                                                        ? item.imageUrl
-                                                        : 'https://picsum.photos/64/64';
-                                                    const isRemote = !imgSrc.startsWith('/');
-                                                    return (
-                                                        <Image
-                                                            alt={item.name}
-                                                            className="aspect-square rounded-md object-cover"
-                                                            height="48"
-                                                            src={imgSrc}
-                                                            width="48"
-                                                            unoptimized={isRemote}
-                                                            data-ai-hint="coffee drink"
-                                                        />
-                                                    );
-                                                })()}
+                                                <Image
+                                                    alt={item.name}
+                                                    className="aspect-square rounded-md object-cover"
+                                                    height="48"
+                                                    src={item.image_url || 'https://placehold.co/48x48/png?text=N/A'}
+                                                    width="48"
+                                                    unoptimized
+                                                    onError={(e) => { e.currentTarget.src = 'https://placehold.co/48x48/png?text=N/A' }}
+                                                />
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-start justify-between">
@@ -353,23 +336,15 @@ export function DailySalesBreakdown() {
                                         {salesDetails.map(item => (
                                             <TableRow key={item.id}>
                                                 <TableCell>
-                                                    {(() => {
-                                                        const imgSrc = item.imageUrl && item.imageUrl.trim().length > 0
-                                                            ? item.imageUrl
-                                                            : 'https://picsum.photos/64/64';
-                                                        const isRemote = !imgSrc.startsWith('/');
-                                                        return (
-                                                            <Image
-                                                                alt={item.name}
-                                                                className="aspect-square rounded-md object-cover"
-                                                                height="64"
-                                                                src={imgSrc}
-                                                                width="64"
-                                                                unoptimized={isRemote}
-                                                                data-ai-hint="coffee drink"
-                                                            />
-                                                        );
-                                                    })()}
+                                                     <Image
+                                                        alt={item.name}
+                                                        className="aspect-square rounded-md object-cover"
+                                                        height="64"
+                                                        src={item.image_url || 'https://placehold.co/64x64/png?text=N/A'}
+                                                        width="64"
+                                                        unoptimized
+                                                        onError={(e) => { e.currentTarget.src = 'https://placehold.co/64x64/png?text=N/A' }}
+                                                    />
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="font-medium">{item.name}</div>
