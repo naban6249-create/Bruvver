@@ -1,4 +1,4 @@
-// lib/types.ts - Improved version with fixes
+// lib/types.ts
 
 export interface Branch {
   id: number;
@@ -63,34 +63,18 @@ export interface Ingredient {
   image_url?: string;
 }
 
-// ✅ FIXED: MenuItem with proper types
 export interface MenuItem {
-  id: string | number;     // ✅ Accept both (backend sends number, we convert to string)
+  id: string;
   name: string;
   price: number;
   description?: string;
-  imageUrl?: string;       // Frontend camelCase
-  image_url?: string;      // Backend snake_case (for compatibility)
+  imageUrl?: string;
   category: string;
   is_available: boolean;
-  branchId: number;        // ✅ REQUIRED - every menu item belongs to a branch
-  branch_id?: number;      // Backend snake_case (for compatibility)
+  branchId?: number;
   ingredients: Ingredient[];
   created_at?: string;
   updated_at?: string;
-}
-
-// ✅ NEW: Type for creating/updating menu items
-export interface MenuItemFormData {
-  id?: string | number;
-  name: string;
-  price: number;
-  description?: string;
-  category: string;
-  is_available: boolean;
-  branch_id: number;       // Always required for create/update
-  image_url?: string;
-  image?: File;            // For file uploads
 }
 
 export interface DailySale {
@@ -142,7 +126,7 @@ export interface Order {
 
 export interface OrderItem {
   id: number;
-  menu_item_id: string | number;  // ✅ Accept both types
+  menu_item_id: string;
   quantity: number;
   unit_price: number;
   total_price: number;
@@ -163,28 +147,3 @@ export interface Inventory {
   created_at: string;
   updated_at: string;
 }
-
-// ✅ NEW: Helper type guards
-export const isMenuItem = (item: any): item is MenuItem => {
-  return item && 
-         (typeof item.id === 'string' || typeof item.id === 'number') &&
-         typeof item.name === 'string' &&
-         typeof item.price === 'number';
-};
-
-// ✅ NEW: Type conversion helpers
-export const normalizeMenuItem = (raw: any): MenuItem => {
-  return {
-    id: String(raw.id),                                    // Convert to string
-    name: raw.name,
-    price: Number(raw.price ?? 0),
-    description: raw.description ?? '',
-    imageUrl: raw.image_url ?? raw.imageUrl ?? '',
-    category: raw.category ?? '',
-    is_available: Boolean(raw.is_available ?? raw.isAvailable ?? true),
-    branchId: Number(raw.branch_id ?? raw.branchId),      // ✅ Always require branch_id
-    ingredients: Array.isArray(raw.ingredients) ? raw.ingredients : [],
-    created_at: raw.created_at,
-    updated_at: raw.updated_at,
-  };
-};
