@@ -147,8 +147,25 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and start automation"""
-    # This single line replaces the old configuration block
-    verify_cloudinary_config() 
+    
+    # Configure Cloudinary - IMPROVED VERSION
+    cloudinary_url = os.getenv("CLOUDINARY_URL")
+    if cloudinary_url:
+        try:
+            import cloudinary
+            
+            # Let cloudinary library parse the URL automatically
+            cloudinary.config()  # This reads from CLOUDINARY_URL env var
+            
+            # Verify configuration
+            if cloudinary.config().cloud_name:
+                logger.info(f"Cloudinary configured successfully: {cloudinary.config().cloud_name}")
+            else:
+                logger.error("Cloudinary cloud_name is empty after config")
+        except Exception as e:
+            logger.error(f"Failed to configure Cloudinary: {e}")
+    else:
+        logger.warning("CLOUDINARY_URL not found in environment variables") 
     
     # Initialize data just once
     await initialize_sample_data()
@@ -181,6 +198,22 @@ async def shutdown_event():
             daily_export_scheduler.shutdown(wait=False)
     except Exception:
         logger.exception("Failed to shutdown daily export scheduler")
+
+@app.get("/api/test/cloudinary")
+async def test_cloudinary():
+    """Test Cloudinary configuration"""
+    try:
+        import cloudinary
+        config = cloudinary.config()
+        
+        return {
+            "configured": bool(config.cloud_name),
+            "cloud_name": config.cloud_name,
+            "has_api_key": bool(config.api_key),
+            "has_api_secret": bool(config.api_secret),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # -------------------------
 # GOOGLE SHEETS DAILY EXPORT
