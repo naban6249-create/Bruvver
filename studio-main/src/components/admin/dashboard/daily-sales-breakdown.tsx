@@ -72,11 +72,11 @@ export function DailySalesBreakdown() {
                 getDailySales(branchId)
             ]);
             
-            // ✅ CORRECTED: Map declaration is now more flexible
-            const salesMap = new Map<string | number, DailySale>(dailySales.map(sale => [sale.itemId, sale]));
+            const salesMap = new Map<string | number, DailySale>(
+                dailySales.map(sale => [sale.itemId, sale])
+            );
             
             const itemsWithSales = menuItems.map(item => {
-                // ✅ CORRECTED: Convert item.id to string for reliable lookup
                 const sale = salesMap.get(String(item.id)); 
                 const quantitySold = sale ? sale.quantity : 0;
                 return {
@@ -87,7 +87,9 @@ export function DailySalesBreakdown() {
             
             setSalesDetails(itemsWithSales);
             
-            const revenue = itemsWithSales.reduce((sum, item) => sum + item.price * item.quantitySold, 0);
+            const revenue = itemsWithSales.reduce((sum, item) => 
+                sum + item.price * item.quantitySold, 0
+            );
             setTotalRevenue(revenue);
             
         } catch (error) {
@@ -116,7 +118,9 @@ export function DailySalesBreakdown() {
             it.id === itemId ? { ...it, quantitySold: newQuantity } : it
         );
         setSalesDetails(updated);
-        const optimisticRevenue = updated.reduce((sum, it) => sum + it.price * it.quantitySold, 0);
+        const optimisticRevenue = updated.reduce((sum, it) => 
+            sum + it.price * it.quantitySold, 0
+        );
         setTotalRevenue(optimisticRevenue);
 
         try {
@@ -125,7 +129,9 @@ export function DailySalesBreakdown() {
         } catch (error) {
             console.error("Failed to update quantity:", error);
             setSalesDetails(prev);
-            const revertedRevenue = prev.reduce((sum, it) => sum + it.price * it.quantitySold, 0);
+            const revertedRevenue = prev.reduce((sum, it) => 
+                sum + it.price * it.quantitySold, 0
+            );
             setTotalRevenue(revertedRevenue);
             toast({
                 title: "Error",
@@ -155,9 +161,7 @@ export function DailySalesBreakdown() {
                 throw new Error('Branch ID is required');
             }
             
-            // ✅ CORRECTED: Pass branchId as the third argument
             await updateMenuItem(itemData, itemId, branchId);
-            
             await fetchSalesSummary();
             toast({ title: "Success", description: `Menu item updated.` });
         } catch (error) {
@@ -173,7 +177,15 @@ export function DailySalesBreakdown() {
         }
     };
 
-    const overallTotalItemsSold = salesDetails.reduce((acc, item) => acc + item.quantitySold, 0);
+    const getImageUrl = (item: MenuItem): string => {
+        // Try imageUrl first (camelCase), fallback to any other format
+        const url = item.imageUrl || (item as any).image_url || '';
+        return url.trim() || 'https://placehold.co/64x64/png?text=N/A';
+    };
+
+    const overallTotalItemsSold = salesDetails.reduce((acc, item) => 
+        acc + item.quantitySold, 0
+    );
 
     if (isLoading) {
         return (
@@ -232,15 +244,21 @@ export function DailySalesBreakdown() {
                             </CardDescription>
                         </div>
                         <div className="text-right">
-                            <p className="font-semibold text-lg text-foreground/90">{currentDate.split(',')[0]}</p>
-                            <p className="font-medium text-foreground/80">{currentDate.split(',').slice(1).join(',')}</p>
+                            <p className="font-semibold text-lg text-foreground/90">
+                                {currentDate.split(',')[0]}
+                            </p>
+                            <p className="font-medium text-foreground/80">
+                                {currentDate.split(',').slice(1).join(',')}
+                            </p>
                         </div>
                     </div>
                 </CardHeader>
                 <CardContent>
                     {salesDetails.length === 0 ? (
                         <div className="text-center py-10">
-                            <p className="text-muted-foreground">No menu items found for this branch.</p>
+                            <p className="text-muted-foreground">
+                                No menu items found for this branch.
+                            </p>
                         </div>
                     ) : (
                         <>
@@ -254,22 +272,33 @@ export function DailySalesBreakdown() {
                                                     alt={item.name}
                                                     className="aspect-square rounded-md object-cover"
                                                     height="48"
-                                                    src={item.imageUrl || 'https://placehold.co/48x48/png?text=N/A'}
+                                                    src={getImageUrl(item)}
                                                     width="48"
                                                     unoptimized
-                                                    onError={(e) => { e.currentTarget.src = 'https://placehold.co/48x48/png?text=N/A' }}
+                                                    onError={(e) => { 
+                                                        e.currentTarget.src = 'https://placehold.co/48x48/png?text=N/A';
+                                                    }}
                                                 />
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-start justify-between">
                                                     <div className="min-w-0 flex-1">
-                                                        <h4 className="font-medium text-sm truncate">{item.name}</h4>
+                                                        <h4 className="font-medium text-sm truncate">
+                                                            {item.name}
+                                                        </h4>
                                                         {item.description && (
-                                                            <p className="text-xs text-muted-foreground line-clamp-2">{item.description}</p>
+                                                            <p className="text-xs text-muted-foreground line-clamp-2">
+                                                                {item.description}
+                                                            </p>
                                                         )}
                                                     </div>
                                                     {hasFullAccess && (
-                                                        <Button variant="ghost" size="sm" onClick={() => handleEditItem(item)} className="ml-2">
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="sm" 
+                                                            onClick={() => handleEditItem(item)} 
+                                                            className="ml-2"
+                                                        >
                                                             <Pencil className="h-4 w-4" />
                                                         </Button>
                                                     )}
@@ -281,35 +310,49 @@ export function DailySalesBreakdown() {
                                                         <span>₹{item.price.toFixed(2)}</span>
                                                     </div>
                                                     <div className="flex justify-between items-center">
-                                                        <span className="text-sm text-muted-foreground">Quantity:</span>
+                                                        <span className="text-sm text-muted-foreground">
+                                                            Quantity:
+                                                        </span>
                                                         {hasFullAccess ? (
                                                             <div className="flex items-center gap-1">
                                                                 <Button 
                                                                     variant="outline" 
                                                                     size="icon" 
                                                                     className="h-6 w-6"
-                                                                    onClick={() => handleQuantityChange(item.id, item.quantitySold - 1)}
+                                                                    onClick={() => handleQuantityChange(
+                                                                        item.id, 
+                                                                        item.quantitySold - 1
+                                                                    )}
                                                                     disabled={item.quantitySold === 0}
                                                                 >
                                                                     <Minus className="h-3 w-3" />
                                                                 </Button>
-                                                                <span className="text-sm font-medium min-w-[2rem] text-center">{item.quantitySold}</span>
+                                                                <span className="text-sm font-medium min-w-[2rem] text-center">
+                                                                    {item.quantitySold}
+                                                                </span>
                                                                 <Button 
                                                                     variant="outline" 
                                                                     size="icon" 
                                                                     className="h-6 w-6"
-                                                                    onClick={() => handleQuantityChange(item.id, item.quantitySold + 1)}
+                                                                    onClick={() => handleQuantityChange(
+                                                                        item.id, 
+                                                                        item.quantitySold + 1
+                                                                    )}
                                                                 >
                                                                     <Plus className="h-3 w-3" />
                                                                 </Button>
                                                             </div>
                                                         ) : (
-                                                            <span className="text-sm font-medium">{item.quantitySold}</span>
+                                                            <span className="text-sm font-medium">
+                                                                {item.quantitySold}
+                                                            </span>
                                                         )}
                                                     </div>
                                                     <div className="flex justify-between text-sm font-medium">
                                                         <span>Revenue:</span>
-                                                        <span className="text-green-600">₹{(item.price * item.quantitySold).toFixed(2)}</span>
+                                                        <span className="text-green-600">
+                                                            ₹{(item.price * item.quantitySold).toFixed(2)}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -326,10 +369,14 @@ export function DailySalesBreakdown() {
                                             <TableHead className="w-[100px]">Image</TableHead>
                                             <TableHead>Menu Item</TableHead>
                                             <TableHead className="text-right">Price</TableHead>
-                                            <TableHead className="w-[150px] text-right">Quantity Sold</TableHead>
+                                            <TableHead className="w-[150px] text-right">
+                                                Quantity Sold
+                                            </TableHead>
                                             <TableHead className="text-right">Revenue</TableHead>
                                             {hasFullAccess && (
-                                                <TableHead className="w-[100px] text-right">Actions</TableHead>
+                                                <TableHead className="w-[100px] text-right">
+                                                    Actions
+                                                </TableHead>
                                             )}
                                         </TableRow>
                                     </TableHeader>
@@ -337,20 +384,24 @@ export function DailySalesBreakdown() {
                                         {salesDetails.map(item => (
                                             <TableRow key={item.id}>
                                                 <TableCell>
-                                                     <Image
+                                                    <Image
                                                         alt={item.name}
                                                         className="aspect-square rounded-md object-cover"
                                                         height="64"
-                                                        src={item.imageUrl || 'https://placehold.co/64x64/png?text=N/A'}
+                                                        src={getImageUrl(item)}
                                                         width="64"
                                                         unoptimized
-                                                        onError={(e) => { e.currentTarget.src = 'https://placehold.co/64x64/png?text=N/A' }}
+                                                        onError={(e) => { 
+                                                            e.currentTarget.src = 'https://placehold.co/64x64/png?text=N/A';
+                                                        }}
                                                     />
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="font-medium">{item.name}</div>
                                                     {item.description && (
-                                                        <div className="text-sm text-muted-foreground">{item.description}</div>
+                                                        <div className="text-sm text-muted-foreground">
+                                                            {item.description}
+                                                        </div>
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="text-right">
@@ -364,23 +415,33 @@ export function DailySalesBreakdown() {
                                                                     variant="outline" 
                                                                     size="icon" 
                                                                     className="h-8 w-8"
-                                                                    onClick={() => handleQuantityChange(item.id, item.quantitySold - 1)}
+                                                                    onClick={() => handleQuantityChange(
+                                                                        item.id, 
+                                                                        item.quantitySold - 1
+                                                                    )}
                                                                     disabled={item.quantitySold === 0}
                                                                 >
                                                                     <Minus className="h-4 w-4" />
                                                                 </Button>
-                                                                <span className="text-center w-8 font-medium">{item.quantitySold}</span>
+                                                                <span className="text-center w-8 font-medium">
+                                                                    {item.quantitySold}
+                                                                </span>
                                                                 <Button 
                                                                     variant="outline" 
                                                                     size="icon" 
                                                                     className="h-8 w-8"
-                                                                    onClick={() => handleQuantityChange(item.id, item.quantitySold + 1)}
+                                                                    onClick={() => handleQuantityChange(
+                                                                        item.id, 
+                                                                        item.quantitySold + 1
+                                                                    )}
                                                                 >
                                                                     <Plus className="h-4 w-4" />
                                                                 </Button>
                                                             </>
                                                         ) : (
-                                                            <span className="text-center font-medium">{item.quantitySold}</span>
+                                                            <span className="text-center font-medium">
+                                                                {item.quantitySold}
+                                                            </span>
                                                         )}
                                                     </div>
                                                 </TableCell>
@@ -389,7 +450,11 @@ export function DailySalesBreakdown() {
                                                 </TableCell>
                                                 {hasFullAccess && (
                                                     <TableCell className="text-right">
-                                                        <Button variant="outline" size="sm" onClick={() => handleEditItem(item)}>
+                                                        <Button 
+                                                            variant="outline" 
+                                                            size="sm" 
+                                                            onClick={() => handleEditItem(item)}
+                                                        >
                                                             <Pencil className="mr-2 h-4 w-4" /> Edit
                                                         </Button>
                                                     </TableCell>
