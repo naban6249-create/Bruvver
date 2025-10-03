@@ -90,7 +90,6 @@ export function MenuManagement() {
   const confirmDeleteItem = async () => {
     if(!selectedItem || !branchId) return;
     try {
-      // Assuming deleteMenuItem requires the item ID and branchId
       await deleteMenuItem(selectedItem.id, branchId);
       await fetchMenuItems();
       toast({ title: "Success", description: "Menu item deleted." });
@@ -102,30 +101,36 @@ export function MenuManagement() {
     }
   }
 
+  // === START: YOUR IMPROVED FUNCTION ===
   const handleSaveItem = async (itemData: FormData) => {
     if (!branchId) return;
     
-    // Determine if it's a new item based on whether an ID is present on the form data.
+    // Add branchId to FormData
+    itemData.append('branch_id', branchId);
+    
     const isNew = !itemData.get('id');
-  
+
     try {
       if (isNew) {
-        await addMenuItem(itemData, branchId);
+        // ✅ FIXED: Only pass itemData (which now includes branch_id)
+        await addMenuItem(itemData);
       } else {
         const itemId = itemData.get('id') as string;
-        await updateMenuItem(itemData, itemId, branchId);
+        // ✅ FIXED: Only pass itemData and itemId
+        await updateMenuItem(itemData, itemId);
       }
       await fetchMenuItems();
       toast({ title: "Success", description: `Menu item ${isNew ? 'added' : 'updated'}.` });
     } catch(error) {
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-        toast({ title: "Error", description: `Could not save menu item: ${errorMessage}`, variant: "destructive" });
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      toast({ title: "Error", description: `Could not save menu item: ${errorMessage}`, variant: "destructive" });
     } finally {
       setIsNewItemDialogOpen(false);
       setIsEditItemDialogOpen(false);
       setSelectedItem(null);
     }
   };
+  // === END: YOUR IMPROVED FUNCTION ===
 
   return (
     <>
@@ -170,7 +175,6 @@ export function MenuManagement() {
               {items.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="hidden sm:table-cell">
-                    {/* === START: ROBUST IMAGE COMPONENT === */}
                     <Image
                       alt={item.name}
                       className="aspect-square rounded-md object-cover"
@@ -183,7 +187,6 @@ export function MenuManagement() {
                         e.currentTarget.onerror = null; // Prevents infinite loops
                       }}
                     />
-                    {/* === END: ROBUST IMAGE COMPONENT === */}
                   </TableCell>
                   <TableCell className="font-medium">{item.name}</TableCell>
                    <TableCell>
