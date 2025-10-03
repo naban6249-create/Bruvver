@@ -34,10 +34,11 @@ import { MenuItemDialog } from "./menu-item-dialog";
 import { DeleteConfirmationDialog } from "@/components/admin/delete-confirmation-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getMenuItems, addMenuItem, updateMenuItem, deleteMenuItem } from "@/lib/menu-service";
+import { v4 as uuidv4 } from 'uuid';
 
 export function MenuManagement() {
-  const { user } = useAuth();
-  const role = user?.role;
+  const { user } = useAuth(); // Get the user from the auth context
+  const role = user?.role; // Get the role from the user object
   const searchParams = useSearchParams();
   const branchId = searchParams.get('branchId');
   const [items, setItems] = React.useState<MenuItem[]>([]);
@@ -101,36 +102,30 @@ export function MenuManagement() {
     }
   }
 
-  // === START: YOUR IMPROVED FUNCTION ===
-  const handleSaveItem = async (itemData: FormData) => {
+  const handleSaveItem = async (item: MenuItem) => {
     if (!branchId) return;
-    
-    // Add branchId to FormData
-    itemData.append('branch_id', branchId);
-    
-    const isNew = !itemData.get('id');
+    const isNew = !item.id;
+    const branchIdNum = parseInt(branchId, 10);
 
     try {
       if (isNew) {
-        // ✅ FIXED: Only pass itemData (which now includes branch_id)
-        await addMenuItem(itemData);
+        // Omit id for create and ensure numeric branchId
+        const { id, ...rest } = item;
+        await addMenuItem({ ...(rest as Omit<MenuItem, 'id'>), branchId: branchIdNum } as any);
       } else {
-        const itemId = itemData.get('id') as string;
-        // ✅ FIXED: Only pass itemData and itemId
-        await updateMenuItem(itemData, itemId);
+        // For update, send full item with numeric branchId
+        await updateMenuItem({ ...item, branchId: branchIdNum } as any);
       }
       await fetchMenuItems();
       toast({ title: "Success", description: `Menu item ${isNew ? 'added' : 'updated'}.` });
     } catch(error) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      toast({ title: "Error", description: `Could not save menu item: ${errorMessage}`, variant: "destructive" });
+        toast({ title: "Error", description: `Could not save menu item.`, variant: "destructive" });
     } finally {
       setIsNewItemDialogOpen(false);
       setIsEditItemDialogOpen(false);
       setSelectedItem(null);
     }
   };
-  // === END: YOUR IMPROVED FUNCTION ===
 
   return (
     <>
@@ -161,9 +156,7 @@ export function MenuManagement() {
                   <span className="sr-only">Image</span>
                 </TableHead>
                 <TableHead>Name</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead className="hidden md:table-cell">Category</TableHead>
+                <TableHead className="hidden md:table-cell">Ingredients</TableHead>
                 {role === 'admin' && (
                   <TableHead>
                     <span className="sr-only">Actions</span>
@@ -175,32 +168,41 @@ export function MenuManagement() {
               {items.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="hidden sm:table-cell">
-                    <Image
-                      alt={item.name}
-                      className="aspect-square rounded-md object-cover"
-                      height="64"
-                      src={item.image_url || 'https://placehold.co/64x64/png?text=No+Image'}
-                      width="64"
-                      unoptimized={!item.image_url?.includes('cloudinary')}
-                      onError={(e) => {
-                        e.currentTarget.src = 'https://placehold.co/64x64/png?text=No+Image';
-                        e.currentTarget.onerror = null; // Prevents infinite loops
-                      }}
-                    />
+                    {(() => {
+                      const imgSrc = item.imageUrl && item.imageUrl.trim().length > 0
+                        ? item.imageUrl
+                        : 'https://picsum.photos/64/64';
+                      const isRemote = !imgSrc.startsWith('/');
+                      return (
+                        <Image
+                          alt={item.name}
+                          className="aspect-square rounded-md object-cover"
+                          height="64"
+                          src={imgSrc}
+                          width="64"
+                          unoptimized={isRemote}
+                          data-ai-hint="coffee drink"
+                        />
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="font-medium">{item.name}</TableCell>
-                   <TableCell>
-                    <Badge variant={item.is_available ? "default" : "outline"}>
-                      {item.is_available ? "Available" : "Unavailable"}
-                    </Badge>
+                  <TableCell className="hidden md:table-cell">
+                    <div className="flex flex-wrap gap-1">
+                        {item.ingredients.map(ing => (
+                            <Badge variant="outline" key={ing.name}>{ing.name}</Badge>
+                        ))}
+                    </div>
                   </TableCell>
-                  <TableCell>₹{item.price.toFixed(2)}</TableCell>
-                  <TableCell className="hidden md:table-cell">{item.category}</TableCell>
                   {role === 'admin' && (
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button aria-haspopup="true" size="icon" variant="ghost">
+                          <Button
+                            aria-haspopup="true"
+                            size="icon"
+                            variant="ghost"
+                          >
                             <MoreHorizontal className="h-4 w-4" />
                             <span className="sr-only">Toggle menu</span>
                           </Button>
