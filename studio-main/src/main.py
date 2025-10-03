@@ -2966,6 +2966,37 @@ async def trigger_daily_reset(current_user: Admin = Depends(get_current_active_u
         logger.exception("Daily reset failed")
         raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
 
+@app.post("/api/admin/cleanup-images")
+async def cleanup_broken_images(
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Remove broken image URLs from database (Admin only)"""
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Update broken static images
+    result1 = db.execute(text("""
+        UPDATE menu_items 
+        SET image_url = NULL 
+        WHERE image_url LIKE '/static/images/%'
+    """))
+    
+    # Update broken Unsplash URLs
+    result2 = db.execute(text("""
+        UPDATE menu_items 
+        SET image_url = NULL 
+        WHERE image_url LIKE '%unsplash.com%'
+    """))
+    
+    db.commit()
+    
+    return {
+        "static_images_cleared": result1.rowcount or 0,
+        "unsplash_images_cleared": result2.rowcount or 0,
+        "message": "Broken images cleared. Re-upload new images via Cloudinary."
+    }
+
 
 # -------------------------
 # Categories endpoint
