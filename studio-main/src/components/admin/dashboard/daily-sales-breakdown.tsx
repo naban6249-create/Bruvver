@@ -150,15 +150,12 @@ export function DailySalesBreakdown() {
         setIsEditDialogOpen(true);
     };
 
-    // ✅ CORRECTED: This function now correctly calls the updated service.
     const handleSaveItem = async (itemData: FormData) => {
         if (!branchId) return;
 
         try {
             const itemId = itemData.get('id') as string;
-            // This call now matches the updated menu-service.ts function signature
             await updateMenuItem(itemData, itemId); 
-            
             await fetchSalesSummary();
             toast({ title: "Success", description: `Menu item updated.` });
         } catch (error) {
@@ -248,15 +245,17 @@ export function DailySalesBreakdown() {
                                     <Card key={item.id} className="p-4">
                                         <div className="flex items-start gap-3">
                                             <div className="flex-shrink-0">
+                                                {/* === START: CORRECTED LINE === */}
                                                 <Image
                                                     alt={item.name}
                                                     className="aspect-square rounded-md object-cover"
                                                     height="48"
-                                                    src={item.image_url || 'https://placehold.co/48x48/png?text=N/A'}
+                                                    src={item.imageUrl || 'https://placehold.co/48x48/png?text=N/A'}
                                                     width="48"
                                                     unoptimized
                                                     onError={(e) => { e.currentTarget.src = 'https://placehold.co/48x48/png?text=N/A' }}
                                                 />
+                                                {/* === END: CORRECTED LINE === */}
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-start justify-between">
@@ -335,15 +334,17 @@ export function DailySalesBreakdown() {
                                         {salesDetails.map(item => (
                                             <TableRow key={item.id}>
                                                 <TableCell>
+                                                    {/* === START: CORRECTED LINE === */}
                                                      <Image
                                                         alt={item.name}
                                                         className="aspect-square rounded-md object-cover"
                                                         height="64"
-                                                        src={item.image_url || 'https://placehold.co/64x64/png?text=N/A'}
+                                                        src={item.imageUrl || 'https://placehold.co/64x64/png?text=N/A'}
                                                         width="64"
                                                         unoptimized
                                                         onError={(e) => { e.currentTarget.src = 'https://placehold.co/64x64/png?text=N/A' }}
                                                     />
+                                                    {/* === END: CORRECTED LINE === */}
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="font-medium">{item.name}</div>
