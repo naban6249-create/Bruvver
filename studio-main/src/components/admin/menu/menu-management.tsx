@@ -34,11 +34,10 @@ import { MenuItemDialog } from "./menu-item-dialog";
 import { DeleteConfirmationDialog } from "@/components/admin/delete-confirmation-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getMenuItems, addMenuItem, updateMenuItem, deleteMenuItem } from "@/lib/menu-service";
-import { v4 as uuidv4 } from 'uuid';
 
 export function MenuManagement() {
-  const { user } = useAuth(); // Get the user from the auth context
-  const role = user?.role; // Get the role from the user object
+  const { user } = useAuth();
+  const role = user?.role;
   const searchParams = useSearchParams();
   const branchId = searchParams.get('branchId');
   const [items, setItems] = React.useState<MenuItem[]>([]);
@@ -52,7 +51,7 @@ export function MenuManagement() {
     if (!branchId) {
       setItems([]);
       return;
-    };
+    }
     try {
       const menuItems = await getMenuItems(branchId);
       setItems(menuItems);
@@ -61,7 +60,7 @@ export function MenuManagement() {
         title: "Error",
         description: "Could not load menu items.",
         variant: "destructive"
-      })
+      });
     }
   }, [branchId, toast]);
 
@@ -100,26 +99,38 @@ export function MenuManagement() {
       setIsDeleteDialogOpen(false);
       setSelectedItem(null);
     }
-  }
+  };
 
-  const handleSaveItem = async (item: MenuItem) => {
+  // ✅ FIXED: Now properly handles FormData from the dialog
+  const handleSaveItem = async (formData: FormData) => {
     if (!branchId) return;
-    const isNew = !item.id;
-    const branchIdNum = parseInt(branchId, 10);
-
+    
     try {
-      if (isNew) {
-        // Omit id for create and ensure numeric branchId
-        const { id, ...rest } = item;
-        await addMenuItem({ ...(rest as Omit<MenuItem, 'id'>), branchId: branchIdNum } as any);
-      } else {
-        // For update, send full item with numeric branchId
-        await updateMenuItem({ ...item, branchId: branchIdNum } as any);
+      const itemId = formData.get('id') as string;
+      
+      // Ensure branch_id is in the FormData
+      if (!formData.has('branch_id')) {
+        formData.append('branch_id', branchId);
       }
+      
+      if (!itemId) {
+        // Create new item
+        await addMenuItem(formData);
+        toast({ title: "Success", description: "Menu item created." });
+      } else {
+        // Update existing item - pass FormData and itemId separately
+        await updateMenuItem(formData, itemId);
+        toast({ title: "Success", description: "Menu item updated." });
+      }
+      
       await fetchMenuItems();
-      toast({ title: "Success", description: `Menu item ${isNew ? 'added' : 'updated'}.` });
-    } catch(error) {
-        toast({ title: "Error", description: `Could not save menu item.`, variant: "destructive" });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      toast({ 
+        title: "Error", 
+        description: `Could not save menu item: ${errorMessage}`, 
+        variant: "destructive" 
+      });
     } finally {
       setIsNewItemDialogOpen(false);
       setIsEditItemDialogOpen(false);
