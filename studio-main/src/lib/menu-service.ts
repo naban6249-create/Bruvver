@@ -13,10 +13,10 @@ function normalizeMenuItem(raw: any): MenuItem {
     name: raw.name,
     price: Number(raw.price ?? 0),
     description: raw.description ?? '',
-    imageUrl: raw.image_url ?? '',  // ✅ Changed from image_url
+    imageUrl: raw.image_url ?? raw.imageUrl ?? '',
     category: raw.category ?? '',
-    isAvailable: Boolean(raw.is_available),  // ✅ Changed from is_available
-    branchId: raw.branch_id ?? undefined,  // ✅ Changed from branch_id
+    is_available: Boolean(raw.is_available ?? raw.isAvailable ?? true),
+    branchId: raw.branch_id ?? raw.branchId ?? undefined,
     ingredients: Array.isArray(raw.ingredients) ? raw.ingredients : [],
   };
 }
