@@ -3,30 +3,44 @@ import type { MenuItem } from './types';
 import { ApiClient } from './api-client';
 
 // Helper function to normalize API response to MenuItem type
+
 function normalizeMenuItem(raw: any): MenuItem {
   if (!raw) return raw as MenuItem;
-  return {
+
+  const normalized: MenuItem = {
     id: String(raw.id),
     name: raw.name,
     price: Number(raw.price ?? 0),
     description: raw.description ?? '',
-    // ✅ Support multiple possible keys for image
     imageUrl: raw.image_url ?? raw.imageUrl ?? raw.image ?? raw.photo ?? '',
     category: raw.category ?? '',
     is_available: Boolean(raw.is_available ?? raw.isAvailable ?? true),
     branchId: raw.branch_id ?? raw.branchId ?? undefined,
     ingredients: Array.isArray(raw.ingredients) ? raw.ingredients : [],
   };
+
+  // ✅ Debug log
+  console.log("🖼️ Normalized image URL:", normalized.imageUrl, "for item:", normalized.name);
+
+  return normalized;
 }
-console.log("🖼️ Normalized image URL:", item.imageUrl, "for item:", item.name);
+
 
 
 // Fetch all menu items for a specific branch
 export async function getMenuItems(branchId: string): Promise<MenuItem[]> {
   if (!branchId) return [];
   const data = await ApiClient.get(`/branches/${branchId}/menu`);
-  return Array.isArray(data) ? data.map(normalizeMenuItem) : [];
+  const items = Array.isArray(data) ? data.map(normalizeMenuItem) : [];
+
+  // ✅ Debug log after normalization
+  items.forEach((item) => {
+    console.log("🖼️ Item:", item.name, "URL:", item.imageUrl);
+  });
+
+  return items;
 }
+
 
 // Add a new menu item using FormData
 export async function addMenuItem(formData: FormData, branchId: string): Promise<MenuItem> {
