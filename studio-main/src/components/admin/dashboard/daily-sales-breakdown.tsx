@@ -158,15 +158,20 @@ export function DailySalesBreakdown() {
         setIsEditDialogOpen(true);
     };
 
-    const handleSaveItem = async (item: MenuItem) => {
+    const handleSaveItem = async (itemData: FormData) => {
+        if (!branchId) return;
+
+        // The dialog passes FormData, which is what the service function expects.
         try {
-            const payload = branchId ? { ...item, branchId } : item;
-            await updateMenuItem(payload as any);
-            await fetchSalesSummary();
+            const itemId = itemData.get('id') as string;
+            // The service function `updateMenuItem` is expecting FormData and the item ID.
+            await updateMenuItem(itemData, itemId); 
+            await fetchSalesSummary(); // Refetch all sales data to reflect potential price changes etc.
             toast({ title: "Success", description: `Menu item updated.` });
         } catch (error) {
             console.error('Error updating menu item:', error);
-            toast({ title: "Error", description: `Could not update menu item.`, variant: "destructive" });
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            toast({ title: "Error", description: `Could not update menu item: ${errorMessage}`, variant: "destructive" });
         } finally {
             setIsEditDialogOpen(false);
             setSelectedItem(null);
