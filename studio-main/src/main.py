@@ -2966,6 +2966,8 @@ async def trigger_daily_reset(current_user: Admin = Depends(get_current_active_u
         logger.exception("Daily reset failed")
         raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
 
+from sqlalchemy import text
+
 @app.post("/api/admin/cleanup-images")
 async def cleanup_broken_images(
     db: Session = Depends(get_database),
@@ -2975,27 +2977,33 @@ async def cleanup_broken_images(
     if not (hasattr(current_user, 'role') and current_user.role == "admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    # Update broken static images
-    result1 = db.execute(text("""
-        UPDATE menu_items 
-        SET image_url = NULL 
-        WHERE image_url LIKE '/static/images/%'
-    """))
-    
-    # Update broken Unsplash URLs
-    result2 = db.execute(text("""
-        UPDATE menu_items 
-        SET image_url = NULL 
-        WHERE image_url LIKE '%unsplash.com%'
-    """))
-    
-    db.commit()
-    
-    return {
-        "static_images_cleared": result1.rowcount or 0,
-        "unsplash_images_cleared": result2.rowcount or 0,
-        "message": "Broken images cleared. Re-upload new images via Cloudinary."
-    }
+    try:
+        # Update menu items with broken /static/images or /images paths
+        result1 = db.execute(text("""
+            UPDATE menu_items 
+            SET image_url = NULL 
+            WHERE image_url LIKE '/static/images/%' OR image_url LIKE '/images/%'
+        """))
+        
+        # Update menu items with broken Unsplash URLs
+        result2 = db.execute(text("""
+            UPDATE menu_items 
+            SET image_url = NULL 
+            WHERE image_url LIKE '%unsplash.com%'
+        """))
+        
+        db.commit()
+        
+        return {
+            "local_images_cleared": (result1.rowcount or 0),
+            "unsplash_images_cleared": (result2.rowcount or 0),
+            "total_cleared": (result1.rowcount or 0) + (result2.rowcount or 0),
+            "message": "Broken image URLs cleared. Upload new images to get Cloudinary URLs."
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to cleanup images: {e}")
+        raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
 
 
 # -------------------------
