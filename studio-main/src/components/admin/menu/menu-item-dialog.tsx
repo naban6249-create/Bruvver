@@ -55,8 +55,8 @@ export function MenuItemDialog({ isOpen, setIsOpen, onSave, item }: MenuItemDial
       setPrice(item.price.toString());
       setCategory(item.category);
       setIsAvailable(item.is_available);
-      setImageUrlInput(item.image_url || '');
-      setImagePreview(item.image_url || 'https://placehold.co/400x200/png?text=Add+Image');
+      setImageUrlInput(item.imageUrl || '');
+      setImagePreview(item.imageUrl || 'https://placehold.co/400x200/png?text=Add+Image');
       setImageFile(undefined); // Reset file on open
     } else if (isOpen) {
       // Adding a new item
