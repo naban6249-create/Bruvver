@@ -10,13 +10,16 @@ function normalizeMenuItem(raw: any): MenuItem {
     name: raw.name,
     price: Number(raw.price ?? 0),
     description: raw.description ?? '',
-    imageUrl: raw.image_url ?? raw.imageUrl ?? '',
+    // ✅ Support multiple possible keys for image
+    imageUrl: raw.image_url ?? raw.imageUrl ?? raw.image ?? raw.photo ?? '',
     category: raw.category ?? '',
     is_available: Boolean(raw.is_available ?? raw.isAvailable ?? true),
     branchId: raw.branch_id ?? raw.branchId ?? undefined,
     ingredients: Array.isArray(raw.ingredients) ? raw.ingredients : [],
   };
 }
+console.log("🖼️ Normalized image URL:", item.imageUrl, "for item:", item.name);
+
 
 // Fetch all menu items for a specific branch
 export async function getMenuItems(branchId: string): Promise<MenuItem[]> {
