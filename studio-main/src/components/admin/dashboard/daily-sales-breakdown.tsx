@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Plus, Minus, Pencil, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { MenuItem } from "@/lib/types";
+import type { MenuItem, DailySale } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { MenuItemDialog } from "@/components/admin/menu/menu-item-dialog";
 import { getMenuItems, updateMenuItem } from "@/lib/menu-service";
@@ -72,10 +72,12 @@ export function DailySalesBreakdown() {
                 getDailySales(branchId)
             ]);
             
-            const salesMap = new Map(dailySales.map(sale => [sale.itemId, sale]));
+            // ✅ CORRECTED: Map declaration is now more flexible
+            const salesMap = new Map<string | number, DailySale>(dailySales.map(sale => [sale.itemId, sale]));
             
             const itemsWithSales = menuItems.map(item => {
-                const sale = salesMap.get(item.id);
+                // ✅ CORRECTED: Convert item.id to string for reliable lookup
+                const sale = salesMap.get(String(item.id)); 
                 const quantitySold = sale ? sale.quantity : 0;
                 return {
                     ...item,
@@ -106,7 +108,7 @@ export function DailySalesBreakdown() {
         fetchSalesSummary();
     }, [fetchSalesSummary]);
 
-    const handleQuantityChange = async (itemId: string, newQuantity: number) => {
+    const handleQuantityChange = async (itemId: string | number, newQuantity: number) => {
         if (newQuantity < 0 || !branchId || !hasFullAccess) return;
 
         const prev = salesDetails;
@@ -118,12 +120,8 @@ export function DailySalesBreakdown() {
         setTotalRevenue(optimisticRevenue);
 
         try {
-            await updateDailySale(branchId, itemId, newQuantity);
+            await updateDailySale(branchId, String(itemId), newQuantity);
             await fetchSalesSummary();
-            toast({
-                title: "Quantity Updated",
-                description: `Sales quantity updated to ${newQuantity}.`,
-            });
         } catch (error) {
             console.error("Failed to update quantity:", error);
             setSalesDetails(prev);
@@ -151,17 +149,24 @@ export function DailySalesBreakdown() {
     };
 
     const handleSaveItem = async (itemData: FormData) => {
-        if (!branchId) return;
-
         try {
             const itemId = itemData.get('id') as string;
-            await updateMenuItem(itemData, itemId); 
+            if (!branchId) {
+                throw new Error('Branch ID is required');
+            }
+            
+            // ✅ CORRECTED: Pass branchId as the third argument
+            await updateMenuItem(itemData, itemId, branchId);
+            
             await fetchSalesSummary();
             toast({ title: "Success", description: `Menu item updated.` });
         } catch (error) {
-            console.error('Error updating menu item:', error);
             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-            toast({ title: "Error", description: `Could not update menu item: ${errorMessage}`, variant: "destructive" });
+            toast({
+                title: "Error",
+                description: `Could not update menu item: ${errorMessage}`,
+                variant: "destructive"
+            });
         } finally {
             setIsEditDialogOpen(false);
             setSelectedItem(null);
