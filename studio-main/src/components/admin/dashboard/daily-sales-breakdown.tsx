@@ -150,17 +150,16 @@ export function DailySalesBreakdown() {
         setIsEditDialogOpen(true);
     };
 
-    // === START: CORRECTED FUNCTION ===
+    // ✅ CORRECTED: This function now correctly calls the updated service.
     const handleSaveItem = async (itemData: FormData) => {
         if (!branchId) return;
 
         try {
             const itemId = itemData.get('id') as string;
-            // The `updateMenuItem` function requires both the form data and the item ID.
-            // This call now matches the correct signature.
+            // This call now matches the updated menu-service.ts function signature
             await updateMenuItem(itemData, itemId); 
             
-            await fetchSalesSummary(); // Refetch all data to reflect changes.
+            await fetchSalesSummary();
             toast({ title: "Success", description: `Menu item updated.` });
         } catch (error) {
             console.error('Error updating menu item:', error);
@@ -171,7 +170,6 @@ export function DailySalesBreakdown() {
             setSelectedItem(null);
         }
     };
-    // === END: CORRECTED FUNCTION ===
 
     const overallTotalItemsSold = salesDetails.reduce((acc, item) => acc + item.quantitySold, 0);
 
