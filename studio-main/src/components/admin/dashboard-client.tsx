@@ -5,12 +5,11 @@ import { Suspense, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { DailyBalanceDashboard } from "./dashboard/daily-balance-dashboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
-import { Mail, Sheet } from 'lucide-react';
-import { useAuth } from "../../lib/auth-context"; // Correctly import the hook
+import { Wrench } from 'lucide-react'; // Added for the Tools icon
+import { useAuth } from "../../lib/auth-context";
 import { Button } from "../../components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { DailySalesBreakdown } from "./dashboard/daily-sales-breakdown";
-import { DailyExpenses } from "./expenses/daily-expenses";
 import { BranchManagement } from "./branches/branch-management";
 import { ReportsDashboard } from "./reports/reports-dashboard";
 import { useToast } from "../../hooks/use-toast";
@@ -19,26 +18,50 @@ import { WorkerDashboard } from './dashboard/worker-dashboard';
 import { PermissionManagement } from './permissions/permission-management';
 import { BalanceDashboardClient } from "./dashboard/balance-dashboard-client";
 import { ExpensesDashboardClient } from "./expenses/expenses-dashboard-client";
+import { ApiClient } from "@/lib/api-client"; // Added to call the cleanup endpoint
 
 export function DashboardClient() {
     const { toast } = useToast();
-    const { user, hasPermission, isLoading } = useAuth(); // Use isLoading from context
+    const { user, isLoading } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const role = searchParams.get('role') || user?.role;
+    const role = user?.role;
     const branchId = searchParams.get('branchId');
     
-    // Add state for controlled tabs
-    const [activeTab, setActiveTab] = React.useState("dashboard");
+    // Get tab from URL or default to 'dashboard'
+    const activeTab = searchParams.get('tab') || 'dashboard';
+
+    // Function to update URL when tab changes
+    const handleTabChange = (newTab: string) => {
+        const params = new URLSearchParams(searchParams);
+        params.set('tab', newTab);
+        router.push(`?${params.toString()}`);
+    };
 
     useEffect(() => {
-        // Redirect to login if the auth check is done and there's no user
         if (!isLoading && !user) {
             router.push('/admin/login');
         }
     }, [isLoading, user, router]);
 
-    // Show a loading spinner while the app confirms if the user is logged in
+    // === START: IMAGE CLEANUP FUNCTION ===
+    const cleanupImages = async () => {
+        try {
+          const response = await ApiClient.post('/admin/cleanup-images');
+          toast({
+            title: 'Image Cleanup Successful',
+            description: `Cleared ${response.total_cleared} total URLs (${response.local_images_cleared} local, ${response.unsplash_images_cleared} Unsplash).`,
+          });
+        } catch (error) {
+          toast({
+            title: 'Error',
+            description: 'Failed to clean up images. This is an admin-only action.',
+            variant: 'destructive',
+          });
+        }
+    };
+    // === END: IMAGE CLEANUP FUNCTION ===
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-screen">
@@ -47,7 +70,6 @@ export function DashboardClient() {
         );
     }
     
-    // Don't render anything if there's no user (the useEffect will redirect)
     if (!user) {
         return null; 
     };
@@ -62,45 +84,35 @@ export function DashboardClient() {
         );
     }
     
+    // Main Admin/Manager Dashboard
+    if (!branchId) {
+        return (
+            <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
+                 <BranchManagement />
+            </div>
+        )
+    }
+
     return (
         <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <Tabs value={activeTab} onValueChange={handleTabChange}>
                 <div className="flex items-center justify-between mb-6">
-                    <TabsList className="grid w-full grid-cols-3 sm:grid-cols-7 h-auto p-1 gap-1 sm:gap-0">
-                        <TabsTrigger value="dashboard" className="text-xs sm:text-sm px-2 sm:px-3">Sales</TabsTrigger>
-                        <TabsTrigger value="balance" className="text-xs sm:text-sm px-2 sm:px-3 hidden sm:inline-flex">Balance</TabsTrigger>
-                        <TabsTrigger value="menu" className="text-xs sm:text-sm px-2 sm:px-3 hidden sm:inline-flex">Menu</TabsTrigger>
-                        <TabsTrigger value="expenses" className="text-xs sm:text-sm px-2 sm:px-3">Expenses</TabsTrigger>
-                        <TabsTrigger value="branches" className="text-xs sm:text-sm px-2 sm:px-3 hidden sm:inline-flex">Branches</TabsTrigger>
-                        <TabsTrigger value="permissions" className="text-xs sm:text-sm px-2 sm:px-3 hidden lg:inline-flex">Users</TabsTrigger>
-                        <TabsTrigger value="reports" className="text-xs sm:text-sm px-2 sm:px-3 hidden lg:inline-flex">Reports</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-4 sm:grid-cols-5 md:grid-cols-8 h-auto p-1 gap-1">
+                        <TabsTrigger value="dashboard">Sales</TabsTrigger>
+                        <TabsTrigger value="balance">Balance</TabsTrigger>
+                        <TabsTrigger value="menu">Menu</TabsTrigger>
+                        <TabsTrigger value="expenses">Expenses</TabsTrigger>
+                        <TabsTrigger value="reports">Reports</TabsTrigger>
+                        {role === 'admin' && <TabsTrigger value="branches">Branches</TabsTrigger>}
+                        {role === 'admin' && <TabsTrigger value="permissions">Users</TabsTrigger>}
+                        {role === 'admin' && <TabsTrigger value="tools">Tools</TabsTrigger>}
                     </TabsList>
-                    
-                    {/* Mobile Menu Button */}
-                    <div className="sm:hidden ml-2">
-                        <select 
-                            className="text-sm border rounded-md px-2 py-1 bg-background"
-                            value={activeTab}
-                            onChange={(e) => setActiveTab(e.target.value)}
-                        >
-                            <option value="dashboard">Sales</option>
-                            <option value="balance">Balance</option>
-                            <option value="menu">Menu</option>
-                            <option value="expenses">Expenses</option>
-                            <option value="branches">Branches</option>
-                            <option value="permissions">Users</option>
-                            <option value="reports">Reports</option>
-                        </select>
-                    </div>
                 </div>
                 
                 <TabsContent value="dashboard">
                     <Suspense fallback={<div>Loading sales data...</div>}>
                         <DailySalesBreakdown />
                     </Suspense>
-                    <div className="mt-8 grid gap-4 md:gap-8 lg:grid-cols-2">
-                        {/* Data Export & Email Reports Cards can be added here */}
-                    </div>
                 </TabsContent>
                 
                 <TabsContent value="balance">
@@ -118,18 +130,48 @@ export function DashboardClient() {
                         <ExpensesDashboardClient />
                     </Suspense>
                 </TabsContent>
-                
-                <TabsContent value="branches">
-                    <BranchManagement />
-                </TabsContent>
-                
-                <TabsContent value="permissions">
-                    <PermissionManagement />
-                </TabsContent>
-                
+
                 <TabsContent value="reports">
                     <ReportsDashboard />
                 </TabsContent>
+                
+                {role === 'admin' && (
+                    <TabsContent value="branches">
+                        <BranchManagement />
+                    </TabsContent>
+                )}
+
+                {role === 'admin' && (
+                    <TabsContent value="permissions">
+                        <PermissionManagement />
+                    </TabsContent>
+                )}
+
+                {/* === START: NEW TOOLS TAB CONTENT === */}
+                {role === 'admin' && (
+                    <TabsContent value="tools">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>System Tools</CardTitle>
+                                <CardDescription>
+                                Perform administrative actions to maintain the application's data integrity.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex items-center gap-4">
+                                <Button onClick={cleanupImages} variant="outline">
+                                    <Wrench className="mr-2 h-4 w-4" />
+                                    Clean Up All Broken Image URLs
+                                </Button>
+                                <p className="text-sm text-muted-foreground">
+                                    Removes old local URLs and broken Unsplash links from all menu items.
+                                </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                )}
+                {/* === END: NEW TOOLS TAB CONTENT === */}
             </Tabs>
         </div>
     );
