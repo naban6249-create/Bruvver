@@ -1574,19 +1574,45 @@ async def update_branch_menu_item(
     db_item = db.query(MenuItem).filter(MenuItem.id == item_id, MenuItem.branch_id == branch_id).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Menu item not found for this branch")
+
     try:
-        image_path = db_item.image_url
-        if image and image.filename:
-            image_path = f"/static/images/{item_id}_{image.filename}"
-            save_path = f"static/images/{item_id}_{image.filename}"
-            with open(save_path, "wb") as buffer:
-                shutil.copyfileobj(image.file, buffer)
+        # --- START: CORRECTED IMAGE LOGIC ---
+        final_image_url = db_item.image_url  # Start with the existing URL
+
+        # Priority 1: Use the provided URL if it exists.
+        if image_url and image_url.strip():
+            final_image_url = image_url.strip()
+            logger.info(f"Using provided image URL: {final_image_url}")
+        # Priority 2: Fallback to uploading a new file if no URL is given.
+        elif image and image.filename:
+            try:
+                contents = await image.read()
+                result = cloudinary.uploader.upload(
+                    contents,
+                    folder=f"bruvver/menu_items/branch_{branch_id}",
+                    public_id=f"item_{item_id}_{name.lower().replace(' ', '_')}",
+                    overwrite=True,
+                    resource_type="image",
+                    format="webp",
+                    quality="auto:good",
+                    fetch_format="auto"
+                )
+                final_image_url = result.get("secure_url")
+                logger.info(f"Successfully uploaded new image to Cloudinary: {final_image_url}")
+            except Exception as e:
+                logger.error(f"Cloudinary upload failed during update for item {item_id}: {e}")
+                # On failure, we keep the old URL by doing nothing
+                pass
+        # --- END: CORRECTED IMAGE LOGIC ---
+
+        # Update the rest of the fields
         db_item.name = name
         db_item.price = price
         db_item.description = description
         db_item.category = category
         db_item.is_available = is_available.lower() in ['true', '1', 't', 'y', 'yes']
-        db_item.image_url = image_path
+        db_item.image_url = final_image_url # Use the correctly determined final URL
+
         # Replace ingredients
         db.query(Ingredient).filter(Ingredient.menu_item_id == item_id).delete(synchronize_session=False)
         ingredients_list = json.loads(ingredients)
@@ -1599,12 +1625,14 @@ async def update_branch_menu_item(
                 image_url=ingredient_data.get("image_url")
             )
             db.add(db_ingredient)
+
         db.commit()
         db.refresh(db_item)
         return db_item
-    except Exception:
+
+    except Exception as e:
         db.rollback()
-        logger.exception("Error updating branch menu item")
+        logger.exception(f"Error updating branch menu item {item_id}")
         raise HTTPException(status_code=500, detail="Internal Server Error during item update.")
 
 @app.delete("/api/branches/{branch_id}/menu/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
