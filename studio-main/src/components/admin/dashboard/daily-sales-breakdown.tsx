@@ -155,9 +155,10 @@ export function DailySalesBreakdown() {
         if (!branchId) return;
 
         try {
-            // The service function now likely extracts the ID from the FormData itself.
-            // We only need to pass the single FormData object.
-            await updateMenuItem(itemData); 
+            const itemId = itemData.get('id') as string;
+            // The `updateMenuItem` function requires both the form data and the item ID.
+            // This call now matches the correct signature.
+            await updateMenuItem(itemData, itemId); 
             
             await fetchSalesSummary(); // Refetch all data to reflect changes.
             toast({ title: "Success", description: `Menu item updated.` });
