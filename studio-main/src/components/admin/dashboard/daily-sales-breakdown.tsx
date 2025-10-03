@@ -55,6 +55,11 @@ export function DailySalesBreakdown() {
         }
 
         if (!hasViewAccess) {
+            toast({
+                title: "Access Denied",
+                description: "You don't have permission to view sales for this branch.",
+                variant: "destructive"
+            });
             setSalesDetails([]);
             setTotalRevenue(0);
             return;
@@ -115,6 +120,10 @@ export function DailySalesBreakdown() {
         try {
             await updateDailySale(branchId, itemId, newQuantity);
             await fetchSalesSummary();
+            toast({
+                title: "Quantity Updated",
+                description: `Sales quantity updated to ${newQuantity}.`,
+            });
         } catch (error) {
             console.error("Failed to update quantity:", error);
             setSalesDetails(prev);
@@ -406,7 +415,6 @@ export function DailySalesBreakdown() {
                     setIsOpen={setIsEditDialogOpen}
                     onSave={handleSaveItem}
                     item={selectedItem}
-                    // ✅ CORRECTED: This prop has been removed
                 />
             )}
         </>
