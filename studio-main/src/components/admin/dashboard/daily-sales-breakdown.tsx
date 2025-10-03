@@ -55,11 +55,6 @@ export function DailySalesBreakdown() {
         }
 
         if (!hasViewAccess) {
-            toast({
-                title: "Access Denied",
-                description: "You don't have permission to view sales for this branch.",
-                variant: "destructive"
-            });
             setSalesDetails([]);
             setTotalRevenue(0);
             return;
@@ -120,10 +115,6 @@ export function DailySalesBreakdown() {
         try {
             await updateDailySale(branchId, itemId, newQuantity);
             await fetchSalesSummary();
-            toast({
-                title: "Quantity Updated",
-                description: `Sales quantity updated to ${newQuantity}.`,
-            });
         } catch (error) {
             console.error("Failed to update quantity:", error);
             setSalesDetails(prev);
@@ -245,7 +236,6 @@ export function DailySalesBreakdown() {
                                     <Card key={item.id} className="p-4">
                                         <div className="flex items-start gap-3">
                                             <div className="flex-shrink-0">
-                                                {/* === START: CORRECTED LINE === */}
                                                 <Image
                                                     alt={item.name}
                                                     className="aspect-square rounded-md object-cover"
@@ -255,7 +245,6 @@ export function DailySalesBreakdown() {
                                                     unoptimized
                                                     onError={(e) => { e.currentTarget.src = 'https://placehold.co/48x48/png?text=N/A' }}
                                                 />
-                                                {/* === END: CORRECTED LINE === */}
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-start justify-between">
@@ -334,7 +323,6 @@ export function DailySalesBreakdown() {
                                         {salesDetails.map(item => (
                                             <TableRow key={item.id}>
                                                 <TableCell>
-                                                    {/* === START: CORRECTED LINE === */}
                                                      <Image
                                                         alt={item.name}
                                                         className="aspect-square rounded-md object-cover"
@@ -344,7 +332,6 @@ export function DailySalesBreakdown() {
                                                         unoptimized
                                                         onError={(e) => { e.currentTarget.src = 'https://placehold.co/64x64/png?text=N/A' }}
                                                     />
-                                                    {/* === END: CORRECTED LINE === */}
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="font-medium">{item.name}</div>
@@ -419,7 +406,7 @@ export function DailySalesBreakdown() {
                     setIsOpen={setIsEditDialogOpen}
                     onSave={handleSaveItem}
                     item={selectedItem}
-                    showIngredients={false}
+                    // ✅ CORRECTED: This prop has been removed
                 />
             )}
         </>
