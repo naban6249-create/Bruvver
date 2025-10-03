@@ -14,19 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { MenuItem } from '@/lib/types';
 import Image from 'next/image';
-import { Switch } from '@/components/ui/switch'; // For toggling availability
-
-// The data structure passed back to the parent on save
-export type MenuItemSaveData = {
-    id?: string;
-    name: string;
-    price: string;
-    category: string;
-    is_available: boolean;
-    imageFile?: File;
-    imageUrl?: string;
-};
-
+import { Switch } from '@/components/ui/switch';
 
 interface MenuItemDialogProps {
   isOpen: boolean;
@@ -42,7 +30,7 @@ export function MenuItemDialog({ isOpen, setIsOpen, onSave, item }: MenuItemDial
   const [isAvailable, setIsAvailable] = useState(true);
   
   // State for image handling
-  const [imageUrlInput, setImageUrlInput] = useState(''); // For the URL input field
+  const [imageUrlInput, setImageUrlInput] = useState('');
   const [imagePreview, setImagePreview] = useState<string>('https://placehold.co/400x200/png?text=Add+Image');
   const [imageFile, setImageFile] = useState<File | undefined>(undefined);
   
@@ -57,7 +45,7 @@ export function MenuItemDialog({ isOpen, setIsOpen, onSave, item }: MenuItemDial
       setIsAvailable(item.is_available);
       setImageUrlInput(item.imageUrl || '');
       setImagePreview(item.imageUrl || 'https://placehold.co/400x200/png?text=Add+Image');
-      setImageFile(undefined); // Reset file on open
+      setImageFile(undefined);
     } else if (isOpen) {
       // Adding a new item
       setName('');
@@ -66,7 +54,7 @@ export function MenuItemDialog({ isOpen, setIsOpen, onSave, item }: MenuItemDial
       setIsAvailable(true);
       setImageUrlInput('');
       setImagePreview('https://placehold.co/400x200/png?text=Add+Image');
-      setImageFile(undefined); // Reset file on open
+      setImageFile(undefined);
     }
   }, [item, isOpen]);
 
@@ -80,8 +68,7 @@ export function MenuItemDialog({ isOpen, setIsOpen, onSave, item }: MenuItemDial
     formData.append('category', category);
     formData.append('is_available', String(isAvailable));
 
-    // IMPORTANT: Prioritize the URL input. If it has a value, send it.
-    // Otherwise, send the uploaded file.
+    // Prioritize URL input over file upload
     if (imageUrlInput) {
         formData.append('image_url', imageUrlInput);
     } else if (imageFile) {
@@ -94,7 +81,7 @@ export function MenuItemDialog({ isOpen, setIsOpen, onSave, item }: MenuItemDial
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // A file was selected, so clear the URL input to prioritize the file
+      // Clear URL input when file is selected
       setImageUrlInput(''); 
       setImageFile(file);
       setImagePreview(URL.createObjectURL(file));
@@ -104,11 +91,11 @@ export function MenuItemDialog({ isOpen, setIsOpen, onSave, item }: MenuItemDial
   const handleUrlInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const url = e.target.value;
       setImageUrlInput(url);
-      // If a URL is being typed, clear any selected file
+      // Clear file selection when URL is entered
       if (imageFile) {
           setImageFile(undefined);
       }
-      // Update preview if URL is valid, otherwise show placeholder
+      // Update preview
       setImagePreview(url || 'https://placehold.co/400x200/png?text=Add+Image');
   };
 
@@ -141,13 +128,16 @@ export function MenuItemDialog({ isOpen, setIsOpen, onSave, item }: MenuItemDial
 
           {/* Image URL Input */}
           <div className="space-y-2">
-            <Label htmlFor="imageUrl">Image URL (Optional)</Label>
+            <Label htmlFor="imageUrl">Image URL (Cloudinary or External)</Label>
             <Input 
                 id="imageUrl" 
-                placeholder="https://example.com/image.jpg"
+                placeholder="https://res.cloudinary.com/your-cloud/image.jpg"
                 value={imageUrlInput}
                 onChange={handleUrlInputChange}
             />
+            <p className="text-xs text-muted-foreground">
+              Paste a Cloudinary URL or any image URL
+            </p>
           </div>
           
           <div className="text-center text-sm text-muted-foreground">OR</div>
@@ -159,6 +149,9 @@ export function MenuItemDialog({ isOpen, setIsOpen, onSave, item }: MenuItemDial
               Choose File
             </Button>
             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+            <p className="text-xs text-muted-foreground">
+              Upload a file to automatically get a Cloudinary URL
+            </p>
           </div>
 
           {/* Image Preview */}
@@ -170,7 +163,7 @@ export function MenuItemDialog({ isOpen, setIsOpen, onSave, item }: MenuItemDial
               width={400}
               height={200}
               className="rounded-md object-cover w-full aspect-video"
-              unoptimized // Good for external URLs like placeholders or Cloudinary
+              unoptimized
               onError={() => setImagePreview('https://placehold.co/400x200/png?text=Invalid+Image')}
             />
           </div>
