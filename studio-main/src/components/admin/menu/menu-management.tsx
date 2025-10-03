@@ -102,38 +102,85 @@ export function MenuManagement() {
   };
 
   const handleSaveItem = async (formData: FormData) => {
-    if (!branchId) return;
+  console.log('=== HANDLE SAVE ITEM START ===');
+  console.log('1️⃣ branchId from searchParams:', branchId);
+  console.log('2️⃣ branchId type:', typeof branchId);
+  console.log('3️⃣ branchId is null?', branchId === null);
+  console.log('4️⃣ branchId is undefined?', branchId === undefined);
+  
+  if (!branchId) {
+    console.error('❌ No branchId - STOPPING');
+    toast({ 
+      title: "Error", 
+      description: "Branch ID is missing from URL", 
+      variant: "destructive" 
+    });
+    return;
+  }
+  
+  try {
+    const itemId = formData.get('id') as string;
+    console.log('5️⃣ Item ID:', itemId);
+    console.log('6️⃣ Operation:', itemId ? 'UPDATE' : 'CREATE');
     
-    try {
-      const itemId = formData.get('id') as string;
-      
-      // Always ensure branch_id is in FormData
-      formData.set('branch_id', branchId);
-      
-      if (!itemId) {
-        // Create new item
-        await addMenuItem(formData);
-        toast({ title: "Success", description: "Menu item created." });
-      } else {
-        // Update existing item
-        await updateMenuItem(formData, itemId);
-        toast({ title: "Success", description: "Menu item updated." });
-      }
-      
-      await fetchMenuItems();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      toast({ 
-        title: "Error", 
-        description: `Could not save menu item: ${errorMessage}`, 
-        variant: "destructive" 
-      });
-    } finally {
-      setIsNewItemDialogOpen(false);
-      setIsEditItemDialogOpen(false);
-      setSelectedItem(null);
+    // Log FormData BEFORE
+    console.log('7️⃣ FormData BEFORE adding branch_id:');
+    const beforeKeys = Array.from(formData.keys());
+    console.log('   Keys:', beforeKeys);
+    beforeKeys.forEach(key => {
+      const value = formData.get(key);
+      console.log(`   ${key}:`, value instanceof File ? `[File: ${value.name}]` : value);
+    });
+    
+    // Set branch_id
+    formData.set('branch_id', branchId);
+    console.log('8️⃣ Called formData.set("branch_id", branchId)');
+    
+    // Log FormData AFTER
+    console.log('9️⃣ FormData AFTER adding branch_id:');
+    const afterKeys = Array.from(formData.keys());
+    console.log('   Keys:', afterKeys);
+    afterKeys.forEach(key => {
+      const value = formData.get(key);
+      console.log(`   ${key}:`, value instanceof File ? `[File: ${value.name}]` : value);
+    });
+    
+    // Double-check branch_id
+    const verifyBranchId = formData.get('branch_id');
+    console.log('🔟 Verify branch_id is in FormData:', verifyBranchId);
+    console.log('1️⃣1️⃣ Verify branch_id matches original:', verifyBranchId === branchId);
+    
+    if (!itemId) {
+      console.log('➕ Calling addMenuItem...');
+      await addMenuItem(formData);
+      toast({ title: "Success", description: "Menu item created." });
+    } else {
+      console.log('✏️ Calling updateMenuItem...');
+      await updateMenuItem(formData, itemId);
+      toast({ title: "Success", description: "Menu item updated." });
     }
-  };
+    
+    console.log('✅ Success! Fetching menu items...');
+    await fetchMenuItems();
+  } catch (error) {
+    console.error('❌ ERROR CAUGHT:', error);
+    console.error('Error type:', error?.constructor?.name);
+    console.error('Error message:', error instanceof Error ? error.message : 'Unknown');
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
+    
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+    toast({ 
+      title: "Error", 
+      description: `Could not save menu item: ${errorMessage}`, 
+      variant: "destructive" 
+    });
+  } finally {
+    setIsNewItemDialogOpen(false);
+    setIsEditItemDialogOpen(false);
+    setSelectedItem(null);
+    console.log('=== HANDLE SAVE ITEM END ===');
+  }
+};
 
   return (
     <>

@@ -112,14 +112,40 @@ export class ApiClient {
   }
 
   static async put(endpoint: string, data?: any): Promise<any> {
-    const isFormData = data instanceof FormData;
-    const response = await this.makeRequest(endpoint, {
-      method: 'PUT',
-      body: isFormData ? data : JSON.stringify(data),
+  console.log('\n=== API CLIENT PUT METHOD START ===');
+  console.log('🎯 Endpoint:', endpoint);
+  console.log('📊 Data type:', data?.constructor?.name);
+  
+  const isFormData = data instanceof FormData;
+  console.log('📋 Is FormData?', isFormData);
+  
+  if (isFormData && data instanceof FormData) {
+    console.log('📦 FormData entries in ApiClient.put:');
+    const keys = Array.from(data.keys());
+    console.log('   Keys:', keys);
+    keys.forEach(key => {
+      const value = data.get(key);
+      if (value instanceof File) {
+        console.log(`   ${key}: [File: ${value.name}]`);
+      } else {
+        console.log(`   ${key}: ${value}`);
+      }
     });
-    const text = await response.text();
-    return text ? JSON.parse(text) : null;
   }
+  
+  console.log('📤 Calling makeRequest...');
+  const response = await this.makeRequest(endpoint, {
+    method: 'PUT',
+    body: isFormData ? data : JSON.stringify(data),
+  });
+  
+  console.log('✅ Response status:', response.status);
+  const text = await response.text();
+  console.log('📥 Response length:', text.length, 'characters');
+  console.log('=== API CLIENT PUT METHOD END ===\n');
+  
+  return text ? JSON.parse(text) : null;
+}
 
   static async patch(endpoint: string, data?: any): Promise<any> {
     const isFormData = data instanceof FormData;
