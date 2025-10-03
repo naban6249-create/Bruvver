@@ -4,6 +4,8 @@ import type { MenuItem } from './types';
 import { ApiClient } from './api-client';
 
 // This is a helper function to ensure the data from the API matches your MenuItem type.
+// In your src/lib/menu-service.ts file, update the normalizeMenuItem function:
+
 function normalizeMenuItem(raw: any): MenuItem {
   if (!raw) return raw as MenuItem;
   return {
@@ -11,10 +13,10 @@ function normalizeMenuItem(raw: any): MenuItem {
     name: raw.name,
     price: Number(raw.price ?? 0),
     description: raw.description ?? '',
-    image_url: raw.image_url ?? '',
+    imageUrl: raw.image_url ?? '',  // ✅ Changed from image_url
     category: raw.category ?? '',
-    is_available: Boolean(raw.is_available),
-    branch_id: raw.branch_id ?? undefined,
+    isAvailable: Boolean(raw.is_available),  // ✅ Changed from is_available
+    branchId: raw.branch_id ?? undefined,  // ✅ Changed from branch_id
     ingredients: Array.isArray(raw.ingredients) ? raw.ingredients : [],
   };
 }
