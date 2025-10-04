@@ -5,10 +5,6 @@ import { AdminHeader } from '@/components/admin/admin-header';
 import { WorkerDashboard } from '@/components/admin/dashboard/worker-dashboard';
 import { Toaster } from '@/components/ui/toaster';
 
-/**
- * This is a client-side component that wraps the entire worker dashboard experience,
- * including components that use client-side hooks like useSearchParams.
- */
 export default function WorkerDashboardClientPage() {
   return (
     <AuthProvider>
