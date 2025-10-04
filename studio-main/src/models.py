@@ -140,6 +140,7 @@ class DailySale(Base):
     branch_id = Column(Integer, ForeignKey("branches.id"))
     quantity = Column(Integer, nullable=False)
     revenue = Column(Float, nullable=False)
+    payment_method = Column(String, default="cash")  # NEW: "cash" or "gpay"
     sale_date = Column(DateTime, default=datetime.utcnow)
 
     branch = relationship("Branch", back_populates="sales")

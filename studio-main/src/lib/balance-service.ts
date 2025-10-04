@@ -19,6 +19,14 @@ export interface DailyBalanceSummary {
   transactionCount: number;
 }
 
+export interface WorkerCashBalanceSummary {
+  opening_balance: number;
+  cash_collections: number;
+  total_expenses: number;
+  expected_closing_cash: number;
+  transaction_count: number;
+}
+
 export async function getOpeningBalance(
   branchId: string, 
   date?: string
@@ -51,6 +59,31 @@ export async function updateOpeningBalance(
   if (date) requestBody.date = date;
 
   return ApiClient.post(`/branches/${branchId}/opening-balance`, requestBody);
+}
+
+export async function getWorkerCashBalance(date?: string): Promise<WorkerCashBalanceSummary> {
+  try {
+    let url = '/worker/cash-balance';
+    const params = new URLSearchParams();
+
+    if (date) params.append('date_filter', date);
+    params.append('_t', Date.now().toString());
+
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+    
+    return await ApiClient.get(url);
+  } catch (error) {
+    console.error("Failed to get worker cash balance:", error);
+    return {
+      opening_balance: 0,
+      cash_collections: 0,
+      total_expenses: 0,
+      expected_closing_cash: 0,
+      transaction_count: 0,
+    };
+  }
 }
 
 export async function getDailyBalanceSummary(

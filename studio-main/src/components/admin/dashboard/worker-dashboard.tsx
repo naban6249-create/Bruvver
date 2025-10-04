@@ -177,7 +177,7 @@ export function WorkerDashboard() {
                                 </CardContent>
                             </Card>
                         )}
-                        <DailyBalanceDashboard />
+                        <DailyBalanceDashboard isWorkerView={true} />
                     </div>
                 </TabsContent>
             </Tabs>

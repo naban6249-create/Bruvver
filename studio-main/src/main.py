@@ -2011,12 +2011,13 @@ async def set_branch_daily_sale_quantity(
     branch_id: int,
     item_id: str,
     quantity: int = Form(...),
+    payment_method: str = Form("cash"),  # NEW: default to cash
     date_filter: Optional[str] = Form(None),
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
     """Set/update daily sales quantity for a specific branch and item"""
-    # Permission check for workers: must have FULL_ACCESS for this branch
+    # Permission check for workers
     if hasattr(current_user, 'role') and current_user.role == "worker":
         perm = db.query(UserBranchPermission).filter(
             UserBranchPermission.user_id == current_user.id,
@@ -2030,7 +2031,7 @@ async def set_branch_daily_sale_quantity(
         if pl != "full_access":
             raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
     
-    # Verify menu item exists for this branch
+    # Verify menu item exists
     menu_item = db.query(MenuItem).filter(
         MenuItem.id == item_id,
         MenuItem.branch_id == branch_id
@@ -2041,9 +2042,13 @@ async def set_branch_daily_sale_quantity(
     if quantity < 0:
         raise HTTPException(status_code=400, detail="Quantity cannot be negative")
     
+    # Validate payment_method
+    if payment_method not in ["cash", "gpay"]:
+        raise HTTPException(status_code=400, detail="Invalid payment_method. Use 'cash' or 'gpay'")
+    
     revenue = float(menu_item.price) * int(quantity)
     
-    # Determine target date (use IST timezone)
+    # Determine target date
     target_date = get_current_date_ist()
     if date_filter:
         try:
@@ -2051,11 +2056,12 @@ async def set_branch_daily_sale_quantity(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     
-    # Upsert: update existing sale for today or create new
+    # Upsert logic
     existing_sale = db.query(DailySale).filter(
         DailySale.menu_item_id == item_id,
         DailySale.branch_id == branch_id,
-        func.date(DailySale.sale_date) == target_date
+        func.date(DailySale.sale_date) == target_date,
+        DailySale.payment_method == payment_method  # NEW: filter by payment method too
     ).first()
     
     if existing_sale:
@@ -2065,13 +2071,13 @@ async def set_branch_daily_sale_quantity(
         db.refresh(existing_sale)
         return existing_sale
     else:
-        # When creating a new record, use IST time
         ist_now = datetime.now(IST)
         db_sale = DailySale(
             menu_item_id=item_id,
             quantity=quantity,
             revenue=revenue,
             branch_id=branch_id,
+            payment_method=payment_method,  # NEW
             sale_date=datetime.combine(target_date, ist_now.time())
         )
         db.add(db_sale)
@@ -2576,6 +2582,73 @@ async def get_worker_expenses(
     if not (hasattr(current_user, 'role') and current_user.role == "worker"):
         raise HTTPException(status_code=403, detail="Worker access required")
     return await get_expenses(branch_id=current_user.branch_id, date=date, category=category, db=db, current_user=current_user)
+
+@app.get("/api/worker/cash-balance")
+async def get_worker_cash_balance(
+    date_filter: Optional[str] = None,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Get cash-only balance summary for workers (excludes GPay)"""
+    if not (hasattr(current_user, 'role') and current_user.role == "worker"):
+        raise HTTPException(status_code=403, detail="Worker access required")
+    
+    if not current_user.branch_id:
+        # Fallback: get first assigned branch
+        first_perm = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == current_user.id
+        ).first()
+        if not first_perm:
+            raise HTTPException(status_code=403, detail="No branch assigned")
+        branch_id = first_perm.branch_id
+    else:
+        branch_id = current_user.branch_id
+    
+    # Determine target date
+    target_date = get_current_date_ist()
+    if date_filter:
+        try:
+            target_date = datetime.strptime(date_filter, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    
+    # Get opening balance
+    opening_balance_obj = db.query(OpeningBalance).filter(
+        OpeningBalance.branch_id == branch_id,
+        func.date(OpeningBalance.date) == target_date
+    ).first()
+    opening_balance = opening_balance_obj.amount if opening_balance_obj else 0.0
+    
+    # Get CASH sales only
+    cash_sales = db.query(func.sum(DailySale.revenue)).filter(
+        DailySale.branch_id == branch_id,
+        func.date(DailySale.sale_date) == target_date,
+        DailySale.payment_method == "cash"
+    ).scalar() or 0.0
+    
+    # Get total expenses
+    total_expenses = db.query(func.sum(DailyExpense.total_amount)).filter(
+        DailyExpense.branch_id == branch_id,
+        func.date(DailyExpense.expense_date) == target_date
+    ).scalar() or 0.0
+    
+    # Calculate expected closing cash
+    expected_closing_cash = opening_balance + cash_sales - total_expenses
+    
+    # Get transaction counts
+    cash_transaction_count = db.query(func.count(DailySale.id)).filter(
+        DailySale.branch_id == branch_id,
+        func.date(DailySale.sale_date) == target_date,
+        DailySale.payment_method == "cash"
+    ).scalar() or 0
+    
+    return {
+        "opening_balance": opening_balance,
+        "cash_collections": cash_sales,
+        "total_expenses": total_expenses,
+        "expected_closing_cash": expected_closing_cash,
+        "transaction_count": cash_transaction_count,
+    }
 
 # -------------------------
 # ADMIN: User management

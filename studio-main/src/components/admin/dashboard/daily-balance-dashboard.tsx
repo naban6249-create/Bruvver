@@ -8,16 +8,25 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth-context';
-import { getOpeningBalance, updateOpeningBalance, getDailyBalanceSummary } from '@/lib/balance-service';
+import { updateOpeningBalance, getDailyBalanceSummary } from '@/lib/balance-service';
+import { getWorkerCashBalance } from '@/lib/balance-service';
 import { DollarSign, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 
-export function DailyBalanceDashboard() {
+interface BalanceSummary {
+    openingBalance: number;
+    totalRevenue: number;
+    totalExpenses: number;
+    calculatedBalance: number;
+    transactionCount: number;
+}
+
+export function DailyBalanceDashboard({ isWorkerView = false }: { isWorkerView?: boolean }) {
   const searchParams = useSearchParams();
   const branchId = searchParams.get('branchId');
   const { user, hasPermission } = useAuth();
   const { toast } = useToast();
 
-  const [summary, setSummary] = useState({
+  const [summary, setSummary] = useState<BalanceSummary>({
     openingBalance: 0,
     totalRevenue: 0,
     totalExpenses: 0,
@@ -35,6 +44,16 @@ export function DailyBalanceDashboard() {
   const hasFullAccess = currentBranchId ? hasPermission(currentBranchId, 'full_access') : false;
   const canUpdateBalance = user?.role === 'admin' || hasFullAccess;
 
+  // Conditional labels based on user role
+  const revenueLabel = isWorkerView ? "Cash Collected" : "Total Collections";
+  const revenueDescription = isWorkerView 
+    ? "Cash revenue from sales" 
+    : "Total revenue from sales";
+  const balanceLabel = isWorkerView ? "Expected Closing Cash" : "Closing Balance";
+  const balanceDescription = isWorkerView
+    ? "Cash you should have in hand"
+    : "Net cash in hand";
+
   useEffect(() => {
     const today = new Date();
     const options: Intl.DateTimeFormatOptions = {
@@ -48,11 +67,27 @@ export function DailyBalanceDashboard() {
 
   const fetchSummary = useCallback(async (branchId: string, date?: Date) => {
     const dateString = date ? date.toISOString().split('T')[0] : undefined;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     
     setIsLoading(true);
     try {
-      const summaryData = await getDailyBalanceSummary(branchId, dateString);
+      let summaryData: BalanceSummary;
+      
+      if (isWorkerView) {
+        // Workers get cash-only balance
+        const workerData = await getWorkerCashBalance(dateString);
+        summaryData = {
+          openingBalance: workerData.opening_balance,
+          totalRevenue: workerData.cash_collections,
+          totalExpenses: workerData.total_expenses,
+          calculatedBalance: workerData.expected_closing_cash,
+          transactionCount: workerData.transaction_count,
+        };
+      } else {
+        // Admins get full balance with all payment methods
+        const adminData = await getDailyBalanceSummary(branchId, dateString);
+        summaryData = adminData;
+      }
+      
       setSummary(summaryData);
       setNewOpeningBalance(summaryData.openingBalance);
     } catch (error) {
@@ -65,7 +100,7 @@ export function DailyBalanceDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, isWorkerView]);
 
   useEffect(() => {
     if (branchId) {
@@ -73,23 +108,16 @@ export function DailyBalanceDashboard() {
     }
   }, [branchId, selectedDate, fetchSummary]);
 
-  // Auto-refresh every 30 seconds to catch updates from other users
+  // Auto-refresh every 30 seconds
   useEffect(() => {
     if (!branchId) return;
     
     const interval = setInterval(() => {
       fetchSummary(branchId, selectedDate);
-    }, 30000); // 30 seconds
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [branchId, selectedDate, fetchSummary]);
-
-  const handleDateChange = (date?: Date) => {
-    setSelectedDate(date);
-    if (branchId && date) {
-      fetchSummary(branchId, date);
-    }
-  };
 
   const handleUpdateOpeningBalance = async () => {
     if (!branchId || typeof newOpeningBalance !== 'number') {
@@ -112,7 +140,6 @@ export function DailyBalanceDashboard() {
 
     setIsUpdating(true);
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       await updateOpeningBalance(branchId, newOpeningBalance, undefined);
       
       toast({
@@ -120,7 +147,6 @@ export function DailyBalanceDashboard() {
         description: 'Opening balance updated successfully.',
       });
       
-      // Force refresh after update
       await fetchSummary(branchId, selectedDate);
     } catch (error) {
       console.error('Error updating balance:', error);
@@ -158,7 +184,9 @@ export function DailyBalanceDashboard() {
           <div>
             <CardTitle className="font-headline">Daily Balance Sheet</CardTitle>
             <CardDescription>
-              An overview of your daily financial transactions for the selected branch.
+              {isWorkerView 
+                ? "Cash management overview - your daily cash responsibility."
+                : "An overview of your daily financial transactions for the selected branch."}
             </CardDescription>
           </div>
           <div className="text-right">
@@ -180,7 +208,6 @@ export function DailyBalanceDashboard() {
                 onChange={(e) => setNewOpeningBalance(Number(e.target.value))}
                 className="mt-2"
                 disabled={isUpdating}
-                placeholder="Enter opening balance (₹)"
               />
             </div>
             <Button onClick={handleUpdateOpeningBalance} disabled={isUpdating}>
@@ -202,12 +229,12 @@ export function DailyBalanceDashboard() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Collections</CardTitle>
+              <CardTitle className="text-sm font-medium">{revenueLabel}</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalRevenue)}</div>
-              <p className="text-xs text-muted-foreground">Total revenue from sales</p>
+              <p className="text-xs text-muted-foreground">{revenueDescription}</p>
             </CardContent>
           </Card>
           <Card>
@@ -222,13 +249,13 @@ export function DailyBalanceDashboard() {
           </Card>
           <Card className="bg-primary/10 border-primary">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Closing Balance</CardTitle>
+              <CardTitle className="text-sm font-medium">{balanceLabel}</CardTitle>
               <Wallet className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(summary.calculatedBalance)}</div>
               <p className="text-xs text-muted-foreground">
-                Opening + Collections - Expenses
+                {balanceDescription}
               </p>
             </CardContent>
           </Card>
