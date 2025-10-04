@@ -1963,61 +1963,63 @@ async def record_sale(
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
+    """Create a new sale transaction (one per call)"""
+    # Permission check for workers
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        perm = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == current_user.id,
+            UserBranchPermission.branch_id == sale.branch_id
+        ).first()
+        if not perm:
+            raise HTTPException(status_code=403, detail="No access to this branch")
+        pl = getattr(perm, "permission_level", None)
+        if hasattr(pl, "value"):
+            pl = pl.value
+        if pl != "full_access":
+            raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
+    
+    # Verify menu item exists
     menu_item = db.query(MenuItem).filter(MenuItem.id == sale.menu_item_id).first()
     if not menu_item:
         raise HTTPException(status_code=404, detail="Menu item not found")
+    
+    if not menu_item.is_available:
+        raise HTTPException(status_code=400, detail=f"Menu item {menu_item.name} is not available")
+    
+    # Validate payment method
+    if sale.payment_method not in ["cash", "gpay"]:
+        raise HTTPException(status_code=400, detail="Invalid payment_method. Use 'cash' or 'gpay'")
+    
+    # Calculate revenue
     revenue = menu_item.price * sale.quantity
-    db_sale = DailySale(menu_item_id=sale.menu_item_id, quantity=sale.quantity, revenue=revenue, branch_id=sale.branch_id)
+    
+    # Create new sale transaction
+    ist_now = datetime.now(IST)
+    db_sale = DailySale(
+        menu_item_id=sale.menu_item_id,
+        quantity=sale.quantity,
+        revenue=revenue,
+        branch_id=sale.branch_id,
+        payment_method=sale.payment_method,
+        sale_date=ist_now
+    )
     db.add(db_sale)
     db.commit()
     db.refresh(db_sale)
+    
+    logger.info(f"Sale recorded: Item {sale.menu_item_id}, Qty {sale.quantity}, Payment {sale.payment_method}")
     return db_sale
 
-# -------------------------
-# BRANCH-SCOPED SALES ENDPOINTS
-# -------------------------
-@app.get("/api/branches/{branch_id}/daily-sales", response_model=List[DailySaleResponse])
-async def get_branch_daily_sales(
+@app.delete("/api/sales/last")
+async def delete_last_sale(
+    menu_item_id: str,
     branch_id: int,
-    date_filter: Optional[str] = None,
+    payment_method: Optional[str] = None,
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
-    """Get daily sales for a specific branch"""
-    # Permission check for workers: must have any permission for this branch
-    if hasattr(current_user, 'role') and current_user.role == "worker":
-        has_perm = db.query(UserBranchPermission).filter(
-            UserBranchPermission.user_id == current_user.id,
-            UserBranchPermission.branch_id == branch_id
-        ).first()
-        if not has_perm:
-            raise HTTPException(status_code=403, detail="No access to this branch")
-
-    query = db.query(DailySale).filter(DailySale.branch_id == branch_id)
-    if date_filter:
-        try:
-            filter_date = datetime.strptime(date_filter, "%Y-%m-%d").date()
-            query = query.filter(func.date(DailySale.sale_date) == filter_date)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-    else:
-        # Default to today if no date specified
-        today = date.today()
-        query = query.filter(func.date(DailySale.sale_date) == today)
-    return query.order_by(DailySale.sale_date.desc()).all()
-
-@app.put("/api/branches/{branch_id}/daily-sales/{item_id}", response_model=DailySaleResponse)
-async def set_branch_daily_sale_quantity(
-    branch_id: int,
-    item_id: str,
-    quantity: int = Form(...),
-    payment_method: str = Form("cash"),  # NEW: default to cash
-    date_filter: Optional[str] = Form(None),
-    db: Session = Depends(get_database),
-    current_user: Admin = Depends(get_current_active_user)
-):
-    """Set/update daily sales quantity for a specific branch and item"""
-    # Permission check for workers
+    """Delete the most recent sale transaction for a specific item"""
+    # Permission check
     if hasattr(current_user, 'role') and current_user.role == "worker":
         perm = db.query(UserBranchPermission).filter(
             UserBranchPermission.user_id == current_user.id,
@@ -2031,59 +2033,70 @@ async def set_branch_daily_sale_quantity(
         if pl != "full_access":
             raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
     
-    # Verify menu item exists
-    menu_item = db.query(MenuItem).filter(
-        MenuItem.id == item_id,
-        MenuItem.branch_id == branch_id
-    ).first()
-    if not menu_item:
-        raise HTTPException(status_code=404, detail="Menu item not found for this branch")
+    # Get today's date in IST
+    today = get_current_date_ist()
     
-    if quantity < 0:
-        raise HTTPException(status_code=400, detail="Quantity cannot be negative")
+    # Find the most recent sale for this item today
+    query = db.query(DailySale).filter(
+        DailySale.menu_item_id == menu_item_id,
+        DailySale.branch_id == branch_id,
+        func.date(DailySale.sale_date) == today
+    )
     
-    # Validate payment_method
-    if payment_method not in ["cash", "gpay"]:
-        raise HTTPException(status_code=400, detail="Invalid payment_method. Use 'cash' or 'gpay'")
+    # Optionally filter by payment method
+    if payment_method:
+        query = query.filter(DailySale.payment_method == payment_method)
     
-    revenue = float(menu_item.price) * int(quantity)
+    # Get the most recent one
+    last_sale = query.order_by(DailySale.sale_date.desc()).first()
     
-    # Determine target date
-    target_date = get_current_date_ist()
+    if not last_sale:
+        raise HTTPException(status_code=404, detail="No sale found to delete")
+    
+    sale_id = last_sale.id
+    db.delete(last_sale)
+    db.commit()
+    
+    logger.info(f"Deleted sale: ID {sale_id}, Item {menu_item_id}, Payment {payment_method}")
+    return {"message": "Sale deleted successfully", "deleted_sale_id": sale_id}
+
+# -------------------------
+# BRANCH-SCOPED SALES ENDPOINTS
+# -------------------------
+@app.get("/api/branches/{branch_id}/daily-sales", response_model=List[DailySaleResponse])
+async def get_branch_daily_sales(
+    branch_id: int,
+    date_filter: Optional[str] = None,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Get all individual sale transactions for a specific branch"""
+    # Permission check
+    if hasattr(current_user, 'role') and current_user.role == "worker":
+        has_perm = db.query(UserBranchPermission).filter(
+            UserBranchPermission.user_id == current_user.id,
+            UserBranchPermission.branch_id == branch_id
+        ).first()
+        if not has_perm:
+            raise HTTPException(status_code=403, detail="No access to this branch")
+
+    query = db.query(DailySale).filter(DailySale.branch_id == branch_id)
+    
     if date_filter:
         try:
-            target_date = datetime.strptime(date_filter, "%Y-%m-%d").date()
+            filter_date = datetime.strptime(date_filter, "%Y-%m-%d").date()
+            query = query.filter(func.date(DailySale.sale_date) == filter_date)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-    
-    # Upsert logic
-    existing_sale = db.query(DailySale).filter(
-        DailySale.menu_item_id == item_id,
-        DailySale.branch_id == branch_id,
-        func.date(DailySale.sale_date) == target_date,
-        DailySale.payment_method == payment_method  # NEW: filter by payment method too
-    ).first()
-    
-    if existing_sale:
-        existing_sale.quantity = quantity
-        existing_sale.revenue = revenue
-        db.commit()
-        db.refresh(existing_sale)
-        return existing_sale
     else:
-        ist_now = datetime.now(IST)
-        db_sale = DailySale(
-            menu_item_id=item_id,
-            quantity=quantity,
-            revenue=revenue,
-            branch_id=branch_id,
-            payment_method=payment_method,  # NEW
-            sale_date=datetime.combine(target_date, ist_now.time())
-        )
-        db.add(db_sale)
-        db.commit()
-        db.refresh(db_sale)
-        return db_sale
+        # Default to today
+        today = get_current_date_ist()
+        query = query.filter(func.date(DailySale.sale_date) == today)
+    
+    # Return all transactions, ordered by time
+    return query.order_by(DailySale.sale_date.desc()).all()
+
+
 
 # -------------------------
 # DASHBOARD

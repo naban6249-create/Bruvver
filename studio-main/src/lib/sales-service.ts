@@ -17,8 +17,8 @@ export async function getRealSalesSummary(branchId?: string): Promise<RealSalesS
   return ApiClient.get(url);
 }
 
+// Get all individual sale transactions for a branch and date
 export async function getDailySales(branchId: string, date?: string): Promise<DailySale[]> {
-  // Use branch-scoped endpoint and pass date_filter per backend contract
   const params = new URLSearchParams();
   if (date) params.append('date_filter', date);
 
@@ -30,30 +30,53 @@ export async function getDailySales(branchId: string, date?: string): Promise<Da
     branchId: sale.branch_id,
     quantity: sale.quantity,
     revenue: sale.revenue,
+    paymentMethod: sale.payment_method || 'cash',
     saleDate: sale.sale_date
   }));
 }
 
-export async function updateDailySale(
-  branchId: string, 
-  itemId: string, 
-  quantity: number,
-  paymentMethod: 'cash' | 'gpay' = 'cash'  // NEW parameter
+// Create a new sale transaction
+export async function createSale(
+  branchId: number,
+  menuItemId: string,
+  quantity: number = 1,
+  paymentMethod: 'cash' | 'gpay' = 'cash'
 ): Promise<DailySale> {
-  const formData = new FormData();
-  formData.append('quantity', quantity.toString());
-  formData.append('payment_method', paymentMethod);  // NEW
+  const saleData = {
+    menu_item_id: menuItemId,
+    branch_id: branchId,
+    quantity: quantity,
+    payment_method: paymentMethod
+  };
 
-  const sale = await ApiClient.put(`/branches/${branchId}/daily-sales/${itemId}`, formData);
+  const sale = await ApiClient.post('/sales', saleData);
   return {
     id: sale.id,
     itemId: String(sale.menu_item_id),
     branchId: sale.branch_id,
     quantity: sale.quantity,
     revenue: sale.revenue,
-    paymentMethod: sale.payment_method || 'cash',  // NEW
+    paymentMethod: sale.payment_method || 'cash',
     saleDate: sale.sale_date
   };
+}
+
+// Delete the most recent sale for a specific item
+export async function deleteLastSale(
+  branchId: number,
+  menuItemId: string,
+  paymentMethod?: 'cash' | 'gpay'
+): Promise<void> {
+  const params = new URLSearchParams({
+    menu_item_id: menuItemId,
+    branch_id: branchId.toString()
+  });
+  
+  if (paymentMethod) {
+    params.append('payment_method', paymentMethod);
+  }
+
+  await ApiClient.delete(`/sales/last?${params.toString()}`);
 }
 
 export async function getSalesSummary(branchId: string, date?: string): Promise<any> {
@@ -67,9 +90,6 @@ export async function resetDailySales(branchId: string): Promise<void> {
   await ApiClient.post('/admin/daily-reset', { branchId });
 }
 
-// Admin-only: Reset data for a specific branch.
-// scope: 'today' => clears today's sales/expenses/reports for that branch
-//        'all'   => clears all historical sales/expenses/reports for that branch
 export async function resetBranchData(branchId: string | number, scope: 'today' | 'all' = 'today'): Promise<{ message: string } & Record<string, any>> {
   return ApiClient.post(`/admin/branch-reset/${branchId}?scope=${scope}`);
 }

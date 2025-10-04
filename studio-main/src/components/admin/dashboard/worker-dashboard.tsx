@@ -9,19 +9,25 @@ import { WorkerExpenses } from "../expenses/worker-expenses";
 import { DailyBalanceDashboard } from "./daily-balance-dashboard";
 import { useAuth } from "@/lib/auth-context";
 import { AlertCircle, Eye, Edit } from "lucide-react";
+import React from 'react';
 
 export function WorkerDashboard() {
     const { user, hasPermission, getUserBranches } = useAuth();
     const searchParams = useSearchParams();
     const branchId = searchParams.get('branchId');
+    const [balanceKey, setBalanceKey] = React.useState(0);
 
     const currentBranchId = branchId ? parseInt(branchId) : null;
     const userBranches = getUserBranches();
     const hasViewAccess = currentBranchId ? hasPermission(currentBranchId, 'view_only') : false;
     const hasFullAccess = currentBranchId ? hasPermission(currentBranchId, 'full_access') : false;
 
-    // Find current branch details
     const currentBranch = userBranches.find((b: any) => b.id === currentBranchId);
+
+    // Callback to refresh balance when sales change
+    const handleSaleChange = React.useCallback(() => {
+        setBalanceKey(prev => prev + 1);
+    }, []);
 
     if (!user) {
         return (
@@ -88,7 +94,6 @@ export function WorkerDashboard() {
 
     return (
         <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
-            {/* Access Level Indicator */}
             <div className="mb-4 sm:mb-6">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div className="min-w-0 flex-1">
@@ -141,7 +146,7 @@ export function WorkerDashboard() {
                                 </CardContent>
                             </Card>
                         )}
-                        <DailySalesBreakdown />
+                        <DailySalesBreakdown onSaleChange={handleSaleChange} />
                     </div>
                 </TabsContent>
 
@@ -177,7 +182,7 @@ export function WorkerDashboard() {
                                 </CardContent>
                             </Card>
                         )}
-                        <DailyBalanceDashboard isWorkerView={true} />
+                        <DailyBalanceDashboard key={balanceKey} isWorkerView={true} />
                     </div>
                 </TabsContent>
             </Tabs>
