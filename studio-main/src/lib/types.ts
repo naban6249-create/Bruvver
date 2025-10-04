@@ -99,6 +99,7 @@ export interface DailySale {
   branchId: number;
   quantity: number;
   revenue: number;
+  paymentMethod: 'cash' | 'gpay';  // NEW
   saleDate: string;
 }
 
