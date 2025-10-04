@@ -34,9 +34,15 @@ export async function getDailySales(branchId: string, date?: string): Promise<Da
   }));
 }
 
-export async function updateDailySale(branchId: string, itemId: string, quantity: number): Promise<DailySale> {
+export async function updateDailySale(
+  branchId: string, 
+  itemId: string, 
+  quantity: number,
+  paymentMethod: 'cash' | 'gpay' = 'cash'  // NEW parameter
+): Promise<DailySale> {
   const formData = new FormData();
   formData.append('quantity', quantity.toString());
+  formData.append('payment_method', paymentMethod);  // NEW
 
   const sale = await ApiClient.put(`/branches/${branchId}/daily-sales/${itemId}`, formData);
   return {
@@ -45,6 +51,7 @@ export async function updateDailySale(branchId: string, itemId: string, quantity
     branchId: sale.branch_id,
     quantity: sale.quantity,
     revenue: sale.revenue,
+    paymentMethod: sale.payment_method || 'cash',  // NEW
     saleDate: sale.sale_date
   };
 }
