@@ -6,17 +6,86 @@ import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Plus, Minus, Pencil, AlertCircle } from "lucide-react";
+import { Plus, Minus, AlertCircle, Wallet, Smartphone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { MenuItem, DailySale } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { MenuItemDialog } from "@/components/admin/menu/menu-item-dialog";
-import { getMenuItems, updateMenuItem } from "@/lib/menu-service";
+import { getMenuItems } from "@/lib/menu-service";
 import { getDailySales, updateDailySale } from "@/lib/sales-service";
 import { useAuth } from "@/lib/auth-context";
 
 interface SaleWithDetails extends MenuItem {
     quantitySold: number;
+}
+
+// Payment Method Selection Dialog Component
+function PaymentMethodDialog({ 
+    isOpen, 
+    onClose, 
+    onConfirm,
+    itemName,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: (paymentMethod: 'cash' | 'gpay') => void;
+    itemName: string;
+}) {
+    const [selectedPayment, setSelectedPayment] = React.useState<'cash' | 'gpay'>('cash');
+
+    const handleConfirm = () => {
+        onConfirm(selectedPayment);
+        setSelectedPayment('cash'); // Reset for next time
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Select Payment Method</DialogTitle>
+                    <DialogDescription>
+                        How was this sale paid for? <br />
+                        <span className="font-medium">{itemName}</span>
+                    </DialogDescription>
+                </DialogHeader>
+                
+                <div className="grid grid-cols-2 gap-4 py-4">
+                    <Button
+                        variant={selectedPayment === 'cash' ? 'default' : 'outline'}
+                        className="h-24 flex flex-col gap-2"
+                        onClick={() => setSelectedPayment('cash')}
+                    >
+                        <Wallet className="h-8 w-8" />
+                        <span>Cash</span>
+                    </Button>
+                    <Button
+                        variant={selectedPayment === 'gpay' ? 'default' : 'outline'}
+                        className="h-24 flex flex-col gap-2"
+                        onClick={() => setSelectedPayment('gpay')}
+                    >
+                        <Smartphone className="h-8 w-8" />
+                        <span>GPay / UPI</span>
+                    </Button>
+                </div>
+
+                <DialogFooter>
+                    <Button variant="outline" onClick={onClose}>
+                        Cancel
+                    </Button>
+                    <Button onClick={handleConfirm}>
+                        Confirm
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
 }
 
 export function DailySalesBreakdown() {
@@ -25,8 +94,12 @@ export function DailySalesBreakdown() {
     const { user, hasPermission } = useAuth();
     
     const [salesDetails, setSalesDetails] = React.useState<SaleWithDetails[]>([]);
-    const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
-    const [selectedItem, setSelectedItem] = React.useState<MenuItem | null>(null);
+    const [isPaymentDialogOpen, setIsPaymentDialogOpen] = React.useState(false);
+    const [pendingUpdate, setPendingUpdate] = React.useState<{
+        itemId: string | number;
+        newQuantity: number;
+        itemName: string;
+    } | null>(null);
     const [currentDate, setCurrentDate] = React.useState('');
     const [isLoading, setIsLoading] = React.useState(false);
     const [totalRevenue, setTotalRevenue] = React.useState(0);
@@ -110,8 +183,17 @@ export function DailySalesBreakdown() {
         fetchSalesSummary();
     }, [fetchSalesSummary]);
 
-    const handleQuantityChange = async (itemId: string | number, newQuantity: number) => {
+    const initiateQuantityChange = (itemId: string | number, newQuantity: number, itemName: string) => {
         if (newQuantity < 0 || !branchId || !hasFullAccess) return;
+        
+        setPendingUpdate({ itemId, newQuantity, itemName });
+        setIsPaymentDialogOpen(true);
+    };
+
+    const handlePaymentMethodSelected = async (paymentMethod: 'cash' | 'gpay') => {
+        if (!pendingUpdate || !branchId) return;
+
+        const { itemId, newQuantity } = pendingUpdate;
 
         const prev = salesDetails;
         const updated = salesDetails.map((it) =>
@@ -123,8 +205,11 @@ export function DailySalesBreakdown() {
         );
         setTotalRevenue(optimisticRevenue);
 
+        setIsPaymentDialogOpen(false);
+        setPendingUpdate(null);
+
         try {
-            await updateDailySale(branchId, String(itemId), newQuantity);
+            await updateDailySale(branchId, String(itemId), newQuantity, paymentMethod);
             await fetchSalesSummary();
         } catch (error) {
             console.error("Failed to update quantity:", error);
@@ -141,44 +226,7 @@ export function DailySalesBreakdown() {
         }
     };
 
-    const handleEditItem = (item: MenuItem) => {
-        if (!hasFullAccess) {
-            toast({
-                title: "Access Denied",
-                description: "You don't have permission to edit menu items.",
-                variant: "destructive"
-            });
-            return;
-        }
-        setSelectedItem(item);
-        setIsEditDialogOpen(true);
-    };
-
-    const handleSaveItem = async (itemData: FormData) => {
-        try {
-            const itemId = itemData.get('id') as string;
-            if (!branchId) {
-                throw new Error('Branch ID is required');
-            }
-            
-            await updateMenuItem(itemData, itemId, branchId);
-            await fetchSalesSummary();
-            toast({ title: "Success", description: `Menu item updated.` });
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-            toast({
-                title: "Error",
-                description: `Could not update menu item: ${errorMessage}`,
-                variant: "destructive"
-            });
-        } finally {
-            setIsEditDialogOpen(false);
-            setSelectedItem(null);
-        }
-    };
-
     const getImageUrl = (item: MenuItem): string => {
-        // Try imageUrl first (camelCase), fallback to any other format
         const url = item.imageUrl || (item as any).image_url || '';
         return url.trim() || 'https://placehold.co/64x64/png?text=N/A';
     };
@@ -292,16 +340,6 @@ export function DailySalesBreakdown() {
                                                             </p>
                                                         )}
                                                     </div>
-                                                    {hasFullAccess && (
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="sm" 
-                                                            onClick={() => handleEditItem(item)} 
-                                                            className="ml-2"
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                    )}
                                                 </div>
                                                 
                                                 <div className="mt-2 space-y-1">
@@ -319,9 +357,10 @@ export function DailySalesBreakdown() {
                                                                     variant="outline" 
                                                                     size="icon" 
                                                                     className="h-6 w-6"
-                                                                    onClick={() => handleQuantityChange(
+                                                                    onClick={() => initiateQuantityChange(
                                                                         item.id, 
-                                                                        item.quantitySold - 1
+                                                                        item.quantitySold - 1,
+                                                                        item.name
                                                                     )}
                                                                     disabled={item.quantitySold === 0}
                                                                 >
@@ -334,9 +373,10 @@ export function DailySalesBreakdown() {
                                                                     variant="outline" 
                                                                     size="icon" 
                                                                     className="h-6 w-6"
-                                                                    onClick={() => handleQuantityChange(
+                                                                    onClick={() => initiateQuantityChange(
                                                                         item.id, 
-                                                                        item.quantitySold + 1
+                                                                        item.quantitySold + 1,
+                                                                        item.name
                                                                     )}
                                                                 >
                                                                     <Plus className="h-3 w-3" />
@@ -373,11 +413,6 @@ export function DailySalesBreakdown() {
                                                 Quantity Sold
                                             </TableHead>
                                             <TableHead className="text-right">Revenue</TableHead>
-                                            {hasFullAccess && (
-                                                <TableHead className="w-[100px] text-right">
-                                                    Actions
-                                                </TableHead>
-                                            )}
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -415,9 +450,10 @@ export function DailySalesBreakdown() {
                                                                     variant="outline" 
                                                                     size="icon" 
                                                                     className="h-8 w-8"
-                                                                    onClick={() => handleQuantityChange(
+                                                                    onClick={() => initiateQuantityChange(
                                                                         item.id, 
-                                                                        item.quantitySold - 1
+                                                                        item.quantitySold - 1,
+                                                                        item.name
                                                                     )}
                                                                     disabled={item.quantitySold === 0}
                                                                 >
@@ -430,9 +466,10 @@ export function DailySalesBreakdown() {
                                                                     variant="outline" 
                                                                     size="icon" 
                                                                     className="h-8 w-8"
-                                                                    onClick={() => handleQuantityChange(
+                                                                    onClick={() => initiateQuantityChange(
                                                                         item.id, 
-                                                                        item.quantitySold + 1
+                                                                        item.quantitySold + 1,
+                                                                        item.name
                                                                     )}
                                                                 >
                                                                     <Plus className="h-4 w-4" />
@@ -448,17 +485,6 @@ export function DailySalesBreakdown() {
                                                 <TableCell className="text-right font-medium">
                                                     ₹{(item.price * item.quantitySold).toFixed(2)}
                                                 </TableCell>
-                                                {hasFullAccess && (
-                                                    <TableCell className="text-right">
-                                                        <Button 
-                                                            variant="outline" 
-                                                            size="sm" 
-                                                            onClick={() => handleEditItem(item)}
-                                                        >
-                                                            <Pencil className="mr-2 h-4 w-4" /> Edit
-                                                        </Button>
-                                                    </TableCell>
-                                                )}
                                             </TableRow>
                                         ))}
                                     </TableBody>
@@ -479,14 +505,15 @@ export function DailySalesBreakdown() {
                 </CardFooter>
             </Card>
             
-            {hasFullAccess && (
-                <MenuItemDialog
-                    isOpen={isEditDialogOpen}
-                    setIsOpen={setIsEditDialogOpen}
-                    onSave={handleSaveItem}
-                    item={selectedItem}
-                />
-            )}
+            <PaymentMethodDialog
+                isOpen={isPaymentDialogOpen}
+                onClose={() => {
+                    setIsPaymentDialogOpen(false);
+                    setPendingUpdate(null);
+                }}
+                onConfirm={handlePaymentMethodSelected}
+                itemName={pendingUpdate?.itemName || ''}
+            />
         </>
     );
 }
