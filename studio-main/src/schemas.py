@@ -300,6 +300,7 @@ class DailySaleCreate(BaseModel):
     menu_item_id: int
     branch_id: int
     quantity: int
+    payment_method: str = "cash"
 
 class DailySaleResponse(BaseModel):
     id: int
@@ -307,6 +308,7 @@ class DailySaleResponse(BaseModel):
     branch_id: int
     quantity: int
     revenue: float
+    payment_method: str  # NEW
     sale_date: datetime
     menu_item: Optional[MenuItemResponse] = None
 
