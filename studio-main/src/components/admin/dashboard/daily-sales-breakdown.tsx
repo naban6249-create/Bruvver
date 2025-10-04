@@ -19,14 +19,16 @@ import {
 import type { MenuItem, DailySale } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { getMenuItems } from "@/lib/menu-service";
-import { getDailySales, updateDailySale } from "@/lib/sales-service";
+import { getDailySales, createSale, deleteLastSale } from "@/lib/sales-service";
 import { useAuth } from "@/lib/auth-context";
 
-interface SaleWithDetails extends MenuItem {
+interface MenuItemWithSales extends MenuItem {
     quantitySold: number;
+    cashCount: number;
+    gpayCount: number;
 }
 
-// Payment Method Selection Dialog Component
+// Payment Method Selection Dialog
 function PaymentMethodDialog({ 
     isOpen, 
     onClose, 
@@ -42,7 +44,7 @@ function PaymentMethodDialog({
 
     const handleConfirm = () => {
         onConfirm(selectedPayment);
-        setSelectedPayment('cash'); // Reset for next time
+        setSelectedPayment('cash');
     };
 
     return (
@@ -88,16 +90,18 @@ function PaymentMethodDialog({
     );
 }
 
-export function DailySalesBreakdown() {
+export function DailySalesBreakdown({ onSaleChange }: { onSaleChange?: () => void }) {
     const searchParams = useSearchParams();
     const branchId = searchParams.get('branchId');
     const { user, hasPermission } = useAuth();
     
-    const [salesDetails, setSalesDetails] = React.useState<SaleWithDetails[]>([]);
+    const [menuItems, setMenuItems] = React.useState<MenuItem[]>([]);
+    const [salesTransactions, setSalesTransactions] = React.useState<DailySale[]>([]);
+    const [itemsWithSales, setItemsWithSales] = React.useState<MenuItemWithSales[]>([]);
     const [isPaymentDialogOpen, setIsPaymentDialogOpen] = React.useState(false);
-    const [pendingUpdate, setPendingUpdate] = React.useState<{
-        itemId: string | number;
-        newQuantity: number;
+    const [pendingAction, setPendingAction] = React.useState<{
+        action: 'add';
+        itemId: string;
         itemName: string;
     } | null>(null);
     const [currentDate, setCurrentDate] = React.useState('');
@@ -120,49 +124,49 @@ export function DailySalesBreakdown() {
         setCurrentDate(today.toLocaleDateString('en-US', options));
     }, []);
 
-    const fetchSalesSummary = React.useCallback(async () => {
-        if (!branchId) {
-            setSalesDetails([]);
-            setTotalRevenue(0);
-            return;
-        }
+    // Calculate aggregated data from transactions
+    const calculateItemSales = React.useCallback((menuItems: MenuItem[], transactions: DailySale[]): MenuItemWithSales[] => {
+        return menuItems.map(item => {
+            const itemTransactions = transactions.filter(t => String(t.itemId) === String(item.id));
+            const totalQuantity = itemTransactions.reduce((sum, t) => sum + t.quantity, 0);
+            const cashCount = itemTransactions
+                .filter(t => t.paymentMethod === 'cash')
+                .reduce((sum, t) => sum + t.quantity, 0);
+            const gpayCount = itemTransactions
+                .filter(t => t.paymentMethod === 'gpay')
+                .reduce((sum, t) => sum + t.quantity, 0);
+            
+            return {
+                ...item,
+                quantitySold: totalQuantity,
+                cashCount,
+                gpayCount
+            };
+        });
+    }, []);
 
-        if (!hasViewAccess) {
-            toast({
-                title: "Access Denied",
-                description: "You don't have permission to view sales for this branch.",
-                variant: "destructive"
-            });
-            setSalesDetails([]);
+    // Fetch all data
+    const fetchSalesData = React.useCallback(async () => {
+        if (!branchId || !hasViewAccess) {
+            setItemsWithSales([]);
             setTotalRevenue(0);
             return;
         }
 
         setIsLoading(true);
         try {
-            const [menuItems, dailySales] = await Promise.all([
+            const [menuData, salesData] = await Promise.all([
                 getMenuItems(branchId),
                 getDailySales(branchId)
             ]);
             
-            const salesMap = new Map<string | number, DailySale>(
-                dailySales.map(sale => [sale.itemId, sale])
-            );
+            setMenuItems(menuData);
+            setSalesTransactions(salesData);
             
-            const itemsWithSales = menuItems.map(item => {
-                const sale = salesMap.get(String(item.id)); 
-                const quantitySold = sale ? sale.quantity : 0;
-                return {
-                    ...item,
-                    quantitySold,
-                };
-            });
+            const aggregated = calculateItemSales(menuData, salesData);
+            setItemsWithSales(aggregated);
             
-            setSalesDetails(itemsWithSales);
-            
-            const revenue = itemsWithSales.reduce((sum, item) => 
-                sum + item.price * item.quantitySold, 0
-            );
+            const revenue = salesData.reduce((sum, sale) => sum + sale.revenue, 0);
             setTotalRevenue(revenue);
             
         } catch (error) {
@@ -172,55 +176,81 @@ export function DailySalesBreakdown() {
                 description: "Could not load today's sales data.",
                 variant: "destructive"
             });
-            setSalesDetails([]);
-            setTotalRevenue(0);
         } finally {
             setIsLoading(false);
         }
-    }, [branchId, hasViewAccess, toast]);
+    }, [branchId, hasViewAccess, toast, calculateItemSales]);
 
     React.useEffect(() => {
-        fetchSalesSummary();
-    }, [fetchSalesSummary]);
+        fetchSalesData();
+    }, [fetchSalesData]);
 
-    const initiateQuantityChange = (itemId: string | number, newQuantity: number, itemName: string) => {
-        if (newQuantity < 0 || !branchId || !hasFullAccess) return;
+    // Handle adding a sale
+    const handleAddSale = (itemId: string, itemName: string) => {
+        if (!hasFullAccess || !branchId) return;
         
-        setPendingUpdate({ itemId, newQuantity, itemName });
+        setPendingAction({ action: 'add', itemId, itemName });
         setIsPaymentDialogOpen(true);
     };
 
+    // Handle payment method selection
     const handlePaymentMethodSelected = async (paymentMethod: 'cash' | 'gpay') => {
-        if (!pendingUpdate || !branchId) return;
-
-        const { itemId, newQuantity } = pendingUpdate;
-
-        const prev = salesDetails;
-        const updated = salesDetails.map((it) =>
-            it.id === itemId ? { ...it, quantitySold: newQuantity } : it
-        );
-        setSalesDetails(updated);
-        const optimisticRevenue = updated.reduce((sum, it) => 
-            sum + it.price * it.quantitySold, 0
-        );
-        setTotalRevenue(optimisticRevenue);
+        if (!pendingAction || !branchId) return;
 
         setIsPaymentDialogOpen(false);
-        setPendingUpdate(null);
-
+        
         try {
-            await updateDailySale(branchId, String(itemId), newQuantity, paymentMethod);
-            await fetchSalesSummary();
+            await createSale(parseInt(branchId), pendingAction.itemId, 1, paymentMethod);
+            
+            toast({
+                title: "Sale Recorded",
+                description: `${pendingAction.itemName} - ${paymentMethod === 'cash' ? 'Cash' : 'GPay'}`,
+            });
+            
+            await fetchSalesData();
+            onSaleChange?.(); // Notify parent to refresh balance
         } catch (error) {
-            console.error("Failed to update quantity:", error);
-            setSalesDetails(prev);
-            const revertedRevenue = prev.reduce((sum, it) => 
-                sum + it.price * it.quantitySold, 0
-            );
-            setTotalRevenue(revertedRevenue);
+            console.error("Failed to create sale:", error);
             toast({
                 title: "Error",
-                description: (error as Error)?.message || "Could not update sales quantity.",
+                description: (error as Error)?.message || "Could not record sale.",
+                variant: "destructive"
+            });
+        } finally {
+            setPendingAction(null);
+        }
+    };
+
+    // Handle removing the last sale
+    const handleRemoveSale = async (itemId: string, itemName: string) => {
+        if (!hasFullAccess || !branchId) return;
+
+        // Check if there are any sales to remove
+        const itemSales = salesTransactions.filter(t => String(t.itemId) === String(itemId));
+        if (itemSales.length === 0) {
+            toast({
+                title: "No Sales",
+                description: `No sales found for ${itemName} to remove.`,
+                variant: "destructive"
+            });
+            return;
+        }
+
+        try {
+            await deleteLastSale(parseInt(branchId), itemId);
+            
+            toast({
+                title: "Sale Removed",
+                description: `Last sale of ${itemName} has been removed.`,
+            });
+            
+            await fetchSalesData();
+            onSaleChange?.(); // Notify parent to refresh balance
+        } catch (error) {
+            console.error("Failed to delete sale:", error);
+            toast({
+                title: "Error",
+                description: (error as Error)?.message || "Could not remove sale.",
                 variant: "destructive"
             });
         }
@@ -231,7 +261,7 @@ export function DailySalesBreakdown() {
         return url.trim() || 'https://placehold.co/64x64/png?text=N/A';
     };
 
-    const overallTotalItemsSold = salesDetails.reduce((acc, item) => 
+    const overallTotalItemsSold = itemsWithSales.reduce((acc, item) => 
         acc + item.quantitySold, 0
     );
 
@@ -285,7 +315,7 @@ export function DailySalesBreakdown() {
                         <div>
                             <CardTitle className="font-headline">Daily Sales Breakdown</CardTitle>
                             <CardDescription>
-                                Track daily sales for each menu item. 
+                                Track sales transactions in real-time. Each click records a new sale.
                                 {!hasFullAccess && (
                                     <Badge variant="secondary" className="ml-2">View Only</Badge>
                                 )}
@@ -302,7 +332,7 @@ export function DailySalesBreakdown() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    {salesDetails.length === 0 ? (
+                    {itemsWithSales.length === 0 ? (
                         <div className="text-center py-10">
                             <p className="text-muted-foreground">
                                 No menu items found for this branch.
@@ -312,7 +342,7 @@ export function DailySalesBreakdown() {
                         <>
                             {/* Mobile Card Layout */}
                             <div className="block md:hidden space-y-4">
-                                {salesDetails.map(item => (
+                                {itemsWithSales.map(item => (
                                     <Card key={item.id} className="p-4">
                                         <div className="flex items-start gap-3">
                                             <div className="flex-shrink-0">
@@ -329,18 +359,14 @@ export function DailySalesBreakdown() {
                                                 />
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex items-start justify-between">
-                                                    <div className="min-w-0 flex-1">
-                                                        <h4 className="font-medium text-sm truncate">
-                                                            {item.name}
-                                                        </h4>
-                                                        {item.description && (
-                                                            <p className="text-xs text-muted-foreground line-clamp-2">
-                                                                {item.description}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                </div>
+                                                <h4 className="font-medium text-sm truncate">
+                                                    {item.name}
+                                                </h4>
+                                                {item.description && (
+                                                    <p className="text-xs text-muted-foreground line-clamp-2">
+                                                        {item.description}
+                                                    </p>
+                                                )}
                                                 
                                                 <div className="mt-2 space-y-1">
                                                     <div className="flex justify-between text-sm">
@@ -357,35 +383,33 @@ export function DailySalesBreakdown() {
                                                                     variant="outline" 
                                                                     size="icon" 
                                                                     className="h-6 w-6"
-                                                                    onClick={() => initiateQuantityChange(
-                                                                        item.id, 
-                                                                        item.quantitySold - 1,
-                                                                        item.name
-                                                                    )}
+                                                                    onClick={() => handleRemoveSale(String(item.id), item.name)}
                                                                     disabled={item.quantitySold === 0}
                                                                 >
                                                                     <Minus className="h-3 w-3" />
                                                                 </Button>
-                                                                <span className="text-sm font-medium min-w-[2rem] text-center">
-                                                                    {item.quantitySold}
-                                                                </span>
+                                                                <div className="text-sm font-medium min-w-[3rem] text-center">
+                                                                    <div>{item.quantitySold}</div>
+                                                                    <div className="text-xs text-muted-foreground">
+                                                                        💵{item.cashCount} 📱{item.gpayCount}
+                                                                    </div>
+                                                                </div>
                                                                 <Button 
                                                                     variant="outline" 
                                                                     size="icon" 
                                                                     className="h-6 w-6"
-                                                                    onClick={() => initiateQuantityChange(
-                                                                        item.id, 
-                                                                        item.quantitySold + 1,
-                                                                        item.name
-                                                                    )}
+                                                                    onClick={() => handleAddSale(String(item.id), item.name)}
                                                                 >
                                                                     <Plus className="h-3 w-3" />
                                                                 </Button>
                                                             </div>
                                                         ) : (
-                                                            <span className="text-sm font-medium">
-                                                                {item.quantitySold}
-                                                            </span>
+                                                            <div className="text-sm font-medium text-center">
+                                                                <div>{item.quantitySold}</div>
+                                                                <div className="text-xs text-muted-foreground">
+                                                                    💵{item.cashCount} 📱{item.gpayCount}
+                                                                </div>
+                                                            </div>
                                                         )}
                                                     </div>
                                                     <div className="flex justify-between text-sm font-medium">
@@ -409,14 +433,14 @@ export function DailySalesBreakdown() {
                                             <TableHead className="w-[100px]">Image</TableHead>
                                             <TableHead>Menu Item</TableHead>
                                             <TableHead className="text-right">Price</TableHead>
-                                            <TableHead className="w-[150px] text-right">
+                                            <TableHead className="w-[200px] text-right">
                                                 Quantity Sold
                                             </TableHead>
                                             <TableHead className="text-right">Revenue</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {salesDetails.map(item => (
+                                        {itemsWithSales.map(item => (
                                             <TableRow key={item.id}>
                                                 <TableCell>
                                                     <Image
@@ -450,35 +474,33 @@ export function DailySalesBreakdown() {
                                                                     variant="outline" 
                                                                     size="icon" 
                                                                     className="h-8 w-8"
-                                                                    onClick={() => initiateQuantityChange(
-                                                                        item.id, 
-                                                                        item.quantitySold - 1,
-                                                                        item.name
-                                                                    )}
+                                                                    onClick={() => handleRemoveSale(String(item.id), item.name)}
                                                                     disabled={item.quantitySold === 0}
                                                                 >
                                                                     <Minus className="h-4 w-4" />
                                                                 </Button>
-                                                                <span className="text-center w-8 font-medium">
-                                                                    {item.quantitySold}
-                                                                </span>
+                                                                <div className="text-center w-16 font-medium">
+                                                                    <div>{item.quantitySold}</div>
+                                                                    <div className="text-xs text-muted-foreground">
+                                                                        💵{item.cashCount} 📱{item.gpayCount}
+                                                                    </div>
+                                                                </div>
                                                                 <Button 
                                                                     variant="outline" 
                                                                     size="icon" 
                                                                     className="h-8 w-8"
-                                                                    onClick={() => initiateQuantityChange(
-                                                                        item.id, 
-                                                                        item.quantitySold + 1,
-                                                                        item.name
-                                                                    )}
+                                                                    onClick={() => handleAddSale(String(item.id), item.name)}
                                                                 >
                                                                     <Plus className="h-4 w-4" />
                                                                 </Button>
                                                             </>
                                                         ) : (
-                                                            <span className="text-center font-medium">
-                                                                {item.quantitySold}
-                                                            </span>
+                                                            <div className="text-center font-medium">
+                                                                <div>{item.quantitySold}</div>
+                                                                <div className="text-xs text-muted-foreground">
+                                                                    💵{item.cashCount} 📱{item.gpayCount}
+                                                                </div>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </TableCell>
@@ -501,6 +523,9 @@ export function DailySalesBreakdown() {
                         <div className="font-bold text-xl text-green-600">
                             Total Revenue: ₹{totalRevenue.toFixed(2)}
                         </div>
+                        <div className="text-sm text-muted-foreground">
+                            {salesTransactions.length} total transaction{salesTransactions.length !== 1 ? 's' : ''}
+                        </div>
                     </div>
                 </CardFooter>
             </Card>
@@ -509,10 +534,10 @@ export function DailySalesBreakdown() {
                 isOpen={isPaymentDialogOpen}
                 onClose={() => {
                     setIsPaymentDialogOpen(false);
-                    setPendingUpdate(null);
+                    setPendingAction(null);
                 }}
                 onConfirm={handlePaymentMethodSelected}
-                itemName={pendingUpdate?.itemName || ''}
+                itemName={pendingAction?.itemName || ''}
             />
         </>
     );
