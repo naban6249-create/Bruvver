@@ -40,7 +40,8 @@ export async function getDailyExpenses(
       url += `?${params.toString()}`;
     }
     
-    return await ApiClient.get(url);
+    const expenses = await ApiClient.get(url);
+    return expenses || [];
   } catch (error) {
     console.error("Failed to get daily expenses:", error);
     return [];
