@@ -63,7 +63,7 @@ export async function updateOpeningBalance(
 
 export async function getWorkerCashBalance(date?: string): Promise<WorkerCashBalanceSummary> {
   try {
-    let url = '/api/worker/cash-balance';  // ✅ Added /api prefix
+    let url = '/worker/cash-balance';// ✅ Added /api prefix
     const params = new URLSearchParams();
 
     if (date) params.append('date_filter', date);
