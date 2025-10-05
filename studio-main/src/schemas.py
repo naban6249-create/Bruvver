@@ -297,7 +297,7 @@ class OrderResponse(BaseModel):
 # SALES SCHEMAS
 # -----------------------
 class DailySaleCreate(BaseModel):
-    menu_item_id: int
+    menu_item_id: str  # Changed from int to str
     branch_id: int
     quantity: int
     payment_method: str = "cash"
