@@ -8,15 +8,16 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { CalendarIcon, Eye, Save } from 'lucide-react';
-import type { DailyExpense, ExpenseCategory } from '@/lib/types';
-import { getExpenseCategories } from '@/lib/expenses-service';
+import { Eye, Save } from 'lucide-react';
+import type { DailyExpense } from '@/lib/types';
 
 interface ExpenseDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   onSave?: (expense: Omit<DailyExpense, 'id' | 'created_at' | 'created_by'>) => void;
   expense?: DailyExpense | null;
+  categories?: any[]; // ✅ Added categories prop
+  isSaving?: boolean; // ✅ Added isSaving prop
   readOnly?: boolean;
 }
 
@@ -24,8 +25,15 @@ const DEFAULT_CATEGORIES = [
   'Dairy', 'Coffee Beans', 'Utilities', 'Rent', 'Staff Salary', 'Maintenance', 'Other'
 ];
 
-export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = false }: ExpenseDialogProps) {
-  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+export function ExpenseDialog({ 
+  isOpen, 
+  setIsOpen, 
+  onSave, 
+  expense, 
+  categories = [], // ✅ Use passed categories with default
+  isSaving = false, // ✅ Use passed isSaving state
+  readOnly = false 
+}: ExpenseDialogProps) {
   const [formData, setFormData] = useState({
     category: '',
     item_name: '',
@@ -37,28 +45,15 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
     expense_date: '',
   });
 
-  // Load expense categories
-  useEffect(() => {
-    const loadCategories = async () => {
-      try {
-        // --- THIS IS THE FIX ---
-        // Removed the token argument from the function call.
-        const cats = await getExpenseCategories();
-        // --- END OF FIX ---
-        setCategories(cats);
-      } catch (error) {
-        console.error('Failed to load categories:', error);
-        // Use default categories as fallback
-        setCategories(DEFAULT_CATEGORIES.map((name, index) => ({
-          id: index,
-          name,
-          is_active: true,
-          created_at: new Date().toISOString()
-        })));
-      }
-    };
-    loadCategories();
-  }, []);
+  // ✅ Use passed categories or fallback to defaults
+  const availableCategories = categories.length > 0 
+    ? categories 
+    : DEFAULT_CATEGORIES.map((name, index) => ({
+        id: index,
+        name,
+        is_active: true,
+        created_at: new Date().toISOString()
+      }));
 
   // Initialize form data when dialog opens
   useEffect(() => {
@@ -161,13 +156,13 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
               <Select
                 value={formData.category}
                 onValueChange={(value) => handleInputChange('category', value)}
-                disabled={readOnly}
+                disabled={readOnly || isSaving}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map(category => (
+                  {availableCategories.map(category => (
                     <SelectItem key={category.id} value={category.name}>
                       {category.name}
                     </SelectItem>
@@ -183,7 +178,7 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
                 value={formData.item_name}
                 onChange={(e) => handleInputChange('item_name', e.target.value)}
                 placeholder="e.g., Milk, Coffee Beans"
-                disabled={readOnly}
+                disabled={readOnly || isSaving}
               />
             </div>
           </div>
@@ -197,7 +192,7 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
               onChange={(e) => handleInputChange('description', e.target.value)}
               placeholder="Additional details about the expense"
               rows={2}
-              disabled={readOnly}
+              disabled={readOnly || isSaving}
             />
           </div>
 
@@ -213,7 +208,7 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
                 value={formData.quantity}
                 onChange={(e) => handleInputChange('quantity', e.target.value)}
                 placeholder="0"
-                disabled={readOnly}
+                disabled={readOnly || isSaving}
               />
             </div>
 
@@ -224,7 +219,7 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
                 value={formData.unit}
                 onChange={(e) => handleInputChange('unit', e.target.value)}
                 placeholder="kg, liters, pieces"
-                disabled={readOnly}
+                disabled={readOnly || isSaving}
               />
             </div>
 
@@ -238,7 +233,7 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
                 value={formData.unit_cost}
                 onChange={(e) => handleInputChange('unit_cost', e.target.value)}
                 placeholder="0.00"
-                disabled={readOnly}
+                disabled={readOnly || isSaving}
               />
             </div>
           </div>
@@ -270,20 +265,29 @@ export function ExpenseDialog({ isOpen, setIsOpen, onSave, expense, readOnly = f
                 type="date"
                 value={formData.expense_date}
                 onChange={(e) => handleInputChange('expense_date', e.target.value)}
-                disabled={readOnly}
+                disabled={readOnly || isSaving}
               />
             </div>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setIsOpen(false)}>
+          <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isSaving}>
             {readOnly ? 'Close' : 'Cancel'}
           </Button>
           {!readOnly && (
-            <Button onClick={handleSave} disabled={!isFormValid}>
-              <Save className="mr-2 h-4 w-4" />
-              {expense ? 'Update Expense' : 'Add Expense'}
+            <Button onClick={handleSave} disabled={!isFormValid || isSaving}>
+              {isSaving ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  {expense ? 'Update Expense' : 'Add Expense'}
+                </>
+              )}
             </Button>
           )}
         </DialogFooter>
