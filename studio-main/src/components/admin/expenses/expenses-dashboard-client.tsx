@@ -42,34 +42,37 @@ export function ExpensesDashboardClient() {
   }, []);
 
   const fetchExpenses = React.useCallback(async () => {
-    if (!branchId || !hasViewAccess) {
-      setExpenses([]);
-      setCategories([]);
-      return;
-    }
+  if (!branchId || !hasViewAccess) {
+    setExpenses([]);
+    setCategories([]);
+    return;
+  }
 
-    setIsLoading(true);
-    try {
-      // CORRECTED: Token removed from calls
-      const [expensesData, categoriesData] = await Promise.all([
-        getDailyExpenses(branchId, undefined, undefined),
-        getExpenseCategories()
-      ]);
-      setExpenses(expensesData || []);
-      setCategories(categoriesData || []);
-    } catch (error) {
-      console.error('Error fetching expenses data:', error);
-      toast({
-        title: "Error",
-        description: "Could not load today's expenses data.",
-        variant: "destructive"
-      });
-      setExpenses([]);
-      setCategories([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [branchId, hasViewAccess, toast]);
+  setIsLoading(true);
+  try {
+    // Get today's date in YYYY-MM-DD format
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Pass today's date to filter expenses
+    const [expensesData, categoriesData] = await Promise.all([
+      getDailyExpenses(branchId, today, undefined), // ✅ Added today's date
+      getExpenseCategories()
+    ]);
+    setExpenses(expensesData || []);
+    setCategories(categoriesData || []);
+  } catch (error) {
+    console.error('Error fetching expenses data:', error);
+    toast({
+      title: "Error",
+      description: "Could not load today's expenses data.",
+      variant: "destructive"
+    });
+    setExpenses([]);
+    setCategories([]);
+  } finally {
+    setIsLoading(false);
+  }
+}, [branchId, hasViewAccess, toast]);
 
   React.useEffect(() => {
     fetchExpenses();
