@@ -12,7 +12,7 @@ import { useAuth } from '@/lib/auth-context';
 import { ExpenseDialog } from './expense-dialog';
 import type { DailyExpense } from '@/lib/types';
 
-export function ExpensesDashboardClient() {
+export function ExpensesDashboardClient({ onExpenseChange }: { onExpenseChange?: () => void }) {
   const searchParams = useSearchParams();
   const branchId = searchParams.get('branchId');
   const { user, hasPermission } = useAuth();
@@ -42,37 +42,37 @@ export function ExpensesDashboardClient() {
   }, []);
 
   const fetchExpenses = React.useCallback(async () => {
-  if (!branchId || !hasViewAccess) {
-    setExpenses([]);
-    setCategories([]);
-    return;
-  }
+    if (!branchId || !hasViewAccess) {
+      setExpenses([]);
+      setCategories([]);
+      return;
+    }
 
-  setIsLoading(true);
-  try {
-    // Get today's date in YYYY-MM-DD format
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Pass today's date to filter expenses
-    const [expensesData, categoriesData] = await Promise.all([
-      getDailyExpenses(branchId, today, undefined), // ✅ Added today's date
-      getExpenseCategories()
-    ]);
-    setExpenses(expensesData || []);
-    setCategories(categoriesData || []);
-  } catch (error) {
-    console.error('Error fetching expenses data:', error);
-    toast({
-      title: "Error",
-      description: "Could not load today's expenses data.",
-      variant: "destructive"
-    });
-    setExpenses([]);
-    setCategories([]);
-  } finally {
-    setIsLoading(false);
-  }
-}, [branchId, hasViewAccess, toast]);
+    setIsLoading(true);
+    try {
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Fetch today's expenses only
+      const [expensesData, categoriesData] = await Promise.all([
+        getDailyExpenses(branchId, today, undefined),
+        getExpenseCategories()
+      ]);
+      setExpenses(expensesData || []);
+      setCategories(categoriesData || []);
+    } catch (error) {
+      console.error('Error fetching expenses data:', error);
+      toast({
+        title: "Error",
+        description: "Could not load today's expenses data.",
+        variant: "destructive"
+      });
+      setExpenses([]);
+      setCategories([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [branchId, hasViewAccess, toast]);
 
   React.useEffect(() => {
     fetchExpenses();
@@ -89,13 +89,13 @@ export function ExpensesDashboardClient() {
     }
 
     try {
-      // CORRECTED: Token removed from call
       await deleteDailyExpense(expenseId);
       toast({
         title: "Success",
         description: "Expense deleted successfully.",
       });
-      await fetchExpenses(); // Refresh the list
+      await fetchExpenses();
+      onExpenseChange?.(); // Notify parent to refresh balance
     } catch (error) {
       console.error('Error deleting expense:', error);
       toast({
@@ -140,7 +140,6 @@ export function ExpensesDashboardClient() {
       const isNew = !selectedExpense?.id;
 
       if (isNew) {
-        // CORRECTED: Token removed from call
         await addDailyExpense({
           ...expenseData,
           branch_id: parseInt(branchId)
@@ -150,7 +149,6 @@ export function ExpensesDashboardClient() {
           description: "Expense added successfully.",
         });
       } else {
-        // CORRECTED: Token removed from call
         await updateDailyExpense(selectedExpense.id, expenseData);
         toast({
           title: "Success",
@@ -160,7 +158,8 @@ export function ExpensesDashboardClient() {
 
       setIsExpenseDialogOpen(false);
       setSelectedExpense(null);
-      await fetchExpenses(); // Refresh the list
+      await fetchExpenses();
+      onExpenseChange?.(); // Notify parent to refresh balance
     } catch (error) {
       console.error('Error saving expense:', error);
       toast({
@@ -230,7 +229,7 @@ export function ExpensesDashboardClient() {
             <div>
               <CardTitle className="font-headline">Daily Expenses</CardTitle>
               <CardDescription>
-                Track daily expenses for the selected branch.
+                Track today's expenses for the selected branch.
                 {!hasFullAccess && (
                   <Badge variant="secondary" className="ml-2">View Only</Badge>
                 )}
@@ -313,7 +312,7 @@ export function ExpensesDashboardClient() {
           {expenses.length > 0 && (
             <div className="mt-6 pt-4 border-t">
               <div className="text-right">
-                <div className="text-sm text-muted-foreground">Total Expenses</div>
+                <div className="text-sm text-muted-foreground">Today's Total Expenses</div>
                 <div className="text-2xl font-bold text-red-600">
                   {formatCurrency(expenses.reduce((sum, exp) => sum + exp.total_amount, 0))}
                 </div>
@@ -329,6 +328,8 @@ export function ExpensesDashboardClient() {
           setIsOpen={setIsExpenseDialogOpen}
           onSave={handleSaveExpense}
           expense={selectedExpense}
+          categories={categories}
+          isSaving={isSaving}
         />
       )}
     </>
