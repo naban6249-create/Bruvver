@@ -1978,8 +1978,8 @@ async def record_sale(
         if pl != "full_access":
             raise HTTPException(status_code=403, detail="Insufficient permissions for this branch")
     
-    # Verify menu item exists
-    menu_item = db.query(MenuItem).filter(MenuItem.id == sale.menu_item_id).first()
+    # Verify menu item exists - FIXED: Use string comparison
+    menu_item = db.query(MenuItem).filter(MenuItem.id == str(sale.menu_item_id)).first()
     if not menu_item:
         raise HTTPException(status_code=404, detail="Menu item not found")
     
@@ -1996,7 +1996,7 @@ async def record_sale(
     # Create new sale transaction
     ist_now = datetime.now(IST)
     db_sale = DailySale(
-        menu_item_id=sale.menu_item_id,
+        menu_item_id=str(sale.menu_item_id),  # Ensure string
         quantity=sale.quantity,
         revenue=revenue,
         branch_id=sale.branch_id,
@@ -2012,7 +2012,7 @@ async def record_sale(
 
 @app.delete("/api/sales/last")
 async def delete_last_sale(
-    menu_item_id: str,
+    menu_item_id: str,  # Already correct as string
     branch_id: int,
     payment_method: Optional[str] = None,
     db: Session = Depends(get_database),
@@ -2038,7 +2038,7 @@ async def delete_last_sale(
     
     # Find the most recent sale for this item today
     query = db.query(DailySale).filter(
-        DailySale.menu_item_id == menu_item_id,
+        DailySale.menu_item_id == str(menu_item_id),  # Ensure string comparison
         DailySale.branch_id == branch_id,
         func.date(DailySale.sale_date) == today
     )
