@@ -655,6 +655,7 @@ async def get_expenses(
 ):
     """Get daily expenses with filtering"""
     query = db.query(DailyExpense)
+    
     # Branch filtering and permission check for workers
     if hasattr(current_user, 'role') and current_user.role == "worker":
         # Fetch branches this user has any permission for
@@ -673,21 +674,25 @@ async def get_expenses(
             query = query.filter(DailyExpense.branch_id.in_(user_branch_ids))
     elif branch_id:
         query = query.filter(DailyExpense.branch_id == branch_id)
+    
+    # Date filtering - critical for daily expenses
     if date:
         try:
             filter_date = datetime.strptime(date, "%Y-%m-%d").date()
             query = query.filter(func.date(DailyExpense.expense_date) == filter_date)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    
     if category:
         query = query.filter(DailyExpense.category == category)
+    
     expenses = query.order_by(DailyExpense.expense_date.desc()).offset(skip).limit(limit).all()
+    
     # Ensure created_at is a valid datetime for response validation
-    from datetime import datetime as _dt
     for exp in expenses:
         if getattr(exp, "created_at", None) is None:
-            # Prefer expense_date if present, otherwise now
-            setattr(exp, "created_at", getattr(exp, "expense_date", None) or _dt.utcnow())
+            setattr(exp, "created_at", getattr(exp, "expense_date", None) or datetime.utcnow())
+    
     return expenses
 
 @app.post("/api/expenses", response_model=DailyExpenseResponse)
