@@ -2606,16 +2606,14 @@ async def get_worker_cash_balance(
     if not (hasattr(current_user, 'role') and current_user.role == "worker"):
         raise HTTPException(status_code=403, detail="Worker access required")
     
-    if not current_user.branch_id:
-        # Fallback: get first assigned branch
-        first_perm = db.query(UserBranchPermission).filter(
-            UserBranchPermission.user_id == current_user.id
-        ).first()
-        if not first_perm:
-            raise HTTPException(status_code=403, detail="No branch assigned")
-        branch_id = first_perm.branch_id
-    else:
-        branch_id = current_user.branch_id
+    # Get the worker's first assigned branch
+    first_perm = db.query(UserBranchPermission).filter(
+        UserBranchPermission.user_id == current_user.id
+    ).first()
+    if not first_perm:
+        raise HTTPException(status_code=403, detail="No branch assigned")
+    
+    branch_id = first_perm.branch_id
     
     # Determine target date
     target_date = get_current_date_ist()
