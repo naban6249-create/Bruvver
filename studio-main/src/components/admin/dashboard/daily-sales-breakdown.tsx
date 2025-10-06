@@ -78,7 +78,7 @@ function BulkEntryDialog({
                         <Input
                             id="quantity"
                             type="number"
-                            min="1"
+                            min=""
                             value={quantity}
                             onChange={(e) => setQuantity(e.target.value)}
                             onKeyDown={handleKeyDown}
