@@ -16,6 +16,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import uuid
 from cloudinary import uploader
 from zoneinfo import ZoneInfo
+from keep_alive import create_multi_service_keepalive
 
 IST = ZoneInfo('Asia/Kolkata')
 
@@ -138,7 +139,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+keep_alive_service = None
 # Serve static files (images)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -147,6 +148,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and start automation"""
+    global keep_alive_service
     
     # Configure Cloudinary - IMPROVED VERSION
     cloudinary_url = os.getenv("CLOUDINARY_URL")
@@ -185,10 +187,32 @@ async def startup_event():
         export_yesterday_job()
     except Exception:
         logger.exception("Failed to perform catch-up export on startup")
+    
+    if os.getenv("RENDER"):
+        backend_url = os.getenv("RENDER_EXTERNAL_URL")
+        # Make sure this frontend URL is correct for your Render service
+        frontend_url = "https://bruvver-3r1e.onrender.com"
+        
+        if backend_url and frontend_url:
+            keep_alive_service = create_multi_service_keepalive(
+                backend_url=backend_url,
+                frontend_url=frontend_url,
+                interval_minutes=10
+            )
+            keep_alive_service.start()
+            logger.info(f"Keep-alive enabled for backend ({backend_url}) and frontend ({frontend_url})")
+        else:
+            logger.warning("Keep-alive URLs not found in environment variables.")
+    else:
+        logger.info("Keep-alive disabled (not in RENDER environment)")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Stop automation services"""
+    global keep_alive_service
+
+    if keep_alive_service:
+        keep_alive_service.stop()
     try:
         stop_automation()
     except Exception:
@@ -198,6 +222,7 @@ async def shutdown_event():
             daily_export_scheduler.shutdown(wait=False)
     except Exception:
         logger.exception("Failed to shutdown daily export scheduler")
+    
 
 @app.get("/api/test/cloudinary")
 async def test_cloudinary():
