@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { getMenuItems, updateMenuItem, deleteMenuItem } from '@/lib/menu-service';
+import { getMenuItems, addMenuItem, updateMenuItem } from '@/lib/menu-service';
 import { useAuth } from '@/lib/auth-context';
 import { MenuItemDialog } from './menu-item-dialog';
 import type { MenuItem } from '@/lib/types';
@@ -53,11 +53,9 @@ export function MenuManagement() {
     fetchMenu();
   }, [fetchMenu]);
 
-  // Fixed handleDelete function with correct argument order
   const handleDelete = async (itemToDelete: MenuItem) => {
     if (!branchId || !hasFullAccess) return;
 
-    // Soft delete by setting is_available to false
     const formData = new FormData();
     formData.append('name', itemToDelete.name);
     formData.append('price', String(itemToDelete.price));
@@ -70,8 +68,7 @@ export function MenuManagement() {
     }
 
     try {
-      // Correct signature: updateMenuItem(formData, itemId, branchId)
-      await updateMenuItem(formData, String(itemToDelete.id), branchId);
+      await updateMenuItem(String(itemToDelete.id), formData, branchId);
       toast({
         title: 'Item Deactivated',
         description: `${itemToDelete.name} has been hidden from the menu.`,
@@ -81,7 +78,7 @@ export function MenuManagement() {
        console.error('Failed to deactivate menu item:', error);
        toast({
          title: 'Error',
-         description: `Could not deactivate item. It may have sales data associated with it.`,
+         description: `Could not deactivate item. Please try again.`,
          variant: 'destructive',
        });
     }
@@ -99,9 +96,36 @@ export function MenuManagement() {
     setIsDialogOpen(true);
   };
 
-  const handleSave = async () => {
-    setIsDialogOpen(false);
-    await fetchMenu();
+  // ✅ --- THIS IS THE CORRECTED FUNCTION ---
+  const handleSave = async (formData: FormData) => {
+    if (!branchId) return;
+
+    try {
+      if (selectedItem) {
+        // This is an update
+        await updateMenuItem(String(selectedItem.id), formData, branchId);
+        toast({
+          title: 'Success',
+          description: `${formData.get('name')} has been updated.`,
+        });
+      } else {
+        // This is a new item
+        await addMenuItem(formData, branchId);
+        toast({
+          title: 'Success',
+          description: `${formData.get('name')} has been added to the menu.`,
+        });
+      }
+      setIsDialogOpen(false);
+      await fetchMenu(); // Refresh the list after saving
+    } catch (error) {
+      console.error('Failed to save menu item:', error);
+      toast({
+        title: 'Error',
+        description: 'Could not save the menu item.',
+        variant: 'destructive',
+      });
+    }
   };
 
   if (isLoading) {
