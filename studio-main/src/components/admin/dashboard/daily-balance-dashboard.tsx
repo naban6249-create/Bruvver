@@ -85,7 +85,7 @@ export function DailyBalanceDashboard({ isWorkerView = false }: { isWorkerView?:
       }
       
       setSummary(summaryData);
-      setNewOpeningBalance(summaryData.openingBalance);
+      setNewOpeningBalance(summaryData.openingBalance === 0 ? '' : summaryData.openingBalance);
     } catch (error) {
       console.error('Error fetching summary:', error);
       toast({
@@ -201,7 +201,7 @@ export function DailyBalanceDashboard({ isWorkerView = false }: { isWorkerView?:
                 type="number"
                 step="0.01"
                 value={newOpeningBalance}
-                onChange={(e) => setNewOpeningBalance(Number(e.target.value))}
+                onChange={(e) => setNewOpeningBalance(e.target.value)}
                 className="mt-2"
                 disabled={isUpdating}
               />
