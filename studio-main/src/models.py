@@ -75,7 +75,7 @@ class UserBranchPermission(Base):
 class MenuItem(Base):
     __tablename__ = "menu_items"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String, nullable=False)
     price = Column(Float, nullable=False)
     description = Column(Text, nullable=True)
