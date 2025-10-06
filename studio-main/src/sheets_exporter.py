@@ -28,6 +28,7 @@ def _open_sheet():
         raise RuntimeError("GOOGLE_SHEETS_SPREADSHEET_ID not set")
     return client.open_by_key(spreadsheet_id)
 
+
 def _get_or_create_ws(sh, title: str, cols: int = 9):
     try:
         return sh.worksheet(title)
@@ -35,39 +36,47 @@ def _get_or_create_ws(sh, title: str, cols: int = 9):
         return sh.add_worksheet(title=title, rows=2000, cols=cols)
 
 
-def _clear_rows_for_date(ws, target_date_iso: str):
-    # Read first column, find rows (>=2) matching date, delete bottom-up
-    col_a = ws.col_values(1)
-    to_delete = []
-    for idx, val in enumerate(col_a, start=1):
-        if idx == 1:
-            continue  # skip header
-        if val == target_date_iso:
-            to_delete.append(idx)
-    for row_idx in reversed(to_delete):
-        try:
-            ws.delete_rows(row_idx)
-        except Exception:
-            pass
-
-
-def _ensure_headers(ws, is_sales: bool):
-    headers_sales = [
-        "date", "branch_id", "branch_name", "menu_item_id", "item_name", "quantity", "revenue"
-    ]
-    headers_exp = [
-        "date", "branch_id", "category", "item_name", "quantity", "unit", "unit_cost", "total_amount", "description"
-    ]
-    expected = headers_sales if is_sales else headers_exp
+def _replace_data_for_date(ws, target_date_iso: str, new_rows: list[list], headers: list[str]):
+    """
+    Efficiently replace data for a specific date using batch operations.
+    This minimizes API calls by:
+    1. Reading all data once
+    2. Filtering out old date rows
+    3. Writing everything back in one update
+    """
     try:
-        row1 = ws.row_values(1)
+        # Read all existing data (including header)
+        all_data = ws.get_all_values()
     except Exception:
-        row1 = []
-    if row1[:len(expected)] != expected:
-        ws.update(f"A1:{chr(ord('A') + len(expected) - 1)}1", [expected])
+        all_data = []
+    
+    # Ensure we have headers
+    if not all_data or all_data[0] != headers:
+        # Keep existing data if any, but update header
+        if all_data and all_data[0] != headers:
+            existing_data = all_data[1:] if len(all_data) > 1 else []
+        else:
+            existing_data = all_data[1:] if len(all_data) > 1 else []
+        all_data = [headers] + existing_data
+    
+    # Filter out rows matching the target date (column A / index 0)
+    filtered_rows = [all_data[0]]  # Keep header
+    for row in all_data[1:]:
+        if len(row) > 0 and row[0] != target_date_iso:
+            filtered_rows.append(row)
+    
+    # Add new rows
+    filtered_rows.extend(new_rows)
+    
+    # Clear and update in one batch operation
+    if filtered_rows:
+        ws.clear()
+        ws.update(f'A1:{chr(ord("A") + len(headers) - 1)}{len(filtered_rows)}', 
+                 filtered_rows, value_input_option="USER_ENTERED")
 
 
 def append_sales_rows(rows: list[list], ws_title: str):
+    """Append rows without date checking - use for incremental updates"""
     sh = _open_sheet()
     ws = _get_or_create_ws(sh, ws_title, cols=7)
     if rows:
@@ -75,6 +84,7 @@ def append_sales_rows(rows: list[list], ws_title: str):
 
 
 def append_expense_rows(rows: list[list], ws_title: str):
+    """Append rows without date checking - use for incremental updates"""
     sh = _open_sheet()
     ws = _get_or_create_ws(sh, ws_title, cols=9)
     if rows:
@@ -82,9 +92,22 @@ def append_expense_rows(rows: list[list], ws_title: str):
 
 
 def export_day(db: Session, target_date: dt.date, branch_id: int | None = None):
-    """Export sales and expenses for a given date to Google Sheets, per-branch tabs with idempotency."""
+    """
+    Export sales and expenses for a given date to Google Sheets.
+    Optimized to minimize API calls and avoid rate limits.
+    """
     sh = _open_sheet()
     target_iso = target_date.isoformat()
+
+    # Define headers
+    headers_sales = [
+        "date", "branch_id", "branch_name", "menu_item_id", 
+        "item_name", "quantity", "revenue"
+    ]
+    headers_exp = [
+        "date", "branch_id", "category", "item_name", 
+        "quantity", "unit", "unit_cost", "total_amount", "description"
+    ]
 
     # Determine branches to export
     branches = []
@@ -95,6 +118,7 @@ def export_day(db: Session, target_date: dt.date, branch_id: int | None = None):
     else:
         branches = db.query(Branch).all()
 
+    # Process each branch
     for b in branches:
         sales_title = f"Sales_b{b.id}"
         exp_title = f"Expenses_b{b.id}"
@@ -114,6 +138,7 @@ def export_day(db: Session, target_date: dt.date, branch_id: int | None = None):
             .join(MenuItem, MenuItem.id == DailySale.menu_item_id)
             .filter(func.date(DailySale.sale_date) == target_date, DailySale.branch_id == b.id)
         )
+        
         sales_rows: list[list] = []
         for r in sales_q.all():
             sales_rows.append([
@@ -126,18 +151,16 @@ def export_day(db: Session, target_date: dt.date, branch_id: int | None = None):
                 round(float(r.revenue or 0.0), 2),
             ])
 
-        # Clear existing rows for date, then append
+        # Replace sales data using batch operation (1-2 API calls instead of N+2)
         ws_sales = _get_or_create_ws(sh, sales_title, cols=7)
-        _ensure_headers(ws_sales, is_sales=True)
-        _clear_rows_for_date(ws_sales, target_iso)
-        if sales_rows:
-            ws_sales.append_rows(sales_rows, value_input_option="USER_ENTERED")
+        _replace_data_for_date(ws_sales, target_iso, sales_rows, headers_sales)
 
         # Build EXPENSE rows for branch
         expenses_q = db.query(DailyExpense).filter(
             func.date(DailyExpense.expense_date) == target_date,
             DailyExpense.branch_id == b.id,
         )
+        
         expense_rows: list[list] = []
         for e in expenses_q.all():
             expense_rows.append([
@@ -152,8 +175,6 @@ def export_day(db: Session, target_date: dt.date, branch_id: int | None = None):
                 e.description or "",
             ])
 
+        # Replace expense data using batch operation
         ws_exp = _get_or_create_ws(sh, exp_title, cols=9)
-        _ensure_headers(ws_exp, is_sales=False)
-        _clear_rows_for_date(ws_exp, target_iso)
-        if expense_rows:
-            ws_exp.append_rows(expense_rows, value_input_option="USER_ENTERED")
+        _replace_data_for_date(ws_exp, target_iso, expense_rows, headers_exp)
