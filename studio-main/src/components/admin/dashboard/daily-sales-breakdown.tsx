@@ -42,8 +42,19 @@ function BulkEntryDialog({
     onConfirm: (quantity: number, paymentMethod: 'cash' | 'gpay') => void;
     itemName: string;
 }) {
-    const [quantity, setQuantity] = React.useState<string>('1');
+    const [quantity, setQuantity] = React.useState<string>('');
     const [selectedPayment, setSelectedPayment] = React.useState<'cash' | 'gpay'>('cash');
+    const inputRef = React.useRef<HTMLInputElement>(null);
+
+    // Auto-select input text when dialog opens
+    React.useEffect(() => {
+        if (isOpen && inputRef.current) {
+            // Small delay to ensure dialog is fully rendered
+            setTimeout(() => {
+                inputRef.current?.select();
+            }, 100);
+        }
+    }, [isOpen]);
 
     const handleConfirm = () => {
         const qty = parseInt(quantity);
@@ -51,7 +62,7 @@ function BulkEntryDialog({
             return;
         }
         onConfirm(qty, selectedPayment);
-        setQuantity('1');
+        setQuantity('');
         setSelectedPayment('cash');
     };
 
@@ -76,9 +87,10 @@ function BulkEntryDialog({
                     <div className="space-y-2">
                         <Label htmlFor="quantity">Quantity</Label>
                         <Input
+                            ref={inputRef}
                             id="quantity"
                             type="number"
-                            min="0"
+                            min="1"
                             value={quantity}
                             onChange={(e) => setQuantity(e.target.value)}
                             onKeyDown={handleKeyDown}
@@ -116,8 +128,8 @@ function BulkEntryDialog({
                     <Button variant="outline" onClick={onClose}>
                         Cancel
                     </Button>
-                    <Button onClick={handleConfirm}>
-                        Record {quantity || 0} Sale{(parseInt(quantity) || 0) !== 1 ? 's' : ''}
+                    <Button onClick={handleConfirm} disabled={!quantity || parseInt(quantity) < 1}>
+                        Record {quantity || '0'} Sale{(parseInt(quantity) || 0) !== 1 ? 's' : ''}
                     </Button>
                 </DialogFooter>
             </DialogContent>
