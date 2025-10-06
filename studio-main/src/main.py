@@ -1210,11 +1210,12 @@ async def create_menu_item(
     is_available: bool = Form(True),
     branch_id: Optional[int] = Form(None),
     ingredients: str = Form("[]"),
-    image_url: Optional[str] = Form(None),
-    image: Optional[UploadFile] = File(None),
+    image_url: Optional[str] = Form(None),  # Accept URL directly
+    image: Optional[UploadFile] = File(None),  # File upload optional
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
+    # Determine branch_id
     if branch_id is None:
         if hasattr(current_user, 'role') and current_user.role == "worker":
             first_permission = db.query(UserBranchPermission).filter(
@@ -1227,47 +1228,60 @@ async def create_menu_item(
         else:
             branch_id = 1
     
+    # Verify branch exists
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
     if not branch:
         raise HTTPException(status_code=400, detail=f"Branch {branch_id} not found")
-
-    # Create the MenuItem without setting the 'id' field
+    
+    # Handle image - Priority 1: URL, Priority 2: File upload
+    final_image_url = None
+    
+    if image_url and image_url.strip():
+        # Use provided URL
+        final_image_url = image_url.strip()
+        logger.info(f"Using provided image URL: {final_image_url}")
+    elif image and image.filename:
+        # Upload to Cloudinary
+        try:
+            contents = await image.read()
+            result = cloudinary.uploader.upload(
+                contents,
+                folder=f"bruvver/menu_items/branch_{branch_id}",
+                public_id=f"item_{name.lower().replace(' ', '_')}",
+                overwrite=True,
+                resource_type="image",
+                format="webp",
+                quality="auto:good",
+                fetch_format="auto"
+            )
+            final_image_url = result.get("secure_url")
+            logger.info(f"Successfully uploaded image to Cloudinary: {final_image_url}")
+        except Exception as e:
+            logger.error(f"Cloudinary upload failed: {e}")
+            final_image_url = None  # Continue without image on failure
+    
+    # Create menu item (database will auto-generate ID)
     db_item = MenuItem(
         name=name,
         price=price,
         description=description,
         category=category,
         branch_id=branch_id,
+        image_url=final_image_url,
         is_available=is_available
     )
     db.add(db_item)
-    db.flush()  # This makes the new database-generated ID available at db_item.id
-
-    final_image_url = None
-    if image_url and image_url.strip():
-        final_image_url = image_url.strip()
-    elif image and image.filename:
-        try:
-            contents = await image.read()
-            result = cloudinary.uploader.upload(
-                contents,
-                folder=f"bruvver/menu_items/branch_{branch_id}",
-                public_id=f"item_{db_item.id}_{name.lower().replace(' ', '_')}",
-                overwrite=True, resource_type="image"
-            )
-            final_image_url = result.get("secure_url")
-        except Exception as e:
-            logging.error(f"Cloudinary upload failed: {e}")
+    db.flush()  # Get the auto-generated ID
     
-    db_item.image_url = final_image_url
-
+    # Add ingredients
     ingredients_list = json.loads(ingredients)
     for ingredient in ingredients_list:
         db_ingredient = Ingredient(
-            menu_item_id=db_item.id,
+            menu_item_id=str(db_item.id),  # Use the auto-generated ID
             name=ingredient['name'],
             quantity=ingredient['quantity'],
-            unit=ingredient['unit']
+            unit=ingredient['unit'],
+            image_url=ingredient.get('image_url')
         )
         db.add(db_ingredient)
     
@@ -1503,46 +1517,88 @@ async def create_branch_menu_item(
     category: Optional[str] = Form(None),
     is_available: bool = Form(True),
     ingredients: str = Form("[]"),
-    image: Optional[UploadFile] = File(None),
+    image_url: Optional[str] = Form(None),  # Accept URL directly
+    image: Optional[UploadFile] = File(None),  # File upload optional
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
-    # Create the item first, without an ID
+    # Verify branch exists
+    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    
+    # Generate new ID
+    max_id_query = db.query(func.max(MenuItem.id)).scalar()
+    max_id = 0
+    if max_id_query:
+        try:
+            max_id = int(max_id_query)
+        except (ValueError, TypeError):
+            max_id = 0
+    new_id = max_id + 1  # Keep as integer for autoincrement
+    
+    # Handle image - Priority 1: URL, Priority 2: File upload
+    final_image_url = None
+    
+    if image_url and image_url.strip():
+        # Use provided URL
+        final_image_url = image_url.strip()
+        logger.info(f"Using provided image URL: {final_image_url}")
+    elif image and image.filename:
+        # Upload to Cloudinary
+        try:
+            allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg']
+            if image.content_type not in allowed_types:
+                raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, PNG, and WEBP are allowed.")
+            
+            MAX_SIZE = 2 * 1024 * 1024  # 2MB
+            contents = await image.read()
+            if len(contents) > MAX_SIZE:
+                raise HTTPException(status_code=400, detail="Image is too large. Please upload an image under 2MB.")
+            
+            result = cloudinary.uploader.upload(
+                contents,
+                folder=f"bruvver/menu_items/branch_{branch_id}",
+                public_id=f"item_{new_id}_{name.lower().replace(' ', '_')}",
+                overwrite=True,
+                resource_type="image",
+                format="webp",
+                quality="auto:good",
+                fetch_format="auto"
+            )
+            final_image_url = result.get("secure_url")
+            logger.info(f"Successfully uploaded image to Cloudinary: {final_image_url}")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Cloudinary upload failed for menu item {new_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
+    
+    # Create menu item (database will auto-generate ID if autoincrement is enabled)
     db_item = MenuItem(
-        name=name, price=price, description=description, category=category,
-        branch_id=branch_id, is_available=is_available
+        name=name,
+        price=price,
+        description=description,
+        category=category,
+        branch_id=branch_id,
+        image_url=final_image_url,
+        is_available=is_available
     )
     db.add(db_item)
-    db.flush() # Get the new ID from the database
-
-    # Now handle the image upload with the new ID
-    image_path = None
-    if image and image.filename:
-        try:
-            contents = await image.read()
-            result = uploader.upload(
-                contents, 
-                folder="menu_items",
-                public_id=f"item_{db_item.id}_{name.lower().replace(' ', '_')}"
-            )
-            image_path = result.get("secure_url")
-        except Exception as e:
-            logging.error(f"Error uploading image: {e}", exc_info=True)
-            # Decide if you want to fail the whole request or just proceed without an image
+    db.flush()  # Get the auto-generated ID
     
-    db_item.image_url = image_path
-
-    # Add ingredients using the new ID
+    # Add ingredients
     ingredients_list = json.loads(ingredients)
     for ingredient in ingredients_list:
         db_ingredient = Ingredient(
-            menu_item_id=db_item.id,
+            menu_item_id=str(db_item.id),  # Use the auto-generated ID
             name=ingredient['name'],
             quantity=ingredient['quantity'],
-            unit=ingredient['unit']
+            unit=ingredient['unit'],
+            image_url=ingredient.get('image_url')
         )
         db.add(db_ingredient)
-        
+    
     db.commit()
     db.refresh(db_item)
     return db_item
