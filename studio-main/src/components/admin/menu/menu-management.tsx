@@ -56,6 +56,7 @@ export function MenuManagement() {
   const handleDelete = async (itemToDelete: MenuItem) => {
     if (!branchId || !hasFullAccess) return;
 
+    // "Soft delete" by setting is_available to false
     const formData = new FormData();
     formData.append('name', itemToDelete.name);
     formData.append('price', String(itemToDelete.price));
@@ -68,12 +69,14 @@ export function MenuManagement() {
     }
 
     try {
-      await updateMenuItem(String(itemToDelete.id), formData, branchId);
+      // ✅ CORRECTED ARGUMENT ORDER: (formData, itemId, branchId)
+      await updateMenuItem(formData, String(itemToDelete.id), branchId);
+      
       toast({
         title: 'Item Deactivated',
         description: `${itemToDelete.name} has been hidden from the menu.`,
       });
-      fetchMenu();
+      fetchMenu(); // Refresh the list
     } catch (error) {
        console.error('Failed to deactivate menu item:', error);
        toast({
@@ -96,14 +99,14 @@ export function MenuManagement() {
     setIsDialogOpen(true);
   };
 
-  // ✅ --- THIS IS THE CORRECTED FUNCTION ---
+  // ✅ --- THIS IS THE CORRECTED SAVE FUNCTION ---
   const handleSave = async (formData: FormData) => {
     if (!branchId) return;
 
     try {
       if (selectedItem) {
         // This is an update
-        await updateMenuItem(String(selectedItem.id), formData, branchId);
+        await updateMenuItem(formData, String(selectedItem.id), branchId);
         toast({
           title: 'Success',
           description: `${formData.get('name')} has been updated.`,
