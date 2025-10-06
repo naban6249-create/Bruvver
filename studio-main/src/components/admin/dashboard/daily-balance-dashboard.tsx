@@ -163,7 +163,7 @@ export function DailyBalanceDashboard({ isWorkerView = false }: { isWorkerView?:
     }).format(amount);
   };
 
-  if (isLoading && summary.openingBalance === 0) {
+  if (isLoading) {
     return (
       <Card className="mt-8">
         <CardContent className="flex justify-center items-center h-40">
