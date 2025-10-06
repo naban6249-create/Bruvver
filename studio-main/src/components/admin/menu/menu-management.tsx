@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { getMenuItems, updateMenuItem } from '@/lib/menu-service';
+import { getMenuItems, updateMenuItem, deleteMenuItem } from '@/lib/menu-service';
 import { useAuth } from '@/lib/auth-context';
 import { MenuItemDialog } from './menu-item-dialog';
 import type { MenuItem } from '@/lib/types';
@@ -53,35 +53,35 @@ export function MenuManagement() {
     fetchMenu();
   }, [fetchMenu]);
 
+  // Fixed handleDelete function with correct argument order
   const handleDelete = async (itemToDelete: MenuItem) => {
     if (!branchId || !hasFullAccess) return;
 
-    // "Soft delete" by setting is_available to false
+    // Soft delete by setting is_available to false
     const formData = new FormData();
     formData.append('name', itemToDelete.name);
     formData.append('price', String(itemToDelete.price));
     formData.append('category', itemToDelete.category);
     formData.append('description', itemToDelete.description || '');
-    formData.append('is_available', 'false'); // Set to false to hide it
+    formData.append('is_available', 'false');
     formData.append('ingredients', JSON.stringify(itemToDelete.ingredients || []));
     if (itemToDelete.image_url) {
       formData.append('image_url', itemToDelete.image_url);
     }
 
     try {
-      // ✅ CORRECTED ARGUMENT ORDER: (itemId, formData, branchId)
-      await updateMenuItem(String(itemToDelete.id), formData, branchId);
-      
+      // Correct signature: updateMenuItem(formData, itemId, branchId)
+      await updateMenuItem(formData, String(itemToDelete.id), branchId);
       toast({
         title: 'Item Deactivated',
         description: `${itemToDelete.name} has been hidden from the menu.`,
       });
-      fetchMenu(); // Refresh the list
+      fetchMenu();
     } catch (error) {
        console.error('Failed to deactivate menu item:', error);
        toast({
          title: 'Error',
-         description: `Could not deactivate item. Please try again.`,
+         description: `Could not deactivate item. It may have sales data associated with it.`,
          variant: 'destructive',
        });
     }
