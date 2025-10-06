@@ -1217,15 +1217,19 @@ async def create_menu_item(
 ):
     if branch_id is None:
         if hasattr(current_user, 'role') and current_user.role == "worker":
-            # ... (branch assignment logic is correct, no changes needed here)
+            first_permission = db.query(UserBranchPermission).filter(
+                UserBranchPermission.user_id == current_user.id
+            ).first()
+            if first_permission:
+                branch_id = first_permission.branch_id
+            else:
+                raise HTTPException(status_code=400, detail="No branch assigned to worker")
         else:
             branch_id = 1
     
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
     if not branch:
         raise HTTPException(status_code=400, detail=f"Branch {branch_id} not found")
-
-    # ❌ --- MANUAL ID GENERATION REMOVED --- ❌
 
     # Create the MenuItem without setting the 'id' field
     db_item = MenuItem(
@@ -1235,12 +1239,10 @@ async def create_menu_item(
         category=category,
         branch_id=branch_id,
         is_available=is_available
-        # id is NOT set here
     )
     db.add(db_item)
     db.flush()  # This makes the new database-generated ID available at db_item.id
 
-    # --- Image upload logic now uses the new ID ---
     final_image_url = None
     if image_url and image_url.strip():
         final_image_url = image_url.strip()
@@ -1250,32 +1252,25 @@ async def create_menu_item(
             result = cloudinary.uploader.upload(
                 contents,
                 folder=f"bruvver/menu_items/branch_{branch_id}",
-                # Use the new, unique ID for the public_id
                 public_id=f"item_{db_item.id}_{name.lower().replace(' ', '_')}",
-                overwrite=True,
-                resource_type="image"
+                overwrite=True, resource_type="image"
             )
             final_image_url = result.get("secure_url")
-            logger.info(f"Successfully uploaded image to Cloudinary: {final_image_url}")
         except Exception as e:
-            logger.error(f"Cloudinary upload failed for menu item: {e}")
-            final_image_url = None
+            logging.error(f"Cloudinary upload failed: {e}")
     
-    # Update the item with the new image URL
     db_item.image_url = final_image_url
 
-    # --- Ingredient logic now uses the new ID ---
     ingredients_list = json.loads(ingredients)
     for ingredient in ingredients_list:
         db_ingredient = Ingredient(
-            menu_item_id=db_item.id, # ✅ Use the database-generated ID
+            menu_item_id=db_item.id,
             name=ingredient['name'],
             quantity=ingredient['quantity'],
-            unit=ingredient['unit'],
-            image_url=ingredient.get('image_url')
+            unit=ingredient['unit']
         )
         db.add(db_ingredient)
-        
+    
     db.commit()
     db.refresh(db_item)
     return db_item
@@ -1512,24 +1507,17 @@ async def create_branch_menu_item(
     db: Session = Depends(get_database),
     current_user: Admin = Depends(get_current_active_user)
 ):
-    # ❌ --- MANUAL ID GENERATION REMOVED --- ❌
-
-    # Create the MenuItem without setting the 'id' field
+    # Create the item first, without an ID
     db_item = MenuItem(
-        name=name,
-        price=price,
-        description=description,
-        category=category,
-        branch_id=branch_id,
-        is_available=is_available
-        # id is NOT set here
+        name=name, price=price, description=description, category=category,
+        branch_id=branch_id, is_available=is_available
     )
     db.add(db_item)
-    db.flush() # This makes the new database-generated ID available at db_item.id
+    db.flush() # Get the new ID from the database
 
-    # --- Image upload logic now uses the new ID ---
+    # Now handle the image upload with the new ID
     image_path = None
-    if image:
+    if image and image.filename:
         try:
             contents = await image.read()
             result = uploader.upload(
@@ -1538,25 +1526,20 @@ async def create_branch_menu_item(
                 public_id=f"item_{db_item.id}_{name.lower().replace(' ', '_')}"
             )
             image_path = result.get("secure_url")
-            if not image_path:
-                raise HTTPException(status_code=500, detail="Cloudinary upload failed.")
-            logger.info(f"Image uploaded to Cloudinary: {image_path}")
         except Exception as e:
-            logger.error(f"Error uploading image: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
+            logging.error(f"Error uploading image: {e}", exc_info=True)
+            # Decide if you want to fail the whole request or just proceed without an image
     
-    # Update the item with the new image URL
     db_item.image_url = image_path
 
-    # --- Ingredient logic now uses the new ID ---
+    # Add ingredients using the new ID
     ingredients_list = json.loads(ingredients)
     for ingredient in ingredients_list:
         db_ingredient = Ingredient(
-            menu_item_id=db_item.id, # ✅ Use the database-generated ID
+            menu_item_id=db_item.id,
             name=ingredient['name'],
             quantity=ingredient['quantity'],
-            unit=ingredient['unit'],
-            image_url=ingredient.get('image_url')
+            unit=ingredient['unit']
         )
         db.add(db_ingredient)
         
