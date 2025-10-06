@@ -117,7 +117,7 @@ function BulkEntryDialog({
                         Cancel
                     </Button>
                     <Button onClick={handleConfirm}>
-                        Record {quantity} Sale{parseInt(quantity) !== 1 ? 's' : ''}
+                        Record {quantity || 0} Sale{(parseInt(quantity) || 0) !== 1 ? 's' : ''}
                     </Button>
                 </DialogFooter>
             </DialogContent>
