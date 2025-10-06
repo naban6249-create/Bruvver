@@ -78,7 +78,7 @@ function BulkEntryDialog({
                         <Input
                             id="quantity"
                             type="number"
-                            min=""
+                            min="0"
                             value={quantity}
                             onChange={(e) => setQuantity(e.target.value)}
                             onKeyDown={handleKeyDown}
@@ -414,29 +414,29 @@ export function DailySalesBreakdown({ onSaleChange }: { onSaleChange?: () => voi
                                                             Quantity:
                                                         </span>
                                                         {hasFullAccess ? (
-                                                            <div className="flex items-center gap-1">
+                                                            <div className="flex items-center gap-2">
                                                                 <Button 
                                                                     variant="outline" 
                                                                     size="icon" 
-                                                                    className="h-6 w-6"
+                                                                    className="h-10 w-10"
                                                                     onClick={() => handleRemoveSale(String(item.id), item.name)}
                                                                     disabled={item.quantitySold === 0}
                                                                 >
-                                                                    <Minus className="h-3 w-3" />
+                                                                    <Minus className="h-5 w-5" />
                                                                 </Button>
-                                                                <div className="text-sm font-medium min-w-[3rem] text-center">
-                                                                    <div>{item.quantitySold}</div>
+                                                                <div className="text-sm font-medium min-w-[3.5rem] text-center">
+                                                                    <div className="text-base">{item.quantitySold}</div>
                                                                     <div className="text-xs text-muted-foreground">
                                                                         💵{item.cashCount} 📱{item.gpayCount}
                                                                     </div>
                                                                 </div>
                                                                 <Button 
-                                                                    variant="outline" 
+                                                                    variant="default" 
                                                                     size="icon" 
-                                                                    className="h-6 w-6"
+                                                                    className="h-10 w-10"
                                                                     onClick={() => handleOpenBulkEntry(String(item.id), item.name)}
                                                                 >
-                                                                    <Edit className="h-3 w-3" />
+                                                                    <Edit className="h-5 w-5" />
                                                                 </Button>
                                                             </div>
                                                         ) : (
