@@ -116,7 +116,11 @@ export function DailyBalanceDashboard({ isWorkerView = false }: { isWorkerView?:
   }, [branchId, selectedDate, fetchSummary]);
 
   const handleUpdateOpeningBalance = async () => {
-    if (!branchId || typeof newOpeningBalance !== 'number') {
+    // ✅ Parse the balance as a number here
+    const amount = parseFloat(newOpeningBalance as string);
+
+    // ✅ Check if the branchId is missing or if the parsed amount is not a number
+    if (!branchId || isNaN(amount)) {
       toast({
         title: 'Invalid Input',
         description: 'Please enter a valid opening balance amount.',
@@ -128,7 +132,7 @@ export function DailyBalanceDashboard({ isWorkerView = false }: { isWorkerView?:
     if (!canUpdateBalance) {
       toast({
         title: 'Access Denied',
-        description: 'You don\'t have permission to update the opening balance.',
+        description: "You don't have permission to update the opening balance.",
         variant: 'destructive',
       });
       return;
@@ -136,7 +140,8 @@ export function DailyBalanceDashboard({ isWorkerView = false }: { isWorkerView?:
 
     setIsUpdating(true);
     try {
-      await updateOpeningBalance(branchId, newOpeningBalance, undefined);
+      // ✅ Use the parsed 'amount' to update the balance
+      await updateOpeningBalance(branchId, amount, undefined);
       
       toast({
         title: 'Success',
