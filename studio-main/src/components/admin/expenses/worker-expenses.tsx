@@ -22,7 +22,21 @@ const COMMON_EXPENSES = [
   { name: 'Coffee Beans', unit: 'kg', icon: Package },
   { name: 'Sugar', unit: 'kg', icon: Package },
   { name: 'Tea Powder', unit: 'packets', icon: Package },
+  { name: 'Other', unit: 'units', icon: Package },
 ];
+
+// Helper function to format timestamps in IST
+function formatDateIST(dateString: string): string {
+  const date = new Date(dateString);
+  return date.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    day: '2-digit',
+    month: 'short'
+  });
+}
 
 export function WorkerExpenses() {
   const searchParams = useSearchParams();
@@ -32,6 +46,8 @@ export function WorkerExpenses() {
   const [expenses, setExpenses] = useState<DailyExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedExpense, setSelectedExpense] = useState<string>('');
+  const [customExpenseName, setCustomExpenseName] = useState<string>('');
+  const [customUnit, setCustomUnit] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('0');
   const [unitPrice, setUnitPrice] = useState<string>('');
   const [calculatedTotal, setCalculatedTotal] = useState<string>('0.00');
@@ -41,6 +57,9 @@ export function WorkerExpenses() {
   const currentBranchId = branchId ? parseInt(branchId) : null;
   const hasViewAccess = currentBranchId ? hasPermission(currentBranchId, 'view_only') : false;
   const hasFullAccess = currentBranchId ? hasPermission(currentBranchId, 'full_access') : false;
+
+  // Check if "Other" is selected
+  const isOtherSelected = selectedExpense === 'Other';
 
   // Calculate total for quick add
   useEffect(() => {
@@ -78,10 +97,23 @@ export function WorkerExpenses() {
   }, [fetchExpenses]);
 
   const handleQuickAdd = async () => {
-    if (!selectedExpense || !quantity || !unitPrice || !branchId) {
+    // Determine the final expense name and unit
+    const finalExpenseName = isOtherSelected ? customExpenseName.trim() : selectedExpense;
+    const finalUnit = isOtherSelected ? customUnit.trim() : COMMON_EXPENSES.find(s => s.name === selectedExpense)?.unit || 'units';
+
+    if (!finalExpenseName || !quantity || !unitPrice || !branchId) {
       toast({
         title: "Missing Information",
-        description: "Please select an expense, enter quantity and unit price.",
+        description: "Please fill in all fields including expense name, quantity, and unit price.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (isOtherSelected && !finalUnit) {
+      toast({
+        title: "Missing Information",
+        description: "Please enter a unit (e.g., kg, liters, pieces).",
         variant: "destructive"
       });
       return;
@@ -96,15 +128,12 @@ export function WorkerExpenses() {
       return;
     }
 
-    const expense = COMMON_EXPENSES.find(s => s.name === selectedExpense);
-    if (!expense) return;
-
     setIsSubmitting(true);
     try {
       await addQuickExpense({
-        item_name: selectedExpense,
+        item_name: finalExpenseName,
         quantity: parseFloat(quantity),
-        unit: expense.unit,
+        unit: finalUnit,
         unit_cost: parseFloat(unitPrice),
         branch_id: parseInt(branchId),
         expense_date: new Date().toISOString()
@@ -112,11 +141,13 @@ export function WorkerExpenses() {
 
       toast({
         title: "Expense Added",
-        description: `${quantity} ${expense.unit} of ${selectedExpense} recorded successfully.`
+        description: `${quantity} ${finalUnit} of ${finalExpenseName} recorded successfully.`
       });
 
-      // Reset form (quantity always resets to 0 now)
+      // Reset form
       setSelectedExpense('');
+      setCustomExpenseName('');
+      setCustomUnit('');
       setQuantity('0');
       setUnitPrice('');
 
@@ -138,13 +169,6 @@ export function WorkerExpenses() {
       style: 'currency',
       currency: 'INR',
     }).format(amount);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
   };
 
   const totalExpenses = expenses.reduce((acc, item) => acc + item.total_amount, 0);
@@ -187,14 +211,17 @@ export function WorkerExpenses() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+            <div className="grid grid-cols-1 gap-4">
+              {/* First Row: Expense Item Selector */}
               <div className="space-y-2">
                 <Label htmlFor="expense">Expense Item</Label>
                 <Select
                   value={selectedExpense}
                   onValueChange={(value) => {
                     setSelectedExpense(value);
-                    setQuantity("0"); // 👈 always reset to 0
+                    setQuantity("0");
+                    setCustomExpenseName('');
+                    setCustomUnit('');
                   }}
                 >
                   <SelectTrigger>
@@ -213,53 +240,85 @@ export function WorkerExpenses() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="quantity">Quantity</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                  placeholder="0"
-                />
-              </div>
+              {/* Conditional Custom Input Fields (shown only when "Other" is selected) */}
+              {isOtherSelected && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="customExpenseName">Custom Expense Name</Label>
+                    <Input
+                      id="customExpenseName"
+                      type="text"
+                      value={customExpenseName}
+                      onChange={(e) => setCustomExpenseName(e.target.value)}
+                      placeholder="e.g., Paper Cups, Napkins, etc."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="customUnit">Custom Unit</Label>
+                    <Input
+                      id="customUnit"
+                      type="text"
+                      value={customUnit}
+                      onChange={(e) => setCustomUnit(e.target.value)}
+                      placeholder="e.g., packets, boxes, pieces"
+                    />
+                  </div>
+                </>
+              )}
 
-              <div className="space-y-2">
-                <Label>Unit</Label>
-                <div className="h-10 flex items-center text-sm text-muted-foreground border rounded-md px-3">
-                  {selectedExpenseData?.unit || 'Select expense first'}
+              {/* Second Row: Quantity, Unit, Unit Price, Total, Add Button */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-end">
+                <div className="space-y-2">
+                  <Label htmlFor="quantity">Quantity</Label>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    placeholder="0"
+                  />
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="unitPrice">Unit Price (₹)</Label>
-                <Input
-                  id="unitPrice"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={unitPrice}
-                  onChange={(e) => setUnitPrice(e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Total Amount</Label>
-                <div className="h-10 flex items-center text-sm font-medium border rounded-md px-3 bg-muted">
-                  ₹{calculatedTotal}
+                <div className="space-y-2">
+                  <Label>Unit</Label>
+                  <div className="h-10 flex items-center text-sm text-muted-foreground border rounded-md px-3">
+                    {isOtherSelected 
+                      ? (customUnit || 'Enter unit above') 
+                      : (selectedExpenseData?.unit || 'Select expense first')
+                    }
+                  </div>
                 </div>
-              </div>
 
-              <Button
-                onClick={handleQuickAdd}
-                disabled={!selectedExpense || !quantity || !unitPrice || isSubmitting}
-                className="h-10"
-              >
-                {isSubmitting ? "Adding..." : "Add Expense"}
-              </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="unitPrice">Unit Price (₹)</Label>
+                  <Input
+                    id="unitPrice"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={unitPrice}
+                    onChange={(e) => setUnitPrice(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Total Amount</Label>
+                  <div className="h-10 flex items-center text-sm font-medium border rounded-md px-3 bg-muted">
+                    ₹{calculatedTotal}
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleQuickAdd}
+                  disabled={!selectedExpense || !quantity || !unitPrice || isSubmitting || (isOtherSelected && (!customExpenseName || !customUnit))}
+                  className="h-10"
+                >
+                  {isSubmitting ? "Adding..." : "Add Expense"}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -312,7 +371,7 @@ export function WorkerExpenses() {
                 {expenses.map(expense => (
                   <TableRow key={expense.id}>
                     <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(expense.created_at)}
+                      {formatDateIST(expense.created_at)}
                     </TableCell>
                     <TableCell>
                       <div>
@@ -328,7 +387,7 @@ export function WorkerExpenses() {
                       <Badge variant="outline">{expense.category}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {expense.quantity ? `${expense.quantity} ${expense.unit}` : '-'}
+                      {expense.quantity} {expense.unit}
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       {formatCurrency(expense.total_amount)}
