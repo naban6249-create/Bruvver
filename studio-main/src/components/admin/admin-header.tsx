@@ -227,7 +227,7 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
       {/* Left section - Logo and Branch Selector */}
       <div className="flex items-center gap-4 flex-1 min-w-0">
         {/* Logo */}
-        <Link href="/admin" className="flex items-center gap-2 flex-shrink-0">
+        <Link href="/admin/dashboard" className="flex items-center gap-2 flex-shrink-0">
           <img
             src="/images/bruvvers_logo_main.png"
             alt="Bruvvver Coffee Logo"
