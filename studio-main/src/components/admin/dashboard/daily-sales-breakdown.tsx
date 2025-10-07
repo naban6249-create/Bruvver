@@ -49,7 +49,6 @@ function BulkEntryDialog({
     // Auto-select input text when dialog opens
     React.useEffect(() => {
         if (isOpen && inputRef.current) {
-            // Small delay to ensure dialog is fully rendered
             setTimeout(() => {
                 inputRef.current?.select();
             }, 100);
@@ -388,7 +387,7 @@ export function DailySalesBreakdown({ onSaleChange }: { onSaleChange?: () => voi
                         </div>
                     ) : (
                         <>
-                            {/* Mobile Card Layout */}
+                            {/* Mobile Card Layout - FIXED */}
                             <div className="block md:hidden space-y-4">
                                 {itemsWithSales.map(item => (
                                     <Card key={item.id} className="p-4">
@@ -426,29 +425,29 @@ export function DailySalesBreakdown({ onSaleChange }: { onSaleChange?: () => voi
                                                             Quantity:
                                                         </span>
                                                         {hasFullAccess ? (
-                                                            <div className="flex items-center gap-2">
+                                                            <div className="flex items-center gap-1.5">
                                                                 <Button 
                                                                     variant="outline" 
                                                                     size="icon" 
-                                                                    className="h-10 w-10"
+                                                                    className="h-8 w-8 flex-shrink-0"
                                                                     onClick={() => handleRemoveSale(String(item.id), item.name)}
                                                                     disabled={item.quantitySold === 0}
                                                                 >
-                                                                    <Minus className="h-5 w-5" />
+                                                                    <Minus className="h-4 w-4" />
                                                                 </Button>
-                                                                <div className="text-sm font-medium min-w-[3.5rem] text-center">
-                                                                    <div className="text-base">{item.quantitySold}</div>
-                                                                    <div className="text-xs text-muted-foreground">
+                                                                <div className="text-xs font-medium text-center min-w-[2.5rem] flex-shrink-0">
+                                                                    <div className="text-sm">{item.quantitySold}</div>
+                                                                    <div className="text-[10px] text-muted-foreground whitespace-nowrap">
                                                                         💵{item.cashCount} 📱{item.gpayCount}
                                                                     </div>
                                                                 </div>
                                                                 <Button 
                                                                     variant="default" 
                                                                     size="icon" 
-                                                                    className="h-10 w-10"
+                                                                    className="h-8 w-8 flex-shrink-0"
                                                                     onClick={() => handleOpenBulkEntry(String(item.id), item.name)}
                                                                 >
-                                                                    <Edit className="h-5 w-5" />
+                                                                    <Edit className="h-4 w-4" />
                                                                 </Button>
                                                             </div>
                                                         ) : (
