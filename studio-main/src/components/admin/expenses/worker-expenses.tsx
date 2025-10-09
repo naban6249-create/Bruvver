@@ -99,21 +99,12 @@ export function WorkerExpenses() {
   const handleQuickAdd = async () => {
     // Determine the final expense name and unit
     const finalExpenseName = isOtherSelected ? customExpenseName.trim() : selectedExpense;
-    const finalUnit = isOtherSelected ? customUnit.trim() : COMMON_EXPENSES.find(s => s.name === selectedExpense)?.unit || 'units';
+    const finalUnit = isOtherSelected ? 'items' : COMMON_EXPENSES.find(s => s.name === selectedExpense)?.unit || 'units';
 
     if (!finalExpenseName || !quantity || !unitPrice || !branchId) {
       toast({
         title: "Missing Information",
         description: "Please fill in all fields including expense name, quantity, and unit price.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (isOtherSelected && !finalUnit) {
-      toast({
-        title: "Missing Information",
-        description: "Please enter a unit (e.g., kg, liters, pieces).",
         variant: "destructive"
       });
       return;
@@ -141,7 +132,9 @@ export function WorkerExpenses() {
 
       toast({
         title: "Expense Added",
-        description: `${quantity} ${finalUnit} of ${finalExpenseName} recorded successfully.`
+        description: isOtherSelected 
+          ? `${finalExpenseName} expense of ₹${calculatedTotal} recorded successfully.`
+          : `${quantity} ${finalUnit} of ${finalExpenseName} recorded successfully.`
       });
 
       // Reset form
@@ -220,6 +213,7 @@ export function WorkerExpenses() {
                   onValueChange={(value) => {
                     setSelectedExpense(value);
                     setQuantity("0");
+                    setUnitPrice('');
                     setCustomExpenseName('');
                     setCustomUnit('');
                   }}
@@ -240,8 +234,9 @@ export function WorkerExpenses() {
                 </Select>
               </div>
 
-              {/* Conditional Custom Input Fields (shown only when "Other" is selected) */}
-              {isOtherSelected && (
+              {/* Conditional Layout based on selection */}
+              {isOtherSelected ? (
+                /* Custom expense layout for "Other" option */
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="customExpenseName">Custom Expense Name</Label>
@@ -253,72 +248,102 @@ export function WorkerExpenses() {
                       placeholder="e.g., Paper Cups, Napkins, etc."
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="customUnit">Custom Unit</Label>
-                    <Input
-                      id="customUnit"
-                      type="text"
-                      value={customUnit}
-                      onChange={(e) => setCustomUnit(e.target.value)}
-                      placeholder="e.g., packets, boxes, pieces"
-                    />
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
+                    <div className="space-y-2">
+                      <Label htmlFor="quantity">Quantity</Label>
+                      <Input
+                        id="quantity"
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={quantity}
+                        onChange={(e) => setQuantity(e.target.value)}
+                        placeholder="0"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="unitPrice">Unit Price (₹)</Label>
+                      <Input
+                        id="unitPrice"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={unitPrice}
+                        onChange={(e) => setUnitPrice(e.target.value)}
+                        placeholder="0.00"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Total Amount</Label>
+                      <div className="h-10 flex items-center text-sm font-medium border rounded-md px-3 bg-muted">
+                        ₹{calculatedTotal}
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={handleQuickAdd}
+                      disabled={!selectedExpense || !quantity || !unitPrice || isSubmitting || !customExpenseName}
+                      className="h-10"
+                    >
+                      {isSubmitting ? "Adding..." : "Add Expense"}
+                    </Button>
                   </div>
                 </>
+              ) : (
+                /* Standard layout for predefined expenses */
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-end">
+                  <div className="space-y-2">
+                    <Label htmlFor="quantity">Quantity</Label>
+                    <Input
+                      id="quantity"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Unit</Label>
+                    <div className="h-10 flex items-center text-sm text-muted-foreground border rounded-md px-3">
+                      {selectedExpenseData?.unit || 'Select expense first'}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="unitPrice">Unit Price (₹)</Label>
+                    <Input
+                      id="unitPrice"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={unitPrice}
+                      onChange={(e) => setUnitPrice(e.target.value)}
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Total Amount</Label>
+                    <div className="h-10 flex items-center text-sm font-medium border rounded-md px-3 bg-muted">
+                      ₹{calculatedTotal}
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleQuickAdd}
+                    disabled={!selectedExpense || !quantity || !unitPrice || isSubmitting}
+                    className="h-10"
+                  >
+                    {isSubmitting ? "Adding..." : "Add Expense"}
+                  </Button>
+                </div>
               )}
-
-              {/* Second Row: Quantity, Unit, Unit Price, Total, Add Button */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-end">
-                <div className="space-y-2">
-                  <Label htmlFor="quantity">Quantity</Label>
-                  <Input
-                    id="quantity"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    placeholder="0"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Unit</Label>
-                  <div className="h-10 flex items-center text-sm text-muted-foreground border rounded-md px-3">
-                    {isOtherSelected 
-                      ? (customUnit || 'Enter unit above') 
-                      : (selectedExpenseData?.unit || 'Select expense first')
-                    }
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="unitPrice">Unit Price (₹)</Label>
-                  <Input
-                    id="unitPrice"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={unitPrice}
-                    onChange={(e) => setUnitPrice(e.target.value)}
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Total Amount</Label>
-                  <div className="h-10 flex items-center text-sm font-medium border rounded-md px-3 bg-muted">
-                    ₹{calculatedTotal}
-                  </div>
-                </div>
-
-                <Button
-                  onClick={handleQuickAdd}
-                  disabled={!selectedExpense || !quantity || !unitPrice || isSubmitting || (isOtherSelected && (!customExpenseName || !customUnit))}
-                  className="h-10"
-                >
-                  {isSubmitting ? "Adding..." : "Add Expense"}
-                </Button>
-              </div>
             </div>
           </CardContent>
         </Card>
