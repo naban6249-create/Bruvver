@@ -48,6 +48,7 @@ class Admin(Base):
 
     # New relationship for branch permissions
     branch_permissions = relationship("UserBranchPermission", back_populates="user", cascade="all, delete-orphan")
+    reset_tokens = relationship("PasswordResetToken", back_populates="user", cascade="all, delete-orphan")
 
 # NEW: Junction table for user-branch permissions
 class UserBranchPermission(Base):
@@ -226,3 +227,14 @@ class OpeningBalance(Base):
 
     branch = relationship("Branch", back_populates="opening_balances")
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("admins.id"), nullable=False)
+    token = Column(String, unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("Admin", back_populates="reset_tokens")
