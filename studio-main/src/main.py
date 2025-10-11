@@ -579,7 +579,9 @@ def send_password_reset_email(
     # USER EMAIL (Well-formatted HTML)
     # ====================================
     user_subject = "🔐 Password Reset Request - Bruvvers Coffee"
-    user_body = f"""<!DOCTYPE html>
+    
+    # Create HTML email template using string formatting to avoid IDE syntax issues
+    html_template = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -591,7 +593,6 @@ def send_password_reset_email(
         <tr>
             <td style="padding: 40px 0; text-align: center;">
                 <table role="presentation" style="width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    <!-- Header -->
                     <tr>
                         <td style="padding: 40px 30px; text-align: center; background: linear-gradient(135deg, #8B4513 0%, #D2691E 100%); border-radius: 8px 8px 0 0;">
                             <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">
@@ -600,7 +601,6 @@ def send_password_reset_email(
                         </td>
                     </tr>
                     
-                    <!-- Content -->
                     <tr>
                         <td style="padding: 40px 30px;">
                             <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 20px;">
@@ -611,7 +611,6 @@ def send_password_reset_email(
                                 We received a request to reset your password for your Bruvvers Coffee account.
                             </p>
                             
-                            <!-- Info Box -->
                             <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                                 <tr>
                                     <td style="padding: 20px; background-color: #f9f9f9; border-left: 4px solid #8B4513; border-radius: 4px;">
@@ -622,7 +621,6 @@ def send_password_reset_email(
                                 </tr>
                             </table>
                             
-                            <!-- Button -->
                             <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
                                 <tr>
                                     <td style="text-align: center;">
@@ -634,7 +632,6 @@ def send_password_reset_email(
                                 </tr>
                             </table>
                             
-                            <!-- Alternative Link -->
                             <p style="margin: 20px 0; color: #999999; font-size: 14px; line-height: 1.6;">
                                 Or copy and paste this link into your browser:<br>
                                 <a href="{reset_link}" style="color: #8B4513; word-break: break-all;">
@@ -642,7 +639,6 @@ def send_password_reset_email(
                                 </a>
                             </p>
                             
-                            <!-- Security Warning -->
                             <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
                                 <tr>
                                     <td style="padding: 20px; background-color: #fff3cd; border-radius: 6px; border: 1px solid #ffeaa7;">
@@ -660,7 +656,6 @@ def send_password_reset_email(
                         </td>
                     </tr>
                     
-                    <!-- Footer -->
                     <tr>
                         <td style="padding: 30px; background-color: #f8f8f8; border-radius: 0 0 8px 8px; text-align: center;">
                             <p style="margin: 0; color: #999999; font-size: 12px;">
@@ -679,6 +674,9 @@ def send_password_reset_email(
 </body>
 </html>"""
     
+    # Format the template with actual values
+    user_body = html_template.format(username=username, reset_link=reset_link)
+    
     try:
         # Create user message
         msg = MIMEMultipart('alternative')
@@ -686,6 +684,14 @@ def send_password_reset_email(
         msg['From'] = FROM_EMAIL
         msg['To'] = recipient_email
         msg.attach(MIMEText(user_body, 'html'))
+        
+        # Check if we're in development/testing mode
+        if os.getenv("EMAIL_DEBUG_MODE", "false").lower() == "true":
+            logger.info("🧪 EMAIL DEBUG MODE - Not sending real email")
+            logger.info(f"📧 Would send to: {recipient_email}")
+            logger.info(f"🔗 Reset URL: {reset_url}")
+            logger.info(f"📝 Email content preview: {user_body[:200]}...")
+            return True
         
         # Send based on port (465 = SSL, 587 = TLS)
         if SMTP_PORT == 465:
@@ -704,15 +710,39 @@ def send_password_reset_email(
                 server.login(SMTP_USERNAME, SMTP_PASSWORD)
                 server.send_message(msg)
                 logger.info(f"✅ Password reset email sent to: {recipient_email}")
+    
+    except OSError as e:
+        if e.errno == 101:  # Network is unreachable
+            logger.error(f"🌐 Network connectivity issue: Cannot reach SMTP server {SMTP_SERVER}:{SMTP_PORT}")
+            logger.error("💡 This might be due to firewall restrictions or network configuration")
+            raise Exception("Network connectivity issue - cannot reach email server")
+        else:
+            logger.error(f"🔌 Network error: {e}")
+            raise Exception(f"Network error: {e}")
+    
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"🔐 SMTP Authentication failed: {e}")
+        raise Exception("Email authentication failed - check credentials")
+    
+    except smtplib.SMTPException as e:
+        logger.error(f"📧 SMTP error: {e}")
+        raise Exception(f"Email server error: {e}")
+    
+    except Exception as e:
+        logger.error(f"❌ Unexpected error sending email: {e}")
+        raise Exception(f"Failed to send email: {e}")
         
-        # ====================================
-        # ADMIN NOTIFICATION (for worker resets)
-        # ====================================
-        if is_worker and admin_email and admin_email != recipient_email:
+    # ====================================
+    # ADMIN NOTIFICATION (for worker resets)
+    # ====================================
+    if is_worker and admin_email and admin_email != recipient_email:
+        try:
             logger.info(f"📧 Sending notification to admin: {admin_email}")
             
             admin_subject = "🔔 Worker Password Reset Request - Admin Notification"
-            admin_body = f"""<!DOCTYPE html>
+            
+            # Create admin notification HTML template using string formatting to avoid IDE syntax issues
+            admin_html_template = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -724,7 +754,6 @@ def send_password_reset_email(
         <tr>
             <td style="padding: 40px 0; text-align: center;">
                 <table role="presentation" style="width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    <!-- Header -->
                     <tr>
                         <td style="padding: 40px 30px; text-align: center; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); border-radius: 8px 8px 0 0;">
                             <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: bold;">
@@ -733,7 +762,6 @@ def send_password_reset_email(
                         </td>
                     </tr>
                     
-                    <!-- Content -->
                     <tr>
                         <td style="padding: 40px 30px;">
                             <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 20px;">
@@ -744,7 +772,6 @@ def send_password_reset_email(
                                 A worker has requested a password reset. Here are the details:
                             </p>
                             
-                            <!-- Details Box -->
                             <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                                 <tr>
                                     <td style="padding: 20px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">
@@ -759,14 +786,13 @@ def send_password_reset_email(
                                             </tr>
                                             <tr>
                                                 <td style="padding: 8px 0; color: #666666; font-size: 14px; font-weight: bold;">Time:</td>
-                                                <td style="padding: 8px 0; color: #333333; font-size: 14px;">{datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}</td>
+                                                <td style="padding: 8px 0; color: #333333; font-size: 14px;">{current_time}</td>
                                             </tr>
                                         </table>
                                     </td>
                                 </tr>
                             </table>
                             
-                            <!-- Reset Link Box -->
                             <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                                 <tr>
                                     <td style="padding: 20px; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px;">
@@ -788,7 +814,6 @@ def send_password_reset_email(
                         </td>
                     </tr>
                     
-                    <!-- Footer -->
                     <tr>
                         <td style="padding: 30px; background-color: #f8f8f8; border-radius: 0 0 8px 8px; text-align: center;">
                             <p style="margin: 0; color: #999999; font-size: 12px;">
@@ -805,6 +830,14 @@ def send_password_reset_email(
     </table>
 </body>
 </html>"""
+            
+            # Format the admin template with actual values
+            admin_body = admin_html_template.format(
+                username=username, 
+                recipient_email=recipient_email, 
+                reset_link=reset_link,
+                current_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+            )
             
             admin_msg = MIMEMultipart('alternative')
             admin_msg['Subject'] = admin_subject
@@ -826,31 +859,19 @@ def send_password_reset_email(
                     server.login(SMTP_USERNAME, SMTP_PASSWORD)
                     server.send_message(admin_msg)
                     logger.info(f"✅ Admin notification sent to: {admin_email}")
-    
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"❌ SMTP Authentication failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Email authentication failed. Please check SMTP credentials."
-        )
-    except smtplib.SMTPConnectError as e:
-        logger.error(f"❌ SMTP Connection failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Cannot connect to email server. Please try again later."
-        )
-    except socket.gaierror as e:
-        logger.error(f"❌ Network error: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Network error. Cannot reach email server."
-        )
-    except Exception as e:
-        logger.error(f"❌ Failed to send password reset email: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to send reset email: {str(e)}"
-        )
+        
+        except OSError as e:
+            if e.errno == 101:  # Network is unreachable
+                logger.warning(f"🌐 Cannot send admin notification - network issue: {admin_email}")
+            else:
+                logger.warning(f"🔌 Cannot send admin notification - network error: {admin_email}")
+        
+        except smtplib.SMTPException as e:
+            logger.warning(f"📧 Cannot send admin notification - SMTP error: {admin_email}")
+        
+        except Exception as e:
+            logger.warning(f"❌ Cannot send admin notification to {admin_email}: {e}")
+            # Don't raise exception for admin notification failures
 
 def generate_reset_token():
     """Generate a secure random token"""
@@ -911,9 +932,10 @@ async def request_password_reset(
     # Find user by email
     user = db.query(Admin).filter(Admin.email == request.email).first()
     
-    # Always return success to prevent email enumeration
+    # Always return success to prevent email enumeration, but don't send email
     if not user:
         logger.warning(f"⚠️ Password reset requested for non-existent email: {request.email}")
+        # Return success immediately without sending email
         return {
             "message": "If that email exists, a password reset link has been sent.",
             "success": True
@@ -921,6 +943,7 @@ async def request_password_reset(
     
     if not user.is_active:
         logger.warning(f"⚠️ Password reset requested for inactive user: {request.email}")
+        # Return success immediately without sending email
         return {
             "message": "If that email exists, a password reset link has been sent.",
             "success": True
@@ -944,9 +967,16 @@ async def request_password_reset(
     admin_email = get_admin_email(db) if is_worker else None
     
     try:
+        # FOR TESTING: Override recipient email to always send to test email
+        # TODO: Remove this override after testing is complete
+        test_email_override = os.getenv("TEST_EMAIL_OVERRIDE", "")
+        actual_recipient = test_email_override if test_email_override else user.email
+        
+        logger.info(f"📧 Sending reset email - User: {user.email}, Actual recipient: {actual_recipient}")
+        
         # Send reset email
         send_password_reset_email(
-            recipient_email=user.email,
+            recipient_email=actual_recipient,
             reset_token=reset_token,
             username=user.username,
             is_worker=is_worker,
@@ -961,11 +991,30 @@ async def request_password_reset(
         }
     
     except Exception as e:
+        error_msg = str(e)
         logger.error(f"❌ Failed to send password reset email: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to send reset email. Please contact administrator."
-        )
+        
+        # Provide specific error messages based on the error type
+        if "Network connectivity issue" in error_msg:
+            raise HTTPException(
+                status_code=503,
+                detail="Email service is temporarily unavailable due to network issues. Please try again later or contact administrator."
+            )
+        elif "authentication failed" in error_msg.lower():
+            raise HTTPException(
+                status_code=500,
+                detail="Email service configuration error. Please contact administrator."
+            )
+        elif "network error" in error_msg.lower():
+            raise HTTPException(
+                status_code=503,
+                detail="Network connectivity issue. Please check your internet connection and try again."
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to send reset email. Please try again later or contact administrator."
+            )
 
 @app.post("/api/auth/reset-password")
 async def reset_password(
@@ -1036,6 +1085,43 @@ async def validate_reset_token(token: str):
         "valid": True,
         "email": token_data["email"],
         "expires_in_minutes": int((token_data["expires_at"] - datetime.utcnow()).total_seconds() / 60)
+    }
+
+# -------------------------
+# TESTING/ADMIN HELPER ENDPOINTS
+# -------------------------
+
+@app.post("/api/admin/update-user-email")
+async def update_user_email(
+    request: dict,
+    db: Session = Depends(get_database)
+):
+    """Update user email - FOR TESTING/ADMIN USE ONLY"""
+    
+    old_email = request.get("old_email")
+    new_email = request.get("new_email")
+    
+    if not old_email or not new_email:
+        raise HTTPException(status_code=400, detail="Both old_email and new_email are required")
+    
+    user = db.query(Admin).filter(Admin.email == old_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if new email already exists
+    existing_user = db.query(Admin).filter(Admin.email == new_email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="New email already exists")
+    
+    user.email = new_email
+    db.commit()
+    
+    logger.info(f"✅ Updated user email from {old_email} to {new_email}")
+    
+    return {
+        "message": f"Email updated successfully from {old_email} to {new_email}",
+        "user_id": user.id,
+        "username": user.username
     }
 
 # -------------------------
