@@ -14,13 +14,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/lib/auth-context";
+import { requestPasswordReset } from "@/lib/auth-service";
 
 export function ForgotPasswordDialog() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const { forgotPassword } = useAuth();
   const { toast } = useToast();
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -31,7 +30,7 @@ export function ForgotPasswordDialog() {
     console.log('🔄 Forgot password form submitted with email:', email);
 
     try {
-      const response = await forgotPassword(email);
+      const response = await requestPasswordReset(email);
 
       toast({
         title: "Password Reset Requested",
