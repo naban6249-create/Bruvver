@@ -478,3 +478,18 @@ class ImageUploadResponse(BaseModel):
         if not any(v.lower().endswith(ext) for ext in allowed_extensions):
             raise ValueError("Invalid image format")
         return v
+
+# -----------------------
+# PASSWORD RESET SCHEMAS
+# -----------------------
+class ForgotPasswordRequest(BaseModel):
+    username_or_email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+class PasswordResetResponse(BaseModel):
+    message: str
+    success: bool
+    username: Optional[str] = None
