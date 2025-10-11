@@ -559,9 +559,16 @@ def send_password_reset_email(
     # Email configuration from environment
     SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    
+    # SendGrid specific port handling - try multiple ports for Render compatibility
+    if SMTP_SERVER == "smtp.sendgrid.net":
+        # Try port 2525 first (often works better on cloud platforms)
+        if SMTP_PORT in [443, 587]:
+            SMTP_PORT = 2525
     SMTP_USERNAME = os.getenv("SMTP_USERNAME")
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
     FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USERNAME)
+    # Get frontend URL from environment variable
     APP_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
     
     if not all([SMTP_USERNAME, SMTP_PASSWORD]):
@@ -572,6 +579,7 @@ def send_password_reset_email(
         )
     
     logger.info(f"📧 Email config: Server={SMTP_SERVER}, Port={SMTP_PORT}, User={SMTP_USERNAME}")
+    logger.info(f"🔗 Using APP_URL: {APP_URL}")
     
     reset_link = f"{APP_URL}/admin/reset-password?token={reset_token}"
     
@@ -693,23 +701,37 @@ def send_password_reset_email(
             logger.info(f"📝 Email content preview: {user_body[:200]}...")
             return True
         
-        # Send based on port (465 = SSL, 587 = TLS)
-        if SMTP_PORT == 465:
-            logger.info("🔒 Using SMTP_SSL (port 465)")
-            context = ssl.create_default_context()
-            with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context, timeout=30) as server:
-                server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                server.send_message(msg)
-                logger.info(f"✅ Password reset email sent to: {recipient_email}")
-        else:
-            logger.info(f"🔒 Using SMTP with STARTTLS (port {SMTP_PORT})")
-            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                server.send_message(msg)
-                logger.info(f"✅ Password reset email sent to: {recipient_email}")
+        # Try multiple ports for SendGrid on cloud platforms
+        ports_to_try = [2525, 587, 465] if SMTP_SERVER == "smtp.sendgrid.net" else [SMTP_PORT]
+        
+        for port in ports_to_try:
+            try:
+                logger.info(f"🔄 Trying port {port}...")
+                
+                if port == 465:
+                    logger.info("🔒 Using SMTP_SSL (port 465)")
+                    context = ssl.create_default_context()
+                    with smtplib.SMTP_SSL(SMTP_SERVER, port, context=context, timeout=15) as server:
+                        server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                        server.send_message(msg)
+                        logger.info(f"✅ Password reset email sent to: {recipient_email}")
+                        return True
+                else:
+                    logger.info(f"🔒 Using SMTP with STARTTLS (port {port})")
+                    with smtplib.SMTP(SMTP_SERVER, port, timeout=15) as server:
+                        server.ehlo()
+                        server.starttls()
+                        server.ehlo()
+                        server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                        server.send_message(msg)
+                        logger.info(f"✅ Password reset email sent to: {recipient_email}")
+                        return True
+                        
+            except Exception as port_error:
+                logger.warning(f"⚠️ Port {port} failed: {str(port_error)}")
+                if port == ports_to_try[-1]:  # Last port, re-raise the error
+                    raise port_error
+                continue
     
     except OSError as e:
         if e.errno == 101:  # Network is unreachable
@@ -929,8 +951,10 @@ async def request_password_reset(
     # Clean up expired tokens first
     cleanup_expired_reset_tokens(db)
     
-    # Find user by email
-    user = db.query(Admin).filter(Admin.email == request.email).first()
+    # Find user by email OR username (for flexibility)
+    user = db.query(Admin).filter(
+        (Admin.email == request.email) | (Admin.username == request.email)
+    ).first()
     
     # Always return success to prevent email enumeration, but don't send email
     if not user:
