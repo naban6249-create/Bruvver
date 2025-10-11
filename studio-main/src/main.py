@@ -1,8 +1,11 @@
 from fastapi import FastAPI, HTTPException, Depends, status, File, UploadFile, Form, Body, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, text
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import secrets
+import string
 from datetime import datetime, date, timedelta
 from typing import List, Optional
 from pydantic import BaseModel
@@ -16,7 +19,13 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import uuid
 from cloudinary import uploader
 from zoneinfo import ZoneInfo
-from keep_alive import create_multi_service_keepalive
+# Conditionally import keep_alive only for Render deployment
+try:
+    from keep_alive import create_multi_service_keepalive
+    KEEP_ALIVE_AVAILABLE = True
+except ImportError:
+    KEEP_ALIVE_AVAILABLE = False
+    print("keep_alive module not found - keep-alive service disabled for local development")
 
 IST = ZoneInfo('Asia/Kolkata')
 
@@ -68,7 +77,8 @@ def verify_cloudinary_config():
 from database import engine, get_database
 from models import (
     Base, MenuItem, Ingredient, DailySale, Admin, Order, OrderItem, Inventory,
-    Branch, DailyExpense, ExpenseCategory, UserBranchPermission, PermissionLevel, OpeningBalance
+    Branch, DailyExpense, ExpenseCategory, UserBranchPermission, PermissionLevel, OpeningBalance,
+    PasswordResetToken
 )
 from schemas import (
     UserRole,  # 👈 FIX: import from schemas, not models
@@ -84,9 +94,11 @@ from schemas import (
     UserPermissionSummary, UserBranchPermissionCreate,  # ✅ This was missing!
     UserBranchPermissionResponse,  # ✅ Add this too
     UserBranchPermissionBase,# Added UserPermissionSummary
-    OpeningBalanceResponse, OpeningBalanceCreate, OpeningBalanceUpdateRequest, OpeningBalanceUpdate, DailyBalanceSummary
+    OpeningBalanceResponse, OpeningBalanceCreate, OpeningBalanceUpdateRequest, OpeningBalanceUpdate, DailyBalanceSummary,
+    ForgotPasswordRequest, ResetPasswordRequest, PasswordResetResponse
 )
 from sqlalchemy import func, and_
+from sqlalchemy.orm import Session
 
 from auth import (
     authenticate_user, create_access_token, get_current_active_user,
@@ -96,7 +108,11 @@ from automation import start_automation, stop_automation, manual_export_sales, m
 from sheets_exporter import export_day
 
 # Load environment variables
+# Try to load from current directory first, then from src directory
 load_dotenv()
+if not os.getenv("SMTP_USERNAME"):
+    # If not found, try loading from src/.env (in case running from parent directory)
+    load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -172,6 +188,15 @@ async def startup_event():
     # Initialize data just once
     await initialize_sample_data()
     
+    # Clean up expired password reset tokens on startup
+    db = next(get_database())
+    try:
+        cleanup_expired_reset_tokens(db)
+    except Exception as e:
+        logger.exception("Failed to cleanup expired tokens on startup")
+    finally:
+        db.close()
+    
     # The rest of the startup tasks
     try:
         start_automation()
@@ -188,7 +213,7 @@ async def startup_event():
     except Exception:
         logger.exception("Failed to perform catch-up export on startup")
     
-    if os.getenv("RENDER"):
+    if os.getenv("RENDER") and KEEP_ALIVE_AVAILABLE:
         backend_url = os.getenv("RENDER_EXTERNAL_URL")
         # Make sure this frontend URL is correct for your Render service
         frontend_url = "https://bruvver-3r1e.onrender.com"
@@ -204,7 +229,7 @@ async def startup_event():
         else:
             logger.warning("Keep-alive URLs not found in environment variables.")
     else:
-        logger.info("Keep-alive disabled (not in RENDER environment)")
+        logger.info("Keep-alive disabled (not in RENDER environment or module not available)")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -442,13 +467,18 @@ async def initialize_sample_data():
                 db_inventory = Inventory(**inv_data)
                 db.add(db_inventory)
 
-        # Default admin (if none)
-        if db.query(Admin).count() == 0:
+        # Default admin (if none) or update existing admin
+        # Use environment variables for admin credentials
+        admin_username = os.getenv("ADMIN_USERNAME", "admin@test.com")
+        admin_email = os.getenv("ADMIN_EMAIL", "naban6249@gmail.com")
+        
+        existing_admin = db.query(Admin).filter(Admin.username == admin_username).first()
+        if not existing_admin:
             default_admin_password = "testpassword"
             hashed_password = get_password_hash(default_admin_password)
             db_admin = Admin(
-                username="admin@test.com",
-                email="admin@test.com",
+                username=admin_username,
+                email=admin_email,
                 full_name="Default Admin",
                 password_hash=hashed_password,
                 role="admin",
@@ -456,7 +486,13 @@ async def initialize_sample_data():
                 is_superuser=True,
             )
             db.add(db_admin)
-            logger.info("Created default admin user admin@test.com / testpassword (role=admin)")
+            logger.info(f"Created default admin user {admin_username} / testpassword (role=admin, email={admin_email})")
+        else:
+            # Update existing admin email if needed
+            if existing_admin.email != admin_email:
+                old_email = existing_admin.email
+                existing_admin.email = admin_email
+                logger.info(f"Updated admin email from {old_email} to {admin_email}")
 
         # Ensure we have some expense categories
         if db.query(ExpenseCategory).count() == 0:
@@ -490,6 +526,87 @@ async def initialize_sample_data():
         db.close()
 
 # -------------------------
+# EMAIL FUNCTIONS
+# -------------------------
+def send_password_reset_email(admin_email: str, reset_token: str, user_full_name: str):
+    """Send password reset email to admin"""
+    try:
+        logger.info(f"Password reset email function called with admin_email: {admin_email}")
+        # Email configuration from environment variables
+        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        smtp_username = os.getenv("SMTP_USERNAME")
+        smtp_password = os.getenv("SMTP_PASSWORD")
+        from_email = os.getenv("FROM_EMAIL", smtp_username)
+
+        if not smtp_username or not smtp_password:
+            logger.error("SMTP credentials not configured")
+            return False
+
+        # Create message
+        msg = MIMEMultipart()
+        msg['From'] = from_email
+        msg['To'] = admin_email
+        msg['Subject'] = "Password Reset Request - Coffee Management System"
+
+        # HTML body
+        reset_url = f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/admin/reset-password?token={reset_token}"
+        
+        # Create HTML template with proper escaping
+        html_template = """<html>
+<body>
+    <h2>Password Reset Request</h2>
+    <p>A password reset has been requested for user: <strong>{user_name}</strong></p>
+    <p>Please click the link below to reset the password:</p>
+    <p><a href="{url}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
+    <p>If the button doesn't work, copy and paste this URL into your browser:</p>
+    <p>{url}</p>
+    <p><strong>This link will expire in 1 hour.</strong></p>
+    <p>If you did not request this password reset, please ignore this email.</p>
+    <br>
+    <p>Best regards,<br>Coffee Management System</p>
+</body>
+</html>"""
+        
+        # Format the template with variables
+        html = html_template.format(user_name=user_full_name, url=reset_url)
+
+        msg.attach(MIMEText(html, 'html'))
+
+        # Send email
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(smtp_username, smtp_password)
+        text = msg.as_string()
+        server.sendmail(from_email, admin_email, text)
+        server.quit()
+
+        logger.info(f"Password reset email sent to {admin_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send password reset email: {e}")
+        return False
+
+def generate_reset_token():
+    """Generate a secure random token"""
+    return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+
+def cleanup_expired_reset_tokens(db: Session):
+    """Clean up expired password reset tokens"""
+    try:
+        expired_count = db.query(PasswordResetToken).filter(
+            PasswordResetToken.expires_at < datetime.utcnow()
+        ).delete()
+        
+        if expired_count > 0:
+            logger.info(f"Cleaned up {expired_count} expired password reset tokens")
+        
+        db.commit()
+    except Exception as e:
+        logger.error(f"Failed to cleanup expired tokens: {e}")
+        db.rollback()
+
+# -------------------------
 # Root / health
 # -------------------------
 @app.get("/")
@@ -508,6 +625,128 @@ async def health_check():
         "timestamp": datetime.utcnow().isoformat(),
         "version": app.version
     }
+
+# -------------------------
+# PASSWORD RESET ENDPOINTS
+# -------------------------
+@app.post("/api/forgot-password", response_model=PasswordResetResponse)
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: Session = Depends(get_database)
+):
+    """Request password reset - sends email to admin with reset link"""
+    # Find user by username or email
+    user = db.query(Admin).filter(
+        (Admin.username == request.username_or_email) |
+        (Admin.email == request.username_or_email)
+    ).first()
+
+    if not user:
+        # Don't reveal if user exists or not for security
+        return PasswordResetResponse(
+            message="If the username/email exists, a password reset link has been sent to the admin.",
+            success=True
+        )
+
+    # Check if user is active
+    if not user.is_active:
+        return PasswordResetResponse(
+            message="Account is inactive. Please contact your administrator.",
+            success=False
+        )
+
+    # Find admin user to send email to
+    admin_user = db.query(Admin).filter(Admin.role == "admin", Admin.is_active == True).first()
+    if not admin_user:
+        logger.error("No active admin user found for password reset emails")
+        return PasswordResetResponse(
+            message="Password reset service is currently unavailable.",
+            success=False
+        )
+
+    # Generate reset token
+    reset_token = generate_reset_token()
+    expires_at = datetime.utcnow() + timedelta(hours=1)  # Token expires in 1 hour
+
+    # Save token to database
+    db_token = PasswordResetToken(
+        user_id=user.id,
+        token=reset_token,
+        expires_at=expires_at
+    )
+    db.add(db_token)
+    db.commit()
+
+    # Send email to admin
+    logger.info(f"Sending reset email to admin: {admin_user.email} for user: {user.username}")
+    email_sent = send_password_reset_email(
+        admin_email=admin_user.email,
+        reset_token=reset_token,
+        user_full_name=user.full_name or user.username
+    )
+
+    if email_sent:
+        return PasswordResetResponse(
+            message="Password reset request submitted. The admin has been notified.",
+            success=True
+        )
+    else:
+        # Clean up token if email failed
+        db.delete(db_token)
+        db.commit()
+        return PasswordResetResponse(
+            message="Failed to send password reset email. Please try again later.",
+            success=False
+        )
+
+@app.post("/api/reset-password", response_model=PasswordResetResponse)
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: Session = Depends(get_database)
+):
+    """Reset password using token"""
+    # Find valid token
+    db_token = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token == request.token,
+        PasswordResetToken.used == False,
+        PasswordResetToken.expires_at > datetime.utcnow()
+    ).first()
+
+    if not db_token:
+        return PasswordResetResponse(
+            message="Invalid or expired reset token.",
+            success=False
+        )
+
+    # Get user
+    user = db.query(Admin).filter(Admin.id == db_token.user_id).first()
+    if not user:
+        return PasswordResetResponse(
+            message="User not found.",
+            success=False
+        )
+
+    # Update password
+    hashed_password = get_password_hash(request.new_password)
+    user.password_hash = hashed_password
+
+    # Mark token as used
+    db_token.used = True
+
+    # Clean up any other tokens for this user
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used == False
+    ).update({"used": True})
+
+    db.commit()
+
+    logger.info(f"Password reset successful for user: {user.username}")
+    return PasswordResetResponse(
+        message="Password has been reset successfully.",
+        success=True,
+        username=user.username
+    )
 
 # -------------------------
 # OPENING BALANCE
@@ -3151,6 +3390,31 @@ async def cleanup_broken_images(
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to cleanup images: {e}")
+        raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
+
+@app.post("/api/admin/cleanup-reset-tokens")
+async def cleanup_expired_reset_tokens_endpoint(
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """Clean up expired password reset tokens (Admin only)"""
+    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        expired_count = db.query(PasswordResetToken).filter(
+            PasswordResetToken.expires_at < datetime.utcnow()
+        ).delete()
+        
+        db.commit()
+        
+        return {
+            "expired_tokens_cleaned": expired_count,
+            "message": f"Cleaned up {expired_count} expired password reset tokens."
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to cleanup expired tokens: {e}")
         raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
 
 
