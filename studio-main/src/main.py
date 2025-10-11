@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException, Depends, status, File, UploadFile, F
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import smtplib
+import ssl
+import socket
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import secrets
@@ -29,6 +31,8 @@ except ImportError:
 
 IST = ZoneInfo('Asia/Kolkata')
 
+# Store reset tokens in memory (for production, use Redis or database)
+password_reset_tokens = {}
 
 def get_current_date_ist():
     """Get current date in IST timezone"""
@@ -95,7 +99,8 @@ from schemas import (
     UserBranchPermissionResponse,  # ✅ Add this too
     UserBranchPermissionBase,# Added UserPermissionSummary
     OpeningBalanceResponse, OpeningBalanceCreate, OpeningBalanceUpdateRequest, OpeningBalanceUpdate, DailyBalanceSummary,
-    ForgotPasswordRequest, ResetPasswordRequest, PasswordResetResponse
+    ForgotPasswordRequestLegacy, ResetPasswordRequestLegacy, PasswordResetResponse,
+    PasswordResetRequest, PasswordResetConfirm
 )
 from sqlalchemy import func, and_
 from sqlalchemy.orm import Session
@@ -528,83 +533,346 @@ async def initialize_sample_data():
 # -------------------------
 # EMAIL FUNCTIONS
 # -------------------------
-def send_password_reset_email(admin_email: str, reset_token: str, user_full_name: str):
-    """Send password reset email to admin"""
-    try:
-        logger.info(f"Password reset email function called with admin_email: {admin_email}")
-        # Email configuration from environment variables
-        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        smtp_username = os.getenv("SMTP_USERNAME")
-        smtp_password = os.getenv("SMTP_PASSWORD")
-        from_email = os.getenv("FROM_EMAIL", smtp_username)
 
-        if not smtp_username or not smtp_password:
-            logger.error("SMTP credentials not configured")
-            return False
+def get_admin_email(db: Session) -> str:
+    """Get the primary admin email for notifications"""
+    admin = db.query(Admin).filter(
+        Admin.role == "admin",
+        Admin.is_active == True
+    ).first()
+    
+    if admin and admin.email:
+        return admin.email
+    
+    # Fallback to environment variable
+    return os.getenv("ADMIN_EMAIL", "admin@bruvvers.in")
 
-        # Create message
-        msg = MIMEMultipart()
-        msg['From'] = from_email
-        msg['To'] = admin_email
-        msg['Subject'] = "Password Reset Request - Coffee Management System"
-
-        # HTML body
-        reset_url = f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/admin/reset-password?token={reset_token}"
-        
-        # Create HTML template with proper escaping
-        html_template = """<html>
-<body>
-    <h2>Password Reset Request</h2>
-    <p>A password reset has been requested for user: <strong>{user_name}</strong></p>
-    <p>Please click the link below to reset the password:</p>
-    <p><a href="{url}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
-    <p>If the button doesn't work, copy and paste this URL into your browser:</p>
-    <p>{url}</p>
-    <p><strong>This link will expire in 1 hour.</strong></p>
-    <p>If you did not request this password reset, please ignore this email.</p>
-    <br>
-    <p>Best regards,<br>Coffee Management System</p>
+def send_password_reset_email(
+    recipient_email: str,
+    reset_token: str,
+    username: str,
+    is_worker: bool = False,
+    admin_email: Optional[str] = None
+):
+    """Send password reset email with proper SSL/TLS support"""
+    
+    # Email configuration from environment
+    SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USERNAME = os.getenv("SMTP_USERNAME")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+    FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USERNAME)
+    APP_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    
+    if not all([SMTP_USERNAME, SMTP_PASSWORD]):
+        logger.error("Email configuration missing: SMTP_USERNAME or SMTP_PASSWORD not set")
+        raise HTTPException(
+            status_code=500,
+            detail="Email configuration not set. Contact administrator."
+        )
+    
+    logger.info(f"📧 Email config: Server={SMTP_SERVER}, Port={SMTP_PORT}, User={SMTP_USERNAME}")
+    
+    reset_link = f"{APP_URL}/admin/reset-password?token={reset_token}"
+    
+    # ====================================
+    # USER EMAIL (Well-formatted HTML)
+    # ====================================
+    user_subject = "🔐 Password Reset Request - Bruvvers Coffee"
+    user_body = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Password Reset</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 40px 0; text-align: center;">
+                <table role="presentation" style="width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 40px 30px; text-align: center; background: linear-gradient(135deg, #8B4513 0%, #D2691E 100%); border-radius: 8px 8px 0 0;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">
+                                🔐 Password Reset
+                            </h1>
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 20px;">
+                                Hello, {username}
+                            </h2>
+                            
+                            <p style="margin: 0 0 20px 0; color: #666666; font-size: 16px; line-height: 1.6;">
+                                We received a request to reset your password for your Bruvvers Coffee account.
+                            </p>
+                            
+                            <!-- Info Box -->
+                            <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                                <tr>
+                                    <td style="padding: 20px; background-color: #f9f9f9; border-left: 4px solid #8B4513; border-radius: 4px;">
+                                        <p style="margin: 0; color: #333333; font-size: 14px; font-weight: bold;">
+                                            Click the button below to reset your password:
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Button -->
+                            <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
+                                <tr>
+                                    <td style="text-align: center;">
+                                        <a href="{reset_link}" 
+                                           style="display: inline-block; padding: 14px 40px; background-color: #8B4513; color: #ffffff; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: bold;">
+                                            Reset Password
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Alternative Link -->
+                            <p style="margin: 20px 0; color: #999999; font-size: 14px; line-height: 1.6;">
+                                Or copy and paste this link into your browser:<br>
+                                <a href="{reset_link}" style="color: #8B4513; word-break: break-all;">
+                                    {reset_link}
+                                </a>
+                            </p>
+                            
+                            <!-- Security Warning -->
+                            <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
+                                <tr>
+                                    <td style="padding: 20px; background-color: #fff3cd; border-radius: 6px; border: 1px solid #ffeaa7;">
+                                        <p style="margin: 0 0 10px 0; color: #856404; font-size: 14px; font-weight: bold;">
+                                            ⚠️ Security Notice
+                                        </p>
+                                        <ul style="margin: 0; padding-left: 20px; color: #856404; font-size: 13px;">
+                                            <li style="margin: 5px 0;">This link expires in <strong>1 hour</strong></li>
+                                            <li style="margin: 5px 0;">If you didn't request this, please ignore this email</li>
+                                            <li style="margin: 5px 0;">Never share this link with anyone</li>
+                                        </ul>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 30px; background-color: #f8f8f8; border-radius: 0 0 8px 8px; text-align: center;">
+                            <p style="margin: 0; color: #999999; font-size: 12px;">
+                                Best regards,<br>
+                                <strong style="color: #8B4513;">Bruvvers Coffee Team</strong>
+                            </p>
+                            <p style="margin: 15px 0 0 0; color: #cccccc; font-size: 11px;">
+                                This is an automated message, please do not reply.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>"""
+    
+    try:
+        # Create user message
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = user_subject
+        msg['From'] = FROM_EMAIL
+        msg['To'] = recipient_email
+        msg.attach(MIMEText(user_body, 'html'))
         
-        # Format the template with variables
-        html = html_template.format(user_name=user_full_name, url=reset_url)
-
-        msg.attach(MIMEText(html, 'html'))
-
-        # Send email
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()
-        server.login(smtp_username, smtp_password)
-        text = msg.as_string()
-        server.sendmail(from_email, admin_email, text)
-        server.quit()
-
-        logger.info(f"Password reset email sent to {admin_email}")
-        return True
+        # Send based on port (465 = SSL, 587 = TLS)
+        if SMTP_PORT == 465:
+            logger.info("🔒 Using SMTP_SSL (port 465)")
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context, timeout=30) as server:
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                server.send_message(msg)
+                logger.info(f"✅ Password reset email sent to: {recipient_email}")
+        else:
+            logger.info(f"🔒 Using SMTP with STARTTLS (port {SMTP_PORT})")
+            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                server.send_message(msg)
+                logger.info(f"✅ Password reset email sent to: {recipient_email}")
+        
+        # ====================================
+        # ADMIN NOTIFICATION (for worker resets)
+        # ====================================
+        if is_worker and admin_email and admin_email != recipient_email:
+            logger.info(f"📧 Sending notification to admin: {admin_email}")
+            
+            admin_subject = "🔔 Worker Password Reset Request - Admin Notification"
+            admin_body = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Notification</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 40px 0; text-align: center;">
+                <table role="presentation" style="width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 40px 30px; text-align: center; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); border-radius: 8px 8px 0 0;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: bold;">
+                                🔔 Admin Notification
+                            </h1>
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 20px;">
+                                Worker Password Reset Request
+                            </h2>
+                            
+                            <p style="margin: 0 0 20px 0; color: #666666; font-size: 16px; line-height: 1.6;">
+                                A worker has requested a password reset. Here are the details:
+                            </p>
+                            
+                            <!-- Details Box -->
+                            <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                                <tr>
+                                    <td style="padding: 20px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">
+                                        <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                                            <tr>
+                                                <td style="padding: 8px 0; color: #666666; font-size: 14px; font-weight: bold;">Username:</td>
+                                                <td style="padding: 8px 0; color: #333333; font-size: 14px;">{username}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 8px 0; color: #666666; font-size: 14px; font-weight: bold;">Email:</td>
+                                                <td style="padding: 8px 0; color: #333333; font-size: 14px;">{recipient_email}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 8px 0; color: #666666; font-size: 14px; font-weight: bold;">Time:</td>
+                                                <td style="padding: 8px 0; color: #333333; font-size: 14px;">{datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}</td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Reset Link Box -->
+                            <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                                <tr>
+                                    <td style="padding: 20px; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px;">
+                                        <p style="margin: 0 0 10px 0; color: #0c5460; font-size: 14px; font-weight: bold;">
+                                            ℹ️ Reset Link (for admin reference):
+                                        </p>
+                                        <p style="margin: 0; word-break: break-all;">
+                                            <a href="{reset_link}" style="color: #0c5460; font-size: 13px;">
+                                                {reset_link}
+                                            </a>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <p style="margin: 20px 0 0 0; color: #999999; font-size: 14px; line-height: 1.6;">
+                                This is an automated notification. The worker will receive their own reset email.
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 30px; background-color: #f8f8f8; border-radius: 0 0 8px 8px; text-align: center;">
+                            <p style="margin: 0; color: #999999; font-size: 12px;">
+                                <strong style="color: #8B4513;">Bruvvers Coffee Management System</strong>
+                            </p>
+                            <p style="margin: 10px 0 0 0; color: #cccccc; font-size: 11px;">
+                                Automated admin notification
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
+            
+            admin_msg = MIMEMultipart('alternative')
+            admin_msg['Subject'] = admin_subject
+            admin_msg['From'] = FROM_EMAIL
+            admin_msg['To'] = admin_email
+            admin_msg.attach(MIMEText(admin_body, 'html'))
+            
+            if SMTP_PORT == 465:
+                context = ssl.create_default_context()
+                with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context, timeout=30) as server:
+                    server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                    server.send_message(admin_msg)
+                    logger.info(f"✅ Admin notification sent to: {admin_email}")
+            else:
+                with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                    server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                    server.send_message(admin_msg)
+                    logger.info(f"✅ Admin notification sent to: {admin_email}")
+    
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"❌ SMTP Authentication failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Email authentication failed. Please check SMTP credentials."
+        )
+    except smtplib.SMTPConnectError as e:
+        logger.error(f"❌ SMTP Connection failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Cannot connect to email server. Please try again later."
+        )
+    except socket.gaierror as e:
+        logger.error(f"❌ Network error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Network error. Cannot reach email server."
+        )
     except Exception as e:
-        logger.error(f"Failed to send password reset email: {e}")
-        return False
+        logger.error(f"❌ Failed to send password reset email: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send reset email: {str(e)}"
+        )
 
 def generate_reset_token():
     """Generate a secure random token"""
-    return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+    return secrets.token_urlsafe(32)
 
 def cleanup_expired_reset_tokens(db: Session):
-    """Clean up expired password reset tokens"""
+    """Clean up expired password reset tokens from memory"""
     try:
-        expired_count = db.query(PasswordResetToken).filter(
-            PasswordResetToken.expires_at < datetime.utcnow()
-        ).delete()
+        current_time = datetime.utcnow()
+        expired_tokens = [
+            token for token, data in password_reset_tokens.items()
+            if data["expires_at"] < current_time
+        ]
         
-        if expired_count > 0:
-            logger.info(f"Cleaned up {expired_count} expired password reset tokens")
+        for token in expired_tokens:
+            del password_reset_tokens[token]
         
-        db.commit()
+        if expired_tokens:
+            logger.info(f"🧹 Cleaned up {len(expired_tokens)} expired password reset tokens")
+    
     except Exception as e:
-        logger.error(f"Failed to cleanup expired tokens: {e}")
-        db.rollback()
+        logger.error(f"❌ Failed to cleanup expired tokens: {e}")
 
 # -------------------------
 # Root / health
@@ -627,126 +895,191 @@ async def health_check():
     }
 
 # -------------------------
-# PASSWORD RESET ENDPOINTS
+# PASSWORD RESET ENDPOINTS (New Improved System)
 # -------------------------
-@app.post("/api/forgot-password", response_model=PasswordResetResponse)
-async def forgot_password(
-    request: ForgotPasswordRequest,
+
+@app.post("/api/auth/forgot-password")
+async def request_password_reset(
+    request: PasswordResetRequest,
     db: Session = Depends(get_database)
 ):
-    """Request password reset - sends email to admin with reset link"""
-    # Find user by username or email
-    user = db.query(Admin).filter(
-        (Admin.username == request.username_or_email) |
-        (Admin.email == request.username_or_email)
-    ).first()
-
+    """Request password reset for any user (admin or worker)"""
+    
+    # Clean up expired tokens first
+    cleanup_expired_reset_tokens(db)
+    
+    # Find user by email
+    user = db.query(Admin).filter(Admin.email == request.email).first()
+    
+    # Always return success to prevent email enumeration
     if not user:
-        # Don't reveal if user exists or not for security
-        return PasswordResetResponse(
-            message="If the username/email exists, a password reset link has been sent to the admin.",
-            success=True
-        )
-
-    # Check if user is active
+        logger.warning(f"⚠️ Password reset requested for non-existent email: {request.email}")
+        return {
+            "message": "If that email exists, a password reset link has been sent.",
+            "success": True
+        }
+    
     if not user.is_active:
-        return PasswordResetResponse(
-            message="Account is inactive. Please contact your administrator.",
-            success=False
-        )
-
-    # Find admin user to send email to
-    admin_user = db.query(Admin).filter(Admin.role == "admin", Admin.is_active == True).first()
-    if not admin_user:
-        logger.error("No active admin user found for password reset emails")
-        return PasswordResetResponse(
-            message="Password reset service is currently unavailable.",
-            success=False
-        )
-
-    # Generate reset token
+        logger.warning(f"⚠️ Password reset requested for inactive user: {request.email}")
+        return {
+            "message": "If that email exists, a password reset link has been sent.",
+            "success": True
+        }
+    
+    # Generate secure reset token
     reset_token = generate_reset_token()
-    expires_at = datetime.utcnow() + timedelta(hours=1)  # Token expires in 1 hour
-
-    # Save token to database
-    db_token = PasswordResetToken(
-        user_id=user.id,
-        token=reset_token,
-        expires_at=expires_at
-    )
-    db.add(db_token)
-    db.commit()
-
-    # Send email to admin
-    logger.info(f"Sending reset email to admin: {admin_user.email} for user: {user.username}")
-    email_sent = send_password_reset_email(
-        admin_email=admin_user.email,
-        reset_token=reset_token,
-        user_full_name=user.full_name or user.username
-    )
-
-    if email_sent:
-        return PasswordResetResponse(
-            message="Password reset request submitted. The admin has been notified.",
-            success=True
+    expiry = datetime.utcnow() + timedelta(hours=1)
+    
+    # Store token in memory
+    password_reset_tokens[reset_token] = {
+        "user_id": user.id,
+        "email": user.email,
+        "expires_at": expiry
+    }
+    
+    # Determine if user is worker
+    is_worker = user.role == "worker"
+    
+    # Get admin email for notification
+    admin_email = get_admin_email(db) if is_worker else None
+    
+    try:
+        # Send reset email
+        send_password_reset_email(
+            recipient_email=user.email,
+            reset_token=reset_token,
+            username=user.username,
+            is_worker=is_worker,
+            admin_email=admin_email
         )
-    else:
-        # Clean up token if email failed
-        db.delete(db_token)
-        db.commit()
+        
+        logger.info(f"✅ Password reset email sent to: {user.email} (Role: {user.role})")
+        
+        return {
+            "message": "Password reset link has been sent to your email.",
+            "success": True
+        }
+    
+    except Exception as e:
+        logger.error(f"❌ Failed to send password reset email: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send reset email. Please contact administrator."
+        )
+
+@app.post("/api/auth/reset-password")
+async def reset_password(
+    request: PasswordResetConfirm,
+    db: Session = Depends(get_database)
+):
+    """Reset password using valid token"""
+    
+    # Validate token
+    token_data = password_reset_tokens.get(request.token)
+    
+    if not token_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset token"
+        )
+    
+    # Check expiry
+    if datetime.utcnow() > token_data["expires_at"]:
+        # Clean up expired token
+        del password_reset_tokens[request.token]
+        raise HTTPException(
+            status_code=400,
+            detail="Reset token has expired. Please request a new one."
+        )
+    
+    # Validate new password
+    if len(request.new_password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters long"
+        )
+    
+    # Find user
+    user = db.query(Admin).filter(Admin.id == token_data["user_id"]).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Update password
+    user.password_hash = get_password_hash(request.new_password)
+    db.commit()
+    
+    # Delete used token
+    del password_reset_tokens[request.token]
+    
+    logger.info(f"✅ Password reset successful for user: {user.username}")
+    
+    return {
+        "message": "Password reset successful. You can now login with your new password.",
+        "success": True
+    }
+
+@app.get("/api/auth/validate-reset-token/{token}")
+async def validate_reset_token(token: str):
+    """Validate if a reset token is still valid"""
+    
+    token_data = password_reset_tokens.get(token)
+    
+    if not token_data:
+        return {"valid": False, "message": "Invalid token"}
+    
+    if datetime.utcnow() > token_data["expires_at"]:
+        del password_reset_tokens[token]
+        return {"valid": False, "message": "Token expired"}
+    
+    return {
+        "valid": True,
+        "email": token_data["email"],
+        "expires_in_minutes": int((token_data["expires_at"] - datetime.utcnow()).total_seconds() / 60)
+    }
+
+# -------------------------
+# LEGACY PASSWORD RESET ENDPOINTS (Keep for backward compatibility)
+# -------------------------
+@app.post("/api/forgot-password", response_model=PasswordResetResponse)
+async def forgot_password_legacy(
+    request: ForgotPasswordRequestLegacy,
+    db: Session = Depends(get_database)
+):
+    """Legacy endpoint - redirects to new system"""
+    # Convert to new format and call new endpoint
+    new_request = PasswordResetRequest(email=request.username_or_email)
+    try:
+        result = await request_password_reset(new_request, db)
         return PasswordResetResponse(
-            message="Failed to send password reset email. Please try again later.",
+            message=result["message"],
+            success=result["success"]
+        )
+    except HTTPException as e:
+        return PasswordResetResponse(
+            message=str(e.detail),
             success=False
         )
 
 @app.post("/api/reset-password", response_model=PasswordResetResponse)
-async def reset_password(
-    request: ResetPasswordRequest,
+async def reset_password_legacy(
+    request: ResetPasswordRequestLegacy,
     db: Session = Depends(get_database)
 ):
-    """Reset password using token"""
-    # Find valid token
-    db_token = db.query(PasswordResetToken).filter(
-        PasswordResetToken.token == request.token,
-        PasswordResetToken.used == False,
-        PasswordResetToken.expires_at > datetime.utcnow()
-    ).first()
-
-    if not db_token:
+    """Legacy endpoint - redirects to new system"""
+    # Convert to new format and call new endpoint
+    new_request = PasswordResetConfirm(token=request.token, new_password=request.new_password)
+    try:
+        result = await reset_password(new_request, db)
         return PasswordResetResponse(
-            message="Invalid or expired reset token.",
+            message=result["message"],
+            success=result["success"]
+        )
+    except HTTPException as e:
+        return PasswordResetResponse(
+            message=str(e.detail),
             success=False
         )
-
-    # Get user
-    user = db.query(Admin).filter(Admin.id == db_token.user_id).first()
-    if not user:
-        return PasswordResetResponse(
-            message="User not found.",
-            success=False
-        )
-
-    # Update password
-    hashed_password = get_password_hash(request.new_password)
-    user.password_hash = hashed_password
-
-    # Mark token as used
-    db_token.used = True
-
-    # Clean up any other tokens for this user
-    db.query(PasswordResetToken).filter(
-        PasswordResetToken.user_id == user.id,
-        PasswordResetToken.used == False
-    ).update({"used": True})
-
-    db.commit()
-
-    logger.info(f"Password reset successful for user: {user.username}")
-    return PasswordResetResponse(
-        message="Password has been reset successfully.",
-        success=True,
-        username=user.username
-    )
 
 # -------------------------
 # OPENING BALANCE
@@ -3392,30 +3725,7 @@ async def cleanup_broken_images(
         logger.error(f"Failed to cleanup images: {e}")
         raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
 
-@app.post("/api/admin/cleanup-reset-tokens")
-async def cleanup_expired_reset_tokens_endpoint(
-    db: Session = Depends(get_database),
-    current_user: Admin = Depends(get_current_active_user)
-):
-    """Clean up expired password reset tokens (Admin only)"""
-    if not (hasattr(current_user, 'role') and current_user.role == "admin"):
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    try:
-        expired_count = db.query(PasswordResetToken).filter(
-            PasswordResetToken.expires_at < datetime.utcnow()
-        ).delete()
-        
-        db.commit()
-        
-        return {
-            "expired_tokens_cleaned": expired_count,
-            "message": f"Cleaned up {expired_count} expired password reset tokens."
-        }
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Failed to cleanup expired tokens: {e}")
-        raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
+
 
 
 # -------------------------
