@@ -562,8 +562,7 @@ def send_password_reset_email(
     SMTP_USERNAME = os.getenv("SMTP_USERNAME")
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
     FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USERNAME)
-    # Get frontend URL, fallback to your actual frontend URL
-    APP_URL = os.getenv("FRONTEND_URL", "https://bruvver-3r1e.onrender.com")
+    APP_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
     
     if not all([SMTP_USERNAME, SMTP_PASSWORD]):
         logger.error("Email configuration missing: SMTP_USERNAME or SMTP_PASSWORD not set")
@@ -573,7 +572,6 @@ def send_password_reset_email(
         )
     
     logger.info(f"📧 Email config: Server={SMTP_SERVER}, Port={SMTP_PORT}, User={SMTP_USERNAME}")
-    logger.info(f"🔗 Using APP_URL: {APP_URL}")
     
     reset_link = f"{APP_URL}/admin/reset-password?token={reset_token}"
     
