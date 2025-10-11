@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +18,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { ForgotPasswordDialog } from "./forgot-password-dialog";
 
-export function LoginForm() {
+// Internal component that uses useSearchParams
+function LoginFormInternal() {
   const router = useRouter();
   const { login } = useAuth();
   const { toast } = useToast();
@@ -358,5 +359,14 @@ export function LoginForm() {
         </CardFooter>
       </form>
     </Card>
+  );
+}
+
+// Main export component with Suspense wrapper
+export function LoginForm() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center p-8">Loading...</div>}>
+      <LoginFormInternal />
+    </Suspense>
   );
 }
