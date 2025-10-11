@@ -251,19 +251,19 @@ export async function isAuthenticated(): Promise<boolean> {
   return !!token;
 }
 
-// Forgot Password API
-export async function requestPasswordReset(usernameOrEmail: string): Promise<{ message: string; success: boolean }> {
+// Forgot Password API (Updated to use new endpoint)
+export async function requestPasswordReset(email: string): Promise<{ message: string; success: boolean }> {
   try {
-    console.log('🔍 Auth Service - Requesting password reset for:', usernameOrEmail);
-    console.log('🔍 Auth Service - API URL:', `${API_BASE_URL}/forgot-password`);
+    console.log('🔍 Auth Service - Requesting password reset for:', email);
+    console.log('🔍 Auth Service - API URL:', `${API_BASE_URL}/auth/forgot-password`);
     
     const requestBody = {
-      username_or_email: usernameOrEmail
+      email: email
     };
     
     console.log('🔍 Auth Service - Request body:', requestBody);
     
-    const response = await fetch(`${API_BASE_URL}/forgot-password`, {
+    const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -289,10 +289,12 @@ export async function requestPasswordReset(usernameOrEmail: string): Promise<{ m
   }
 }
 
-// Reset Password API
+// Reset Password API (Updated to use new endpoint)
 export async function resetPassword(token: string, newPassword: string): Promise<{ message: string; success: boolean; username?: string }> {
   try {
-    const response = await fetch(`${API_BASE_URL}/reset-password`, {
+    console.log('🔍 Auth Service - Resetting password with token:', token.substring(0, 8) + '...');
+    
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -303,15 +305,42 @@ export async function resetPassword(token: string, newPassword: string): Promise
       }),
     });
 
+    console.log('🔍 Auth Service - Reset response status:', response.status);
+    
     const data = await response.json();
+    console.log('🔍 Auth Service - Reset response data:', data);
 
     if (!response.ok) {
+      console.error('❌ Auth Service - Reset failed:', data);
       throw new Error(data.detail || 'Failed to reset password');
     }
 
+    console.log('✅ Auth Service - Password reset successful');
     return data;
   } catch (error) {
-    console.error('Reset password error:', error);
+    console.error('❌ Auth Service - Reset password error:', error);
     throw error;
+  }
+}
+
+// Validate Reset Token API (New function)
+export async function validateResetToken(token: string): Promise<{ valid: boolean; message?: string; email?: string; expires_in_minutes?: number }> {
+  try {
+    console.log('🔍 Auth Service - Validating reset token:', token.substring(0, 8) + '...');
+    
+    const response = await fetch(`${API_BASE_URL}/auth/validate-reset-token/${token}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await response.json();
+    console.log('🔍 Auth Service - Token validation result:', data);
+
+    return data;
+  } catch (error) {
+    console.error('❌ Auth Service - Token validation error:', error);
+    return { valid: false, message: 'Failed to validate token' };
   }
 }
