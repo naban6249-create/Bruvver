@@ -1,61 +1,317 @@
-'use client';
 
 import type { User, LoginResponse } from './types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
+// Helper to get authenticated headers
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  let token: string | undefined;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  try {
+    if (typeof window === 'undefined') {
+      const { cookies } = await import('next/headers');
+      const cookieStore = await cookies();
+      token = cookieStore.get('token')?.value;
+    } else {
+      // Try localStorage first
+      token = window.localStorage?.getItem('token') || undefined;
+      if (!token) {
+        // Fallback to reading from document.cookie
+        const match = document.cookie
+          .split(';')
+          .map(c => c.trim())
+          .find(c => c.startsWith('token='));
+        if (match) token = match.split('=')[1];
+      }
+    }
+  } catch (_) {
+    // Ignore and continue without token
+  }
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
+// Helper to handle API responses
+async function handleResponse(response: Response) {
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("API Error:", errorText);
+    try {
+      const errorJson = JSON.parse(errorText);
+      if (errorJson.detail) {
+        throw new Error(errorJson.detail);
+      }
+    } catch (e) {
+      throw new Error(`API call failed with status ${response.status}: ${errorText}`);
+    }
+  }
+  return response.json();
+}
+
 export async function loginUser(username: string, password: string): Promise<LoginResponse | null> {
   try {
+    const requestBody = {
+      username: username,
+      password: password
+    };
+    
+    console.log('🔐 Auth Service Debug:', {
+      username: username,
+      usernameLength: username?.length || 0,
+      passwordLength: password?.length || 0,
+      apiUrl: `${API_BASE_URL}/auth/login`,
+      requestBody: { username, password: '***' },
+      usernameEmpty: !username || username.trim() === '',
+      passwordEmpty: !password || password.trim() === ''
+    });
+    
+    // Validate inputs
+    if (!username || username.trim() === '') {
+      console.error('❌ Username is empty in auth service!');
+      throw new Error('Username is required');
+    }
+    
+    if (!password || password.trim() === '') {
+      console.error('❌ Password is empty in auth service!');
+      throw new Error('Password is required');
+    }
+    
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        username,
-        password
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const errorData = await response.text();
       console.error('Login failed:', errorData);
-      throw new Error(`Login failed: ${response.status}`);
+      return null;
     }
 
     const data: LoginResponse = await response.json();
     
-    // Store token in localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('token', data.access_token);
-      localStorage.setItem('currentUser', JSON.stringify(data.user));
+    // Persist token depending on environment
+    if (typeof window === 'undefined') {
+      // Server-side: set cookie via next/headers
+      try {
+        const { cookies } = await import('next/headers');
+        const cookieStore = await cookies();
+        cookieStore.set('token', data.access_token, {
+          httpOnly: false,
+          secure: process.env.NODE_ENV === 'production',
+          maxAge: 24 * 60 * 60,
+          sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+        });
+      } catch (e) {
+        // ignore
+      }
+    } else {
+      // Client-side: localStorage + document.cookie (AuthProvider also stores redundantly)
+      try {
+        window.localStorage.setItem('token', data.access_token);
+        window.localStorage.setItem('currentUser', JSON.stringify(data.user));
+        document.cookie = `token=${data.access_token}; max-age=${24 * 60 * 60}; path=/; samesite=${process.env.NODE_ENV === 'production' ? 'none' : 'lax'}; ${process.env.NODE_ENV === 'production' ? 'secure' : ''}`.trim();
+      } catch (_) {}
     }
 
+    console.log('Successfully logged in user:', data.user.username);
+    // Return full response so client can persist token in localStorage
     return data;
+
   } catch (error) {
     console.error('Login error:', error);
-    throw error;
+    return null;
   }
 }
 
 export async function logoutUser(): Promise<void> {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('token');
-    localStorage.removeItem('currentUser');
+  try {
+    // Clear token
+    if (typeof window === 'undefined') {
+      try {
+        const { cookies } = await import('next/headers');
+        const cookieStore = await cookies();
+        cookieStore.delete('token');
+      } catch (_) {}
+    }
+    
+    // Clear client-side storage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('currentUser');
+      // Also clear cookie from client-side
+      document.cookie = 'token=; max-age=0; path=/;';
+    }
+    
+    console.log('User logged out successfully');
+  } catch (error) {
+    console.error('Logout error:', error);
   }
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  if (typeof window !== 'undefined') {
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
-      try {
+  try {
+    // First try to get from localStorage (client-side)
+    if (typeof window !== 'undefined') {
+      const savedUser = localStorage.getItem('currentUser');
+      if (savedUser) {
         return JSON.parse(savedUser);
-      } catch (error) {
-        console.error('Error parsing saved user:', error);
-        localStorage.removeItem('currentUser');
       }
     }
+
+    // If not available client-side, make API call
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      headers,
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const userData = await handleResponse(response);
+    
+    // Store for future use
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('currentUser', JSON.stringify(userData));
+    }
+
+    return userData;
+  } catch (error) {
+    console.error('Error getting current user:', error);
+    return null;
   }
-  return null;
+}
+
+export async function refreshUserData(): Promise<User | null> {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      headers,
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const userData = await handleResponse(response);
+    
+    // Update stored user data
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('currentUser', JSON.stringify(userData));
+    }
+
+    return userData;
+  } catch (error) {
+    console.error('Error refreshing user data:', error);
+    return null;
+  }
+}
+
+export async function getAuthToken(): Promise<string | null> {
+  try {
+    if (typeof window === 'undefined') {
+      // Server-side cookies
+      try {
+        const { cookies } = await import('next/headers');
+        const cookieStore = await cookies();
+        const token = cookieStore.get('token')?.value;
+        if (token) return token;
+      } catch (_) {}
+    } else {
+      // Client-side storage
+      const localToken = localStorage.getItem('token');
+      if (localToken) return localToken;
+      const match = document.cookie
+        .split(';')
+        .map(c => c.trim())
+        .find(c => c.startsWith('token='));
+      if (match) return match.split('=')[1];
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error getting auth token:', error);
+    // Fallback to localStorage if cookies fail
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('token');
+    }
+    return null;
+  }
+}
+
+export async function isAuthenticated(): Promise<boolean> {
+  const token = await getAuthToken();
+  return !!token;
+}
+
+// Forgot Password API
+export async function requestPasswordReset(usernameOrEmail: string): Promise<{ message: string; success: boolean }> {
+  try {
+    console.log('🔍 Auth Service - Requesting password reset for:', usernameOrEmail);
+    console.log('🔍 Auth Service - API URL:', `${API_BASE_URL}/forgot-password`);
+    
+    const requestBody = {
+      username_or_email: usernameOrEmail
+    };
+    
+    console.log('🔍 Auth Service - Request body:', requestBody);
+    
+    const response = await fetch(`${API_BASE_URL}/forgot-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    console.log('🔍 Auth Service - Response status:', response.status);
+    
+    const data = await response.json();
+    console.log('🔍 Auth Service - Response data:', data);
+
+    if (!response.ok) {
+      console.error('❌ Auth Service - Request failed:', data);
+      throw new Error(data.detail || 'Failed to request password reset');
+    }
+
+    console.log('✅ Auth Service - Request successful:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Auth Service - Forgot password error:', error);
+    throw error;
+  }
+}
+
+// Reset Password API
+export async function resetPassword(token: string, newPassword: string): Promise<{ message: string; success: boolean; username?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/reset-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        token,
+        new_password: newPassword
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to reset password');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Reset password error:', error);
+    throw error;
+  }
 }
