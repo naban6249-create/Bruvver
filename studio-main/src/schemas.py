@@ -480,12 +480,22 @@ class ImageUploadResponse(BaseModel):
         return v
 
 # -----------------------
-# PASSWORD RESET SCHEMAS
+# PASSWORD RESET SCHEMAS (Legacy - for backward compatibility)
 # -----------------------
-class ForgotPasswordRequest(BaseModel):
+class ForgotPasswordRequestLegacy(BaseModel):
     username_or_email: str
 
-class ResetPasswordRequest(BaseModel):
+class ResetPasswordRequestLegacy(BaseModel):
+    token: str
+    new_password: str
+
+# -----------------------
+# PASSWORD RESET SCHEMAS (New System)
+# -----------------------
+class PasswordResetRequest(BaseModel):
+    email: str
+
+class PasswordResetConfirm(BaseModel):
     token: str
     new_password: str
 
