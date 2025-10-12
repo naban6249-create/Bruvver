@@ -554,42 +554,34 @@ def send_password_reset_email(
     is_worker: bool = False,
     admin_email: Optional[str] = None
 ):
-    """Send password reset email with proper SSL/TLS support"""
+    """Send password reset email using SendGrid HTTP API (bypasses SMTP port blocks)"""
     
-    # Email configuration from environment
-    SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+    FROM_EMAIL = os.getenv("FROM_EMAIL", "bruvvercoffee@gmail.com")
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
     
-    # SendGrid specific port handling - try multiple ports for Render compatibility
-    if SMTP_SERVER == "smtp.sendgrid.net":
-        # Try port 2525 first (often works better on cloud platforms)
-        if SMTP_PORT in [443, 587]:
-            SMTP_PORT = 2525
-    SMTP_USERNAME = os.getenv("SMTP_USERNAME")
-    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-    FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USERNAME)
-    # Get frontend URL from environment variable
-    APP_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    # ⭐ ADMIN-CONTROLLED RESET: Override recipient if TEST_EMAIL_OVERRIDE is set
+    test_override = os.getenv("TEST_EMAIL_OVERRIDE", "")
+    actual_recipient = test_override if test_override else recipient_email
     
-    if not all([SMTP_USERNAME, SMTP_PASSWORD]):
-        logger.error("Email configuration missing: SMTP_USERNAME or SMTP_PASSWORD not set")
+    if not SENDGRID_API_KEY:
+        logger.error("SENDGRID_API_KEY not configured")
         raise HTTPException(
             status_code=500,
-            detail="Email configuration not set. Contact administrator."
+            detail="Email service not configured. Contact administrator."
         )
     
-    logger.info(f"📧 Email config: Server={SMTP_SERVER}, Port={SMTP_PORT}, User={SMTP_USERNAME}")
-    logger.info(f"🔗 Using APP_URL: {APP_URL}")
+    logger.info(f"📧 Sending reset email via SendGrid HTTP API")
+    logger.info(f"🔗 Frontend URL: {FRONTEND_URL}")
+    logger.info(f"👤 User requesting reset: {username} ({recipient_email})")
+    logger.info(f"📬 Email will be sent to: {actual_recipient}")
     
-    reset_link = f"{APP_URL}/admin/reset-password?token={reset_token}"
+    # Build reset link
+    reset_link = f"{FRONTEND_URL}/admin/reset-password?token={reset_token}"
+    logger.info(f"🔗 Reset link: {reset_link}")
     
-    # ====================================
-    # USER EMAIL (Well-formatted HTML)
-    # ====================================
-    user_subject = "🔐 Password Reset Request - Bruvvers Coffee"
-    
-    # Create HTML email template using string formatting to avoid IDE syntax issues
-    html_template = """<!DOCTYPE html>
+    # HTML email template
+    html_body = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -604,31 +596,21 @@ def send_password_reset_email(
                     <tr>
                         <td style="padding: 40px 30px; text-align: center; background: linear-gradient(135deg, #8B4513 0%, #D2691E 100%); border-radius: 8px 8px 0 0;">
                             <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">
-                                🔐 Password Reset
+                                🔐 Password Reset Request
                             </h1>
                         </td>
                     </tr>
-                    
                     <tr>
                         <td style="padding: 40px 30px;">
                             <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 20px;">
-                                Hello, {username}
+                                Password Reset for: {username}
                             </h2>
-                            
                             <p style="margin: 0 0 20px 0; color: #666666; font-size: 16px; line-height: 1.6;">
-                                We received a request to reset your password for your Bruvvers Coffee account.
+                                User Email: <strong>{recipient_email}</strong>
                             </p>
-                            
-                            <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                                <tr>
-                                    <td style="padding: 20px; background-color: #f9f9f9; border-left: 4px solid #8B4513; border-radius: 4px;">
-                                        <p style="margin: 0; color: #333333; font-size: 14px; font-weight: bold;">
-                                            Click the button below to reset your password:
-                                        </p>
-                                    </td>
-                                </tr>
-                            </table>
-                            
+                            <p style="margin: 0 0 20px 0; color: #666666; font-size: 16px; line-height: 1.6;">
+                                A password reset was requested for this Bruvvers Coffee account.
+                            </p>
                             <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
                                 <tr>
                                     <td style="text-align: center;">
@@ -639,39 +621,30 @@ def send_password_reset_email(
                                     </td>
                                 </tr>
                             </table>
-                            
                             <p style="margin: 20px 0; color: #999999; font-size: 14px; line-height: 1.6;">
-                                Or copy and paste this link into your browser:<br>
+                                Or copy and paste this link:<br>
                                 <a href="{reset_link}" style="color: #8B4513; word-break: break-all;">
                                     {reset_link}
                                 </a>
                             </p>
-                            
                             <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
                                 <tr>
-                                    <td style="padding: 20px; background-color: #fff3cd; border-radius: 6px; border: 1px solid #ffeaa7;">
-                                        <p style="margin: 0 0 10px 0; color: #856404; font-size: 14px; font-weight: bold;">
-                                            ⚠️ Security Notice
+                                    <td style="padding: 20px; background-color: #fff3cd; border-radius: 6px;">
+                                        <p style="margin: 0; color: #856404; font-size: 14px;">
+                                            ⚠️ <strong>Admin Notice:</strong><br>
+                                            • This link expires in 1 hour<br>
+                                            • You are resetting password for: <strong>{username}</strong><br>
+                                            • After reset, inform the user of their new password
                                         </p>
-                                        <ul style="margin: 0; padding-left: 20px; color: #856404; font-size: 13px;">
-                                            <li style="margin: 5px 0;">This link expires in <strong>1 hour</strong></li>
-                                            <li style="margin: 5px 0;">If you didn't request this, please ignore this email</li>
-                                            <li style="margin: 5px 0;">Never share this link with anyone</li>
-                                        </ul>
                                     </td>
                                 </tr>
                             </table>
                         </td>
                     </tr>
-                    
                     <tr>
                         <td style="padding: 30px; background-color: #f8f8f8; border-radius: 0 0 8px 8px; text-align: center;">
                             <p style="margin: 0; color: #999999; font-size: 12px;">
-                                Best regards,<br>
-                                <strong style="color: #8B4513;">Bruvvers Coffee Team</strong>
-                            </p>
-                            <p style="margin: 15px 0 0 0; color: #cccccc; font-size: 11px;">
-                                This is an automated message, please do not reply.
+                                Bruvvers Coffee Management System
                             </p>
                         </td>
                     </tr>
@@ -680,220 +653,36 @@ def send_password_reset_email(
         </tr>
     </table>
 </body>
-</html>"""
-    
-    # Format the template with actual values
-    user_body = html_template.format(username=username, reset_link=reset_link)
+</html>""".format(username=username, recipient_email=recipient_email, reset_link=reset_link)
     
     try:
-        # Create user message
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = user_subject
-        msg['From'] = FROM_EMAIL
-        msg['To'] = recipient_email
-        msg.attach(MIMEText(user_body, 'html'))
+        # Use SendGrid HTTP API (port 443 - always allowed!)
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import Mail
         
-        # Check if we're in development/testing mode
-        if os.getenv("EMAIL_DEBUG_MODE", "false").lower() == "true":
-            logger.info("🧪 EMAIL DEBUG MODE - Not sending real email")
-            logger.info(f"📧 Would send to: {recipient_email}")
-            logger.info(f"🔗 Reset URL: {reset_url}")
-            logger.info(f"📝 Email content preview: {user_body[:200]}...")
-            return True
+        message = Mail(
+            from_email=FROM_EMAIL,
+            to_emails=actual_recipient,  # ⭐ Uses TEST_EMAIL_OVERRIDE!
+            subject=f'🔐 Password Reset for {username} - Bruvvers Coffee',
+            html_content=html_body
+        )
         
-        # Try multiple ports for SendGrid on cloud platforms
-        ports_to_try = [2525, 587, 465] if SMTP_SERVER == "smtp.sendgrid.net" else [SMTP_PORT]
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sg.send(message)
         
-        for port in ports_to_try:
-            try:
-                logger.info(f"🔄 Trying port {port}...")
-                
-                if port == 465:
-                    logger.info("🔒 Using SMTP_SSL (port 465)")
-                    context = ssl.create_default_context()
-                    with smtplib.SMTP_SSL(SMTP_SERVER, port, context=context, timeout=15) as server:
-                        server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                        server.send_message(msg)
-                        logger.info(f"✅ Password reset email sent to: {recipient_email}")
-                        return True
-                else:
-                    logger.info(f"🔒 Using SMTP with STARTTLS (port {port})")
-                    with smtplib.SMTP(SMTP_SERVER, port, timeout=15) as server:
-                        server.ehlo()
-                        server.starttls()
-                        server.ehlo()
-                        server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                        server.send_message(msg)
-                        logger.info(f"✅ Password reset email sent to: {recipient_email}")
-                        return True
-                        
-            except Exception as port_error:
-                logger.warning(f"⚠️ Port {port} failed: {str(port_error)}")
-                if port == ports_to_try[-1]:  # Last port, re-raise the error
-                    raise port_error
-                continue
-    
-    except OSError as e:
-        if e.errno == 101:  # Network is unreachable
-            logger.error(f"🌐 Network connectivity issue: Cannot reach SMTP server {SMTP_SERVER}:{SMTP_PORT}")
-            logger.error("💡 This might be due to firewall restrictions or network configuration")
-            raise Exception("Network connectivity issue - cannot reach email server")
-        else:
-            logger.error(f"🔌 Network error: {e}")
-            raise Exception(f"Network error: {e}")
-    
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"🔐 SMTP Authentication failed: {e}")
-        raise Exception("Email authentication failed - check credentials")
-    
-    except smtplib.SMTPException as e:
-        logger.error(f"📧 SMTP error: {e}")
-        raise Exception(f"Email server error: {e}")
-    
+        logger.info(f"✅ Password reset email sent successfully!")
+        logger.info(f"   SendGrid Status: {response.status_code}")
+        logger.info(f"   User: {username} ({recipient_email})")
+        logger.info(f"   Email sent to: {actual_recipient}")
+        
+        return True
+        
     except Exception as e:
-        logger.error(f"❌ Unexpected error sending email: {e}")
-        raise Exception(f"Failed to send email: {e}")
-        
-    # ====================================
-    # ADMIN NOTIFICATION (for worker resets)
-    # ====================================
-    if is_worker and admin_email and admin_email != recipient_email:
-        try:
-            logger.info(f"📧 Sending notification to admin: {admin_email}")
-            
-            admin_subject = "🔔 Worker Password Reset Request - Admin Notification"
-            
-            # Create admin notification HTML template using string formatting to avoid IDE syntax issues
-            admin_html_template = """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Notification</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
-    <table role="presentation" style="width: 100%; border-collapse: collapse;">
-        <tr>
-            <td style="padding: 40px 0; text-align: center;">
-                <table role="presentation" style="width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    <tr>
-                        <td style="padding: 40px 30px; text-align: center; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); border-radius: 8px 8px 0 0;">
-                            <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: bold;">
-                                🔔 Admin Notification
-                            </h1>
-                        </td>
-                    </tr>
-                    
-                    <tr>
-                        <td style="padding: 40px 30px;">
-                            <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 20px;">
-                                Worker Password Reset Request
-                            </h2>
-                            
-                            <p style="margin: 0 0 20px 0; color: #666666; font-size: 16px; line-height: 1.6;">
-                                A worker has requested a password reset. Here are the details:
-                            </p>
-                            
-                            <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                                <tr>
-                                    <td style="padding: 20px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">
-                                        <table role="presentation" style="width: 100%; border-collapse: collapse;">
-                                            <tr>
-                                                <td style="padding: 8px 0; color: #666666; font-size: 14px; font-weight: bold;">Username:</td>
-                                                <td style="padding: 8px 0; color: #333333; font-size: 14px;">{username}</td>
-                                            </tr>
-                                            <tr>
-                                                <td style="padding: 8px 0; color: #666666; font-size: 14px; font-weight: bold;">Email:</td>
-                                                <td style="padding: 8px 0; color: #333333; font-size: 14px;">{recipient_email}</td>
-                                            </tr>
-                                            <tr>
-                                                <td style="padding: 8px 0; color: #666666; font-size: 14px; font-weight: bold;">Time:</td>
-                                                <td style="padding: 8px 0; color: #333333; font-size: 14px;">{current_time}</td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
-                            
-                            <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                                <tr>
-                                    <td style="padding: 20px; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px;">
-                                        <p style="margin: 0 0 10px 0; color: #0c5460; font-size: 14px; font-weight: bold;">
-                                            ℹ️ Reset Link (for admin reference):
-                                        </p>
-                                        <p style="margin: 0; word-break: break-all;">
-                                            <a href="{reset_link}" style="color: #0c5460; font-size: 13px;">
-                                                {reset_link}
-                                            </a>
-                                        </p>
-                                    </td>
-                                </tr>
-                            </table>
-                            
-                            <p style="margin: 20px 0 0 0; color: #999999; font-size: 14px; line-height: 1.6;">
-                                This is an automated notification. The worker will receive their own reset email.
-                            </p>
-                        </td>
-                    </tr>
-                    
-                    <tr>
-                        <td style="padding: 30px; background-color: #f8f8f8; border-radius: 0 0 8px 8px; text-align: center;">
-                            <p style="margin: 0; color: #999999; font-size: 12px;">
-                                <strong style="color: #8B4513;">Bruvvers Coffee Management System</strong>
-                            </p>
-                            <p style="margin: 10px 0 0 0; color: #cccccc; font-size: 11px;">
-                                Automated admin notification
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>"""
-            
-            # Format the admin template with actual values
-            admin_body = admin_html_template.format(
-                username=username, 
-                recipient_email=recipient_email, 
-                reset_link=reset_link,
-                current_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
-            )
-            
-            admin_msg = MIMEMultipart('alternative')
-            admin_msg['Subject'] = admin_subject
-            admin_msg['From'] = FROM_EMAIL
-            admin_msg['To'] = admin_email
-            admin_msg.attach(MIMEText(admin_body, 'html'))
-            
-            if SMTP_PORT == 465:
-                context = ssl.create_default_context()
-                with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context, timeout=30) as server:
-                    server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                    server.send_message(admin_msg)
-                    logger.info(f"✅ Admin notification sent to: {admin_email}")
-            else:
-                with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
-                    server.ehlo()
-                    server.starttls()
-                    server.ehlo()
-                    server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                    server.send_message(admin_msg)
-                    logger.info(f"✅ Admin notification sent to: {admin_email}")
-        
-        except OSError as e:
-            if e.errno == 101:  # Network is unreachable
-                logger.warning(f"🌐 Cannot send admin notification - network issue: {admin_email}")
-            else:
-                logger.warning(f"🔌 Cannot send admin notification - network error: {admin_email}")
-        
-        except smtplib.SMTPException as e:
-            logger.warning(f"📧 Cannot send admin notification - SMTP error: {admin_email}")
-        
-        except Exception as e:
-            logger.warning(f"❌ Cannot send admin notification to {admin_email}: {e}")
-            # Don't raise exception for admin notification failures
+        logger.error(f"❌ SendGrid API error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send reset email: {str(e)}"
+        )
 
 def generate_reset_token():
     """Generate a secure random token"""
