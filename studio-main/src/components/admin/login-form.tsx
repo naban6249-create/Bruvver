@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -353,8 +354,16 @@ function LoginFormInternal() {
             </div>
           )}
           
-          <div className="text-center">
+          <div className="text-center space-y-2">
             <ForgotPasswordDialog />
+            <div className="text-sm">
+              <Link 
+                href="/" 
+                className="text-muted-foreground hover:text-primary transition-colors"
+              >
+                ← Back to Home
+              </Link>
+            </div>
           </div>
         </CardFooter>
       </form>
