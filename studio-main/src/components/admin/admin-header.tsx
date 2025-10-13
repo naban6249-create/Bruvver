@@ -256,9 +256,15 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
 
       {/* Right section - User info and actions */}
       <div className="flex items-center gap-2">
-        {/* Desktop User Info and Logout */}
-        <div className="hidden md:flex items-center gap-4">
+        {/* Desktop User Info and Actions */}
+        <div className="hidden md:flex items-center gap-3">
           <UserInfo />
+          {/* Home/Landing Page Link */}
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/">
+              Home
+            </Link>
+          </Button>
           {/* ✅ FIXED: Use onClick with handleLogout instead of Link */}
           <Button variant="outline" size="sm" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
@@ -301,6 +307,17 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
 
               {/* Actions */}
               <div className="space-y-2 pt-4 border-t">
+                {/* Home/Landing Page Link */}
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="w-full justify-start" 
+                  asChild
+                >
+                  <Link href="/" onClick={() => setIsMobileMenuOpen(false)}>
+                    Home
+                  </Link>
+                </Button>
                 {/* ✅ FIXED: Use onClick with handleLogout for mobile too */}
                 <Button 
                   variant="outline" 
