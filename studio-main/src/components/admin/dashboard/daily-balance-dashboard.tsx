@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth-context';
 import { updateOpeningBalance, getDailyBalanceSummary } from '@/lib/balance-service';
 import { getWorkerCashBalance } from '@/lib/balance-service';
-import { DollarSign, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
+import { IndianRupee, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 
 interface BalanceSummary {
     openingBalance: number;
@@ -209,6 +209,7 @@ export function DailyBalanceDashboard({ isWorkerView = false }: { isWorkerView?:
                 onChange={(e) => setNewOpeningBalance(e.target.value)}
                 className="mt-2"
                 disabled={isUpdating}
+                placeholder="Enter opening balance"
               />
             </div>
             <Button onClick={handleUpdateOpeningBalance} disabled={isUpdating}>
@@ -221,7 +222,7 @@ export function DailyBalanceDashboard({ isWorkerView = false }: { isWorkerView?:
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Opening Balance</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <IndianRupee className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(summary.openingBalance)}</div>
