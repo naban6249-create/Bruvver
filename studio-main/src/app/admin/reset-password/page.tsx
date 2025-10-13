@@ -10,6 +10,10 @@ import { ArrowRight, Loader2, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { resetPassword, validateResetToken } from "@/lib/auth-service";
 
+// Force dynamic rendering to prevent static generation
+export const dynamic = 'force-dynamic';
+export const runtime = 'edge'; // Optional: use edge runtime
+
 // Internal component that uses useSearchParams
 function ResetPasswordPageInternal() {
   const router = useRouter();
