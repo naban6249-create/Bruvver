@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/components/admin/contexts/auth-provider"; // ✅ FIXED: Changed from @/lib/auth-context
+import { useAuth } from "@/components/admin/contexts/auth-provider";
 import { ForgotPasswordDialog } from "./forgot-password-dialog";
 
 // Internal component that uses useSearchParams
@@ -229,9 +229,35 @@ function LoginFormInternal() {
 
     } catch (error) {
       console.error('Login error:', error);
+      
+      // Parse the error message from the API response
+      let errorMessage = "An error occurred during login. Please try again.";
+      let errorTitle = "Login Error";
+      
+      if (error instanceof Error) {
+        const errorMsg = error.message.toLowerCase();
+        
+        // Check for specific error messages
+        if (errorMsg.includes('incorrect username or password') || 
+            errorMsg.includes('invalid credentials') ||
+            errorMsg.includes('authentication failed')) {
+          errorTitle = "Invalid Credentials";
+          errorMessage = "Incorrect username or password. Please check your credentials and try again.";
+        } else if (errorMsg.includes('user not found')) {
+          errorTitle = "User Not Found";
+          errorMessage = "No account found with this email address.";
+        } else if (errorMsg.includes('account disabled') || errorMsg.includes('account locked')) {
+          errorTitle = "Account Issue";
+          errorMessage = "Your account has been disabled or locked. Please contact support.";
+        } else {
+          // Use the actual error message from the API
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
-        title: "Login Error",
-        description: "An error occurred during login. Please try again.",
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
