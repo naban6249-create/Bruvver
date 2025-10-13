@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth-context';
 import { getOpeningBalance, updateOpeningBalance, getDailyBalanceSummary } from '@/lib/balance-service';
-import { DollarSign, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
+import { IndianRupee, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 
 export function BalanceDashboardClient() {
   const searchParams = useSearchParams();
@@ -25,7 +25,7 @@ export function BalanceDashboardClient() {
     transactionCount: 0,
   });
   const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(new Date());
-  const [newOpeningBalance, setNewOpeningBalance] = React.useState<string | number>('');
+  const [newOpeningBalance, setNewOpeningBalance] = React.useState<string>('');
   const [currentDate, setCurrentDate] = React.useState('');
   const [isUpdating, setIsUpdating] = React.useState(false);
 
@@ -47,7 +47,7 @@ export function BalanceDashboardClient() {
       // ✅ FIXED: Removed token parameter - ApiClient handles it
       const summaryData = await getDailyBalanceSummary(branchId, dateString);
       setSummary(summaryData);
-      setNewOpeningBalance(summaryData.openingBalance);
+      setNewOpeningBalance(summaryData.openingBalance.toString());
     } catch (error) {
       console.error('Error fetching summary:', error);
       toast({
@@ -65,7 +65,7 @@ export function BalanceDashboardClient() {
   }, [branchId, selectedDate, fetchSummary]);
 
   const handleUpdateOpeningBalance = React.useCallback(async () => {
-    if (!branchId || typeof newOpeningBalance !== 'number') {
+    if (!branchId || !newOpeningBalance || isNaN(Number(newOpeningBalance))) {
       toast({
         title: 'Invalid Input',
         description: 'Please enter a valid opening balance amount.',
@@ -77,7 +77,7 @@ export function BalanceDashboardClient() {
     setIsUpdating(true);
     try {
       // ✅ FIXED: Removed token parameter - ApiClient handles it
-      await updateOpeningBalance(branchId, newOpeningBalance, undefined);
+      await updateOpeningBalance(branchId, Number(newOpeningBalance), undefined);
       
       toast({
         title: 'Success',
@@ -130,7 +130,7 @@ export function BalanceDashboardClient() {
                 type="number"
                 step="0.01"
                 value={newOpeningBalance}
-                onChange={(e) => setNewOpeningBalance(Number(e.target.value))}
+                onChange={(e) => setNewOpeningBalance(e.target.value)}
                 className="mt-2"
                 disabled={isUpdating}
               />
@@ -145,7 +145,7 @@ export function BalanceDashboardClient() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Opening Balance</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <IndianRupee className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(summary.openingBalance)}</div>
