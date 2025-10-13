@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { DailySalesBreakdown } from "./daily-sales-breakdown";
 import { WorkerExpenses } from "../expenses/worker-expenses";
 import { DailyBalanceDashboard } from "./daily-balance-dashboard";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/components/admin/contexts/auth-provider";
 import { AlertCircle, Eye, Edit } from "lucide-react";
 import React from 'react';
 
