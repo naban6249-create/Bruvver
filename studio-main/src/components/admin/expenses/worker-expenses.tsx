@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import type { DailyExpense } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { getDailyExpenses, addQuickExpense } from '@/lib/expenses-service';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/components/admin/contexts/auth-provider';
 
 // Common expenses for quick adding (all start at 0)
 const COMMON_EXPENSES = [
