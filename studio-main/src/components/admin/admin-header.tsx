@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import type { Branch, User } from '@/lib/types';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/components/admin/contexts/auth-provider';
 import { getBranches } from '@/lib/branch-service';
 
 interface AdminHeaderProps {
