@@ -22,7 +22,7 @@ import type { MenuItem, DailySale } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { getMenuItems } from "@/lib/menu-service";
 import { getDailySales, createSale, deleteLastSale } from "@/lib/sales-service";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/components/admin/contexts/auth-provider";
 
 interface MenuItemWithSales extends MenuItem {
     quantitySold: number;
