@@ -73,10 +73,32 @@ const login = async (email: string, password: string): Promise<User> => {
   const logout = async () => {
     try {
       await logoutUser();
-      setUser(null);
-      router.push('/admin/login');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('Logout API error:', error);
+      // Continue with cleanup even if API call fails
+    } finally {
+      // Always clear local state and storage
+      setUser(null);
+      
+      if (typeof window !== 'undefined') {
+        // Clear all authentication data
+        localStorage.removeItem('token');
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('selectedBranchId');
+      }
+      
+      // Navigate to login page
+      router.push('/admin/login');
+    }
+  };
+
+  const forgotPassword = async (usernameOrEmail: string): Promise<{ message: string; success: boolean }> => {
+    try {
+      // You can implement this later or create a simple placeholder
+      return { message: 'Password reset functionality not implemented yet', success: false };
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      throw error;
     }
   };
 
@@ -115,6 +137,7 @@ const login = async (email: string, password: string): Promise<User> => {
     user,
     login,
     logout,
+    forgotPassword,
     hasPermission,
     getUserBranches,
     isLoading,
