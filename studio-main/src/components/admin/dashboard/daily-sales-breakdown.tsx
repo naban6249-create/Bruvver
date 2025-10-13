@@ -420,42 +420,38 @@ export function DailySalesBreakdown({ onSaleChange }: { onSaleChange?: () => voi
                                                         <span className="text-muted-foreground">Price:</span>
                                                         <span>₹{item.price.toFixed(2)}</span>
                                                     </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-sm text-muted-foreground">
-                                                            Quantity:
-                                                        </span>
-                                                        {hasFullAccess ? (
-                                                            <div className="flex items-center gap-1.5">
+                                                    <div className="space-y-1.5">
+                                                        <div className="flex justify-between text-sm">
+                                                            <span className="text-muted-foreground">Quantity:</span>
+                                                            <span className="font-medium">{item.quantitySold}</span>
+                                                        </div>
+                                                        <div className="flex justify-between text-xs">
+                                                            <span className="text-muted-foreground">Payment:</span>
+                                                            <span className="text-muted-foreground">
+                                                                💵{item.cashCount} 📱{item.gpayCount}
+                                                            </span>
+                                                        </div>
+                                                        {hasFullAccess && (
+                                                            <div className="flex items-center gap-1.5 pt-1">
                                                                 <Button 
                                                                     variant="outline" 
-                                                                    size="icon" 
-                                                                    className="h-8 w-8 flex-shrink-0"
+                                                                    size="sm"
+                                                                    className="h-7 flex-1 text-xs px-2"
                                                                     onClick={() => handleRemoveSale(String(item.id), item.name)}
                                                                     disabled={item.quantitySold === 0}
                                                                 >
-                                                                    <Minus className="h-4 w-4" />
+                                                                    <Minus className="h-3 w-3 mr-1" />
+                                                                    Remove
                                                                 </Button>
-                                                                <div className="text-xs font-medium text-center min-w-[2.5rem] flex-shrink-0">
-                                                                    <div className="text-sm">{item.quantitySold}</div>
-                                                                    <div className="text-[10px] text-muted-foreground whitespace-nowrap">
-                                                                        💵{item.cashCount} 📱{item.gpayCount}
-                                                                    </div>
-                                                                </div>
                                                                 <Button 
                                                                     variant="default" 
-                                                                    size="icon" 
-                                                                    className="h-8 w-8 flex-shrink-0"
+                                                                    size="sm"
+                                                                    className="h-7 flex-1 text-xs px-2"
                                                                     onClick={() => handleOpenBulkEntry(String(item.id), item.name)}
                                                                 >
-                                                                    <Edit className="h-4 w-4" />
+                                                                    <Edit className="h-3 w-3 mr-1" />
+                                                                    Record
                                                                 </Button>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="text-sm font-medium text-center">
-                                                                <div>{item.quantitySold}</div>
-                                                                <div className="text-xs text-muted-foreground">
-                                                                    💵{item.cashCount} 📱{item.gpayCount}
-                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>
