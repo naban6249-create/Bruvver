@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/components/admin/contexts/auth-provider";
+import { useAuth } from "@/components/admin/contexts/auth-provider"; // ✅ FIXED: Changed from @/lib/auth-context
 import { ForgotPasswordDialog } from "./forgot-password-dialog";
 
 // Internal component that uses useSearchParams
@@ -237,7 +237,7 @@ function LoginFormInternal() {
       if (error instanceof Error) {
         const errorMsg = error.message.toLowerCase();
         
-        // Check for specific error messages
+        // Check for specific error messages from the API
         if (errorMsg.includes('incorrect username or password') || 
             errorMsg.includes('invalid credentials') ||
             errorMsg.includes('authentication failed')) {
@@ -246,12 +246,14 @@ function LoginFormInternal() {
         } else if (errorMsg.includes('user not found')) {
           errorTitle = "User Not Found";
           errorMessage = "No account found with this email address.";
-        } else if (errorMsg.includes('account disabled') || errorMsg.includes('account locked')) {
-          errorTitle = "Account Issue";
-          errorMessage = "Your account has been disabled or locked. Please contact support.";
+        } else if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
+          errorTitle = "Connection Error";
+          errorMessage = "Unable to connect to the server. Please check your internet connection.";
         } else {
-          // Use the actual error message from the API
-          errorMessage = error.message;
+          // Use the actual error message from the API if it's user-friendly
+          if (error.message && error.message.length < 100) {
+            errorMessage = error.message;
+          }
         }
       }
       
