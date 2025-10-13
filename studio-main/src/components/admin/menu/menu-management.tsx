@@ -8,7 +8,7 @@ import { Plus, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { getMenuItems, addMenuItem, updateMenuItem } from '@/lib/menu-service';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/components/admin/contexts/auth-provider';
 import { MenuItemDialog } from './menu-item-dialog';
 import type { MenuItem } from '@/lib/types';
 import Image from 'next/image';
