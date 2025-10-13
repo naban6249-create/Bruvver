@@ -7,13 +7,14 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/lib/auth-context';
 import { getOpeningBalance, updateOpeningBalance, getDailyBalanceSummary } from '@/lib/balance-service';
-import { IndianRupee, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 
 export function BalanceDashboardClient() {
   const searchParams = useSearchParams();
   const branchId = searchParams.get('branchId');
-  const role = searchParams.get('role');
+  const { user } = useAuth();
   const { toast } = useToast();
 
   const [summary, setSummary] = React.useState({
@@ -24,10 +25,10 @@ export function BalanceDashboardClient() {
     transactionCount: 0,
   });
   const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(new Date());
-  const [newOpeningBalance, setNewOpeningBalance] = React.useState<string>('');
+  const [newOpeningBalance, setNewOpeningBalance] = React.useState<string | number>('');
   const [currentDate, setCurrentDate] = React.useState('');
+  const [isUpdating, setIsUpdating] = React.useState(false);
 
-  // Set current date on component mount
   React.useEffect(() => {
     const today = new Date();
     const options: Intl.DateTimeFormatOptions = {
@@ -39,15 +40,23 @@ export function BalanceDashboardClient() {
     setCurrentDate(today.toLocaleDateString('en-US', options));
   }, []);
 
-  // Add the 'date' parameter to the fetchSummary function
   const fetchSummary = React.useCallback(async (branchId: string, date?: Date) => {
     const dateString = date ? date.toISOString().split('T')[0] : undefined;
-    // Get token from localStorage for authentication
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined;
-    const summaryData = await getDailyBalanceSummary(branchId, dateString, token || undefined);
-    setSummary(summaryData);
-    setNewOpeningBalance(summaryData.openingBalance.toString());
-  }, []);
+    
+    try {
+      // ✅ FIXED: Removed token parameter - ApiClient handles it
+      const summaryData = await getDailyBalanceSummary(branchId, dateString);
+      setSummary(summaryData);
+      setNewOpeningBalance(summaryData.openingBalance);
+    } catch (error) {
+      console.error('Error fetching summary:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load balance data.',
+        variant: 'destructive',
+      });
+    }
+  }, [toast]);
 
   React.useEffect(() => {
     if (branchId) {
@@ -56,24 +65,35 @@ export function BalanceDashboardClient() {
   }, [branchId, selectedDate, fetchSummary]);
 
   const handleUpdateOpeningBalance = React.useCallback(async () => {
-    if (!branchId || !newOpeningBalance || isNaN(Number(newOpeningBalance))) return;
+    if (!branchId || typeof newOpeningBalance !== 'number') {
+      toast({
+        title: 'Invalid Input',
+        description: 'Please enter a valid opening balance amount.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsUpdating(true);
     try {
-      // Get token from localStorage for authentication
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : undefined;
-      await updateOpeningBalance(branchId, Number(newOpeningBalance), undefined, token || undefined);
+      // ✅ FIXED: Removed token parameter - ApiClient handles it
+      await updateOpeningBalance(branchId, newOpeningBalance, undefined);
+      
       toast({
         title: 'Success',
         description: 'Opening balance updated successfully.',
       });
-      if (branchId && selectedDate) {
-        await fetchSummary(branchId, selectedDate);
-      }
+      
+      await fetchSummary(branchId, selectedDate);
     } catch (error) {
+      console.error('Error updating balance:', error);
       toast({
         title: 'Error',
         description: 'Failed to update opening balance.',
         variant: 'destructive',
       });
+    } finally {
+      setIsUpdating(false);
     }
   }, [branchId, newOpeningBalance, selectedDate, fetchSummary, toast]);
 
@@ -101,19 +121,23 @@ export function BalanceDashboardClient() {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {role === 'admin' && (
+        {user?.role === 'admin' && (
           <div className="flex items-end gap-4 p-4 border rounded-lg bg-muted/40">
             <div className='flex-grow'>
               <Label htmlFor="openingBalance" className="text-sm font-medium">Set Today's Opening Balance</Label>
               <Input
                 id="openingBalance"
                 type="number"
+                step="0.01"
                 value={newOpeningBalance}
-                onChange={(e) => setNewOpeningBalance(e.target.value)}
+                onChange={(e) => setNewOpeningBalance(Number(e.target.value))}
                 className="mt-2"
+                disabled={isUpdating}
               />
             </div>
-            <Button onClick={handleUpdateOpeningBalance}>Update Balance</Button>
+            <Button onClick={handleUpdateOpeningBalance} disabled={isUpdating}>
+              {isUpdating ? 'Updating...' : 'Update Balance'}
+            </Button>
           </div>
         )}
 
@@ -121,7 +145,7 @@ export function BalanceDashboardClient() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Opening Balance</CardTitle>
-              <IndianRupee className="h-4 w-4 text-muted-foreground" />
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(summary.openingBalance)}</div>
