@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ExpenseDialog } from './expense-dialog';
 import { DeleteConfirmationDialog } from '../delete-confirmation-dialog';
 import { getDailyExpenses, addDailyExpense, updateDailyExpense, deleteDailyExpense } from '@/lib/expenses-service';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/components/admin/contexts/auth-provider';
 
 export function DailyExpenses() {
     const searchParams = useSearchParams();
