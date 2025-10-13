@@ -390,7 +390,7 @@ export function DailySalesBreakdown({ onSaleChange }: { onSaleChange?: () => voi
                             {/* Mobile Card Layout - FIXED */}
                             <div className="block md:hidden space-y-4">
                                 {itemsWithSales.map(item => (
-                                    <Card key={item.id} className="p-4">
+                                    <Card key={item.id} className="p-3 overflow-hidden">
                                         <div className="flex items-start gap-3">
                                             <div className="flex-shrink-0">
                                                 <Image
@@ -415,50 +415,50 @@ export function DailySalesBreakdown({ onSaleChange }: { onSaleChange?: () => voi
                                                     </p>
                                                 )}
                                                 
-                                                <div className="mt-2 space-y-1">
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-muted-foreground">Price:</span>
-                                                        <span>₹{item.price.toFixed(2)}</span>
+                                                <div className="mt-2 space-y-1.5">
+                                                    <div className="flex justify-between text-sm gap-2">
+                                                        <span className="text-muted-foreground flex-shrink-0">Price:</span>
+                                                        <span className="flex-shrink-0">₹{item.price.toFixed(2)}</span>
                                                     </div>
-                                                    <div className="space-y-1.5">
-                                                        <div className="flex justify-between text-sm">
-                                                            <span className="text-muted-foreground">Quantity:</span>
-                                                            <span className="font-medium">{item.quantitySold}</span>
+                                                    <div className="space-y-1">
+                                                        <div className="flex justify-between text-sm gap-2">
+                                                            <span className="text-muted-foreground flex-shrink-0">Quantity:</span>
+                                                            <span className="font-medium flex-shrink-0">{item.quantitySold}</span>
                                                         </div>
-                                                        <div className="flex justify-between text-xs">
-                                                            <span className="text-muted-foreground">Payment:</span>
-                                                            <span className="text-muted-foreground">
+                                                        <div className="flex justify-between text-xs gap-2">
+                                                            <span className="text-muted-foreground flex-shrink-0">Payment:</span>
+                                                            <span className="text-muted-foreground flex-shrink-0">
                                                                 💵{item.cashCount} 📱{item.gpayCount}
                                                             </span>
                                                         </div>
                                                         {hasFullAccess && (
-                                                            <div className="flex items-center gap-1.5 pt-1">
+                                                            <div className="flex items-center gap-1 pt-1 max-w-full">
                                                                 <Button 
                                                                     variant="outline" 
                                                                     size="sm"
-                                                                    className="h-7 flex-1 text-xs px-2"
+                                                                    className="h-6 flex-1 text-xs px-1 min-w-0"
                                                                     onClick={() => handleRemoveSale(String(item.id), item.name)}
                                                                     disabled={item.quantitySold === 0}
                                                                 >
-                                                                    <Minus className="h-3 w-3 mr-1" />
-                                                                    Remove
+                                                                    <Minus className="h-3 w-3 mr-0.5 flex-shrink-0" />
+                                                                    <span className="truncate">Remove</span>
                                                                 </Button>
                                                                 <Button 
                                                                     variant="default" 
                                                                     size="sm"
-                                                                    className="h-7 flex-1 text-xs px-2"
+                                                                    className="h-6 flex-1 text-xs px-1 min-w-0"
                                                                     onClick={() => handleOpenBulkEntry(String(item.id), item.name)}
                                                                 >
-                                                                    <Edit className="h-3 w-3 mr-1" />
-                                                                    Record
+                                                                    <Edit className="h-3 w-3 mr-0.5 flex-shrink-0" />
+                                                                    <span className="truncate">Record</span>
                                                                 </Button>
                                                             </div>
                                                         )}
                                                     </div>
                                                     {user?.role === 'admin' && (
-                                                        <div className="flex justify-between text-sm font-medium">
-                                                            <span>Revenue:</span>
-                                                            <span className="text-green-600">
+                                                        <div className="flex justify-between text-sm font-medium gap-2 pt-1">
+                                                            <span className="flex-shrink-0">Revenue:</span>
+                                                            <span className="text-green-600 flex-shrink-0">
                                                                 ₹{(item.price * item.quantitySold).toFixed(2)}
                                                             </span>
                                                         </div>
