@@ -5,6 +5,9 @@ import { AdminHeader } from '@/components/admin/admin-header';
 import { WorkerDashboard } from '@/components/admin/dashboard/worker-dashboard';
 import { Toaster } from '@/components/ui/toaster';
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default function WorkerDashboardClientPage() {
   return (
     <AuthProvider>
