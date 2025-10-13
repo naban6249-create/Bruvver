@@ -101,6 +101,18 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
     setIsMobileMenuOpen(false);
   };
 
+  // ✅ FIXED: Proper logout handler with cleanup
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // Close mobile menu if open
+      setIsMobileMenuOpen(false);
+      // Redirect will be handled by logout() in auth-context
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
   const getSelectedBranchName = () => {
     const branch = availableBranches.find(b => b.id.toString() === selectedBranch);
     return branch ? branch.name : 'Select Branch';
@@ -247,7 +259,8 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
         {/* Desktop User Info and Logout */}
         <div className="hidden md:flex items-center gap-4">
           <UserInfo />
-          <Button variant="outline" size="sm" onClick={logout}>
+          {/* ✅ FIXED: Use onClick with handleLogout instead of Link */}
+          <Button variant="outline" size="sm" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
             Logout
           </Button>
@@ -288,7 +301,13 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
 
               {/* Actions */}
               <div className="space-y-2 pt-4 border-t">
-                <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => { logout(); setIsMobileMenuOpen(false); }}>
+                {/* ✅ FIXED: Use onClick with handleLogout for mobile too */}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full justify-start" 
+                  onClick={handleLogout}
+                >
                   <LogOut className="mr-2 h-4 w-4" />
                   Logout
                 </Button>
@@ -300,4 +319,3 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
     </header>
   );
 }
-
