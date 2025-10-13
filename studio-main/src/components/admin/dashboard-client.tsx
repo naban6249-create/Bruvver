@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { DailyBalanceDashboard } from "./dashboard/daily-balance-dashboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Wrench } from 'lucide-react'; // Added for the Tools icon
-import { useAuth } from "../../lib/auth-context";
+import { useAuth } from "./contexts/auth-provider";
 import { Button } from "../../components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { DailySalesBreakdown } from "./dashboard/daily-sales-breakdown";
