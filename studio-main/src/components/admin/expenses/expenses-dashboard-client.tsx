@@ -8,7 +8,7 @@ import { Plus, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { getDailyExpenses, getExpenseCategories, deleteDailyExpense, addDailyExpense, updateDailyExpense } from '@/lib/expenses-service';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/components/admin/contexts/auth-provider';
 import { ExpenseDialog } from './expense-dialog';
 import type { DailyExpense } from '@/lib/types';
 
