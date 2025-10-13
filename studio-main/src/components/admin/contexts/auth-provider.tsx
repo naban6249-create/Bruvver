@@ -70,9 +70,25 @@ const login = async (email: string, password: string): Promise<User> => {
     });
 
     if (!response.ok) {
-      const errorData = await response.text();
-      console.error('Login failed:', errorData);
-      throw new Error('Login failed');
+      let errorMessage = 'Login failed';
+      
+      try {
+        const errorData = await response.text();
+        console.error('Login failed:', errorData);
+        
+        // Try to parse the error response
+        const parsedError = JSON.parse(errorData);
+        if (parsedError.detail) {
+          errorMessage = parsedError.detail;
+        } else if (parsedError.message) {
+          errorMessage = parsedError.message;
+        }
+      } catch (parseError) {
+        // If parsing fails, use generic message
+        console.error('Failed to parse error response:', parseError);
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
