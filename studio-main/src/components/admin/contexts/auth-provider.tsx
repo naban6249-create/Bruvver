@@ -1,10 +1,31 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { AuthContext, type AuthContextType } from '@/lib/auth-context';
-import { loginUser, logoutUser } from '@/lib/auth-service';
+import React, { useState, useEffect, createContext, useContext } from 'react';
 import { useRouter } from 'next/navigation';
+import { loginUser, logoutUser } from '@/lib/auth-service';
 import type { User, Branch } from '@/lib/types';
+
+// Define the AuthContext interface to match your existing auth-context.tsx
+interface AuthContextType {
+  user: User | null;
+  login: (email: string, password: string) => Promise<User>;
+  logout: () => void;
+  hasPermission: (branchId: number, requiredLevel: 'view_only' | 'full_access') => boolean;
+  getUserBranches: () => Array<Branch & { permission: 'view_only' | 'full_access' }>;
+  isLoading: boolean;
+}
+
+// Create the AuthContext
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Export the useAuth hook
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -92,15 +113,6 @@ const login = async (email: string, password: string): Promise<User> => {
     }
   };
 
-  const forgotPassword = async (usernameOrEmail: string): Promise<{ message: string; success: boolean }> => {
-    try {
-      // You can implement this later or create a simple placeholder
-      return { message: 'Password reset functionality not implemented yet', success: false };
-    } catch (error) {
-      console.error('Forgot password error:', error);
-      throw error;
-    }
-  };
 
   const hasPermission = (branchId: number, requiredLevel: 'view_only' | 'full_access'): boolean => {
     if (!user) return false;
@@ -137,7 +149,6 @@ const login = async (email: string, password: string): Promise<User> => {
     user,
     login,
     logout,
-    forgotPassword,
     hasPermission,
     getUserBranches,
     isLoading,
