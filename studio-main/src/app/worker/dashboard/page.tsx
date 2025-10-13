@@ -2,6 +2,9 @@ import { Suspense } from 'react';
 import WorkerDashboardClientPage from './client-page'; // Import the new client component
 import { Skeleton } from "@/components/ui/skeleton";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 /**
  * A loading component to show while the dashboard's client-side
  * components are being rendered.
