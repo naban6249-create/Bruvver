@@ -10,12 +10,18 @@ load_dotenv()
 # Fallback to a local SQLite database if DATABASE_URL is not set.
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./coffee_shop.db")
 
-# If we are using PostgreSQL, Render often gives "postgres://"
+# If we are using PostgreSQL, ensure the driver is specified for SQLAlchemy
+# Render gives "postgres://" and Supabase gives "postgresql://"
 # SQLAlchemy + psycopg v3 needs "postgresql+psycopg://"
-if SQLALCHEMY_DATABASE_URL and SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
-    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace(
-        "postgres://", "postgresql+psycopg://", 1
-    )
+if SQLALCHEMY_DATABASE_URL:
+    if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+        SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace(
+            "postgres://", "postgresql+psycopg://", 1
+        )
+    elif SQLALCHEMY_DATABASE_URL.startswith("postgresql://"):
+        SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace(
+            "postgresql://", "postgresql+psycopg://", 1
+        )
 
 # For SQLite, allow single-threaded access
 engine_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
