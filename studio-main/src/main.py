@@ -3635,6 +3635,46 @@ async def get_categories(db: Session = Depends(get_database)):
     categories = db.query(MenuItem.category).filter(MenuItem.category.isnot(None), MenuItem.is_available == True).distinct().all()
     return [cat[0] for cat in categories if cat[0]]
 
+
+@app.get("/api/v1/sales-data-for-ai")
+async def get_sales_data_for_ai(
+    timeframe: str = "daily",
+    branch_id: Optional[int] = None,
+    db: Session = Depends(get_database),
+    current_user: Admin = Depends(get_current_active_user)
+):
+    """
+    Get sales data formatted for AI analysis
+    """
+    from crud import get_orders_between_dates
+    from datetime import datetime, timedelta
+    
+    # Calculate date range based on timeframe
+    end_date = datetime.utcnow()
+    if timeframe == "daily":
+        start_date = end_date - timedelta(days=7)
+    elif timeframe == "weekly":
+        start_date = end_date - timedelta(weeks=4)
+    elif timeframe == "monthly":
+        start_date = end_date - timedelta(days=180)
+    else:
+        start_date = end_date - timedelta(days=7)
+    
+    # Get sales data
+    sales = get_orders_between_dates(db, start_date, end_date, branch_id)
+    
+    # Format for AI
+    formatted_data = []
+    for sale in sales:
+        formatted_data.append({
+            "sale_date": sale.sale_date.isoformat() if hasattr(sale, 'sale_date') else sale.created_at.isoformat(),
+            "item_name": sale.menu_item.name if sale.menu_item else "Unknown",
+            "quantity": sale.quantity,
+            "revenue": sale.revenue,
+            "branch_id": sale.branch_id
+        })
+    
+    return formatted_data
 # -------------------------
 # Run the server
 # -------------------------
