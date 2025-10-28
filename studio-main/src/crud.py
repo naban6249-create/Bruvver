@@ -291,6 +291,28 @@ def update_inventory_stock(db: Session, item_id: int, new_stock: float, movement
     db.refresh(db_item)
     return db_item
 
+def get_orders_between_dates(
+    db: Session, 
+    start_date: datetime, 
+    end_date: datetime,
+    branch_id: Optional[int] = None
+):
+    """
+    Get all sales/orders between two dates
+    """
+    query = db.query(DailySale).filter(
+        and_(
+            DailySale.sale_date >= start_date,
+            DailySale.sale_date <= end_date
+        )
+    )
+    
+    # Filter by branch if specified
+    if branch_id:
+        query = query.filter(DailySale.branch_id == branch_id)
+    
+    return query.order_by(DailySale.sale_date.desc()).all()
+
 # Analytics functions
 def get_sales_analytics(db: Session, start_date: date, end_date: date):
     """Get detailed sales analytics for a date range"""
