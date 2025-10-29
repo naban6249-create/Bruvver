@@ -3635,7 +3635,6 @@ async def get_categories(db: Session = Depends(get_database)):
     categories = db.query(MenuItem.category).filter(MenuItem.category.isnot(None), MenuItem.is_available == True).distinct().all()
     return [cat[0] for cat in categories if cat[0]]
 
-
 @app.get("/api/v1/sales-data-for-ai")
 async def get_sales_data_for_ai(
     timeframe: str = "daily",
@@ -3644,37 +3643,108 @@ async def get_sales_data_for_ai(
     current_user: Admin = Depends(get_current_active_user)
 ):
     """
-    Get sales data formatted for AI analysis
+    Get real sales data from database for AI analysis
+    
+    ADMIN ONLY endpoint - returns actual sales transactions for AI insights
+    
+    Args:
+        timeframe: 'daily' (last 7 days), 'weekly' (last 4 weeks), or 'monthly' (last 6 months)
+        branch_id: Optional branch filter
+    
+    Returns:
+        List of sales records with date, item_name, quantity, revenue, branch_id
     """
-    from crud import get_orders_between_dates
-    from datetime import datetime, timedelta
+    
+    # ✅ ADMIN ONLY CHECK
+    if hasattr(current_user, 'role') and current_user.role != 'admin':
+        logger.warning(f"Non-admin user {current_user.username} attempted to access AI sales data")
+        raise HTTPException(
+            status_code=403, 
+            detail="Access denied. Admin privileges required for AI insights."
+        )
+    
+    from datetime import timedelta
     
     # Calculate date range based on timeframe
-    end_date = datetime.utcnow()
+    end_date = get_current_date_ist()
+    
     if timeframe == "daily":
-        start_date = end_date - timedelta(days=7)
+        start_date = end_date - timedelta(days=7)  # Last 7 days
+        logger.info(f"AI Insights: Fetching daily data (last 7 days)")
     elif timeframe == "weekly":
-        start_date = end_date - timedelta(weeks=4)
+        start_date = end_date - timedelta(weeks=4)  # Last 4 weeks
+        logger.info(f"AI Insights: Fetching weekly data (last 4 weeks)")
     elif timeframe == "monthly":
-        start_date = end_date - timedelta(days=180)
+        start_date = end_date - timedelta(days=180)  # Last 6 months
+        logger.info(f"AI Insights: Fetching monthly data (last 6 months)")
     else:
-        start_date = end_date - timedelta(days=7)
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid timeframe. Use 'daily', 'weekly', or 'monthly'"
+        )
     
-    # Get sales data
-    sales = get_orders_between_dates(db, start_date, end_date, branch_id)
+    try:
+        # Query REAL sales data from database with JOIN to get menu item names
+        query = db.query(
+            DailySale.sale_date,
+            MenuItem.name.label('item_name'),
+            DailySale.quantity,
+            DailySale.revenue,
+            DailySale.branch_id,
+            DailySale.payment_method
+        ).join(
+            MenuItem, 
+            DailySale.menu_item_id == MenuItem.id
+        ).filter(
+            func.date(DailySale.sale_date) >= start_date,
+            func.date(DailySale.sale_date) <= end_date
+        )
+        
+        # Filter by branch if specified
+        if branch_id:
+            query = query.filter(DailySale.branch_id == branch_id)
+            logger.info(f"AI Insights: Filtering by branch_id={branch_id}")
+        
+        # Execute query and get results
+        sales = query.order_by(DailySale.sale_date.desc()).all()
+        
+        logger.info(f"✅ AI Insights: Returning {len(sales)} REAL sales records for {timeframe} analysis")
+        
+        # If no data found, return empty array with helpful log
+        if len(sales) == 0:
+            logger.warning(f"⚠️ No sales data found for branch_id={branch_id}, timeframe={timeframe}")
+            return []
+        
+        # Format results as JSON
+        result = []
+        for sale in sales:
+            # Handle datetime conversion properly
+            sale_date_str = sale.sale_date.strftime("%Y-%m-%d") if hasattr(sale.sale_date, 'strftime') else str(sale.sale_date)
+            
+            result.append({
+                "date": sale_date_str,
+                "sale_date": sale_date_str,  # Include both for compatibility
+                "item_name": sale.item_name or "Unknown Item",
+                "quantity": int(sale.quantity or 0),
+                "revenue": float(sale.revenue or 0),
+                "branch_id": sale.branch_id,
+                "payment_method": sale.payment_method or "cash"
+            })
+        
+        # Log summary statistics for debugging
+        total_revenue = sum(item["revenue"] for item in result)
+        total_quantity = sum(item["quantity"] for item in result)
+        logger.info(f"📊 AI Data Summary: {total_quantity} items, ₹{total_revenue:.2f} revenue, {len(set(item['item_name'] for item in result))} unique items")
+        
+        return result
     
-    # Format for AI
-    formatted_data = []
-    for sale in sales:
-        formatted_data.append({
-            "sale_date": sale.sale_date.isoformat() if hasattr(sale, 'sale_date') else sale.created_at.isoformat(),
-            "item_name": sale.menu_item.name if sale.menu_item else "Unknown",
-            "quantity": sale.quantity,
-            "revenue": sale.revenue,
-            "branch_id": sale.branch_id
-        })
-    
-    return formatted_data
+    except Exception as e:
+        logger.error(f"❌ Error fetching sales data for AI: {e}")
+        logger.exception("Full traceback:")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch sales data: {str(e)}"
+        )
 # -------------------------
 # Run the server
 # -------------------------
