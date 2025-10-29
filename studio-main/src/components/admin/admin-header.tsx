@@ -255,16 +255,18 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
         <div className="hidden md:flex items-center gap-3">
           <UserInfo />
           
-          {/* ✨ NEW: Business Insights Quick Link */}
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={`/admin/insights${selectedBranch ? `?branchId=${selectedBranch}` : ''}`} className="relative">
-              <BarChart3 className="mr-2 h-4 w-4" />
-              AI Insights
-              <span className="ml-1 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800">
-                Beta
-              </span>
-            </Link>
-          </Button>
+          {/* ✅ ADMIN ONLY: Business Insights Link */}
+          {effectiveUser?.role === 'admin' && (
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/admin/insights${selectedBranch ? `?branchId=${selectedBranch}` : ''}`} className="relative">
+                <BarChart3 className="mr-2 h-4 w-4" />
+                AI Insights
+                <span className="ml-1 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800">
+                  Beta
+                </span>
+              </Link>
+            </Button>
+          )}
           
           {/* Home/Landing Page Link */}
           <Button variant="ghost" size="sm" asChild>
@@ -315,24 +317,26 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
 
               {/* Actions */}
               <div className="space-y-2 pt-4 border-t">
-                {/* ✨ NEW: Business Insights Link */}
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="w-full justify-start" 
-                  asChild
-                >
-                  <Link 
-                    href={`/admin/insights${selectedBranch ? `?branchId=${selectedBranch}` : ''}`}
-                    onClick={() => setIsMobileMenuOpen(false)}
+                {/* ✅ ADMIN ONLY: Business Insights Link */}
+                {effectiveUser?.role === 'admin' && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="w-full justify-start" 
+                    asChild
                   >
-                    <BarChart3 className="mr-2 h-4 w-4" />
-                    Business Insights
-                    <span className="ml-auto rounded bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-800">
-                      AI
-                    </span>
-                  </Link>
-                </Button>
+                    <Link 
+                      href={`/admin/insights${selectedBranch ? `?branchId=${selectedBranch}` : ''}`}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <BarChart3 className="mr-2 h-4 w-4" />
+                      Business Insights
+                      <span className="ml-auto rounded bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-800">
+                        AI
+                      </span>
+                    </Link>
+                  </Button>
+                )}
                 
                 {/* Home/Landing Page Link */}
                 <Button 
