@@ -6,13 +6,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Get the database URL from environment variables.
-# Fallback to a local SQLite database if DATABASE_URL is not set.
+# Get the database URL from environment variables
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./coffee_shop.db")
 
-# If we are using PostgreSQL, ensure the driver is specified for SQLAlchemy
-# Render gives "postgres://" and Supabase gives "postgresql://"
-# SQLAlchemy + psycopg v3 needs "postgresql+psycopg://"
+# Convert to psycopg format
 if SQLALCHEMY_DATABASE_URL:
     if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
         SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace(
@@ -23,16 +20,26 @@ if SQLALCHEMY_DATABASE_URL:
             "postgresql://", "postgresql+psycopg://", 1
         )
 
-# For SQLite, allow single-threaded access
-engine_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
+# Engine arguments
+if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    engine_args = {"check_same_thread": False}
+else:
+    # Force IPv4 for PostgreSQL/Supabase
+    engine_args = {
+        "connect_timeout": 10,
+        "options": "-c timezone=utc"
+    }
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args=engine_args,
-    pool_pre_ping=True,  # helps avoid stale connections
+    pool_pre_ping=True,
+    pool_recycle=300,  # Recycle connections every 5 minutes
+    pool_size=5,
+    max_overflow=10
 )
 
-# For SQLite, enable WAL + busy timeout (optional, but good for dev)
+# SQLite WAL mode
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
@@ -45,7 +52,6 @@ if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
             cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
 
 def get_database():
