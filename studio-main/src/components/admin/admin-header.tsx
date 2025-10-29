@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { LogOut, Menu, X, Building2, ChevronDown } from 'lucide-react';
+import { LogOut, Menu, X, Building2, ChevronDown, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -101,13 +101,10 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
     setIsMobileMenuOpen(false);
   };
 
-  // ✅ FIXED: Proper logout handler with cleanup
   const handleLogout = async () => {
     try {
       await logout();
-      // Close mobile menu if open
       setIsMobileMenuOpen(false);
-      // Redirect will be handled by logout() in auth-context
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -146,7 +143,6 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
     }
 
     if (isMobile) {
-      // Mobile version - use a simple list
       return (
         <div className="space-y-2 py-2">
           <div className="flex items-center gap-2 text-sm font-medium">
@@ -178,7 +174,6 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
       );
     }
 
-    // Desktop version - use Popover for better UX
     return (
       <Popover open={isBranchPopoverOpen} onOpenChange={setIsBranchPopoverOpen}>
         <PopoverTrigger asChild>
@@ -259,13 +254,26 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
         {/* Desktop User Info and Actions */}
         <div className="hidden md:flex items-center gap-3">
           <UserInfo />
+          
+          {/* ✨ NEW: Business Insights Quick Link */}
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/admin/insights${selectedBranch ? `?branchId=${selectedBranch}` : ''}`} className="relative">
+              <BarChart3 className="mr-2 h-4 w-4" />
+              AI Insights
+              <span className="ml-1 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800">
+                Beta
+              </span>
+            </Link>
+          </Button>
+          
           {/* Home/Landing Page Link */}
           <Button variant="ghost" size="sm" asChild>
             <Link href="/">
               Home
             </Link>
           </Button>
-          {/* ✅ FIXED: Use onClick with handleLogout instead of Link */}
+          
+          {/* Logout Button */}
           <Button variant="outline" size="sm" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
             Logout
@@ -307,6 +315,25 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
 
               {/* Actions */}
               <div className="space-y-2 pt-4 border-t">
+                {/* ✨ NEW: Business Insights Link */}
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="w-full justify-start" 
+                  asChild
+                >
+                  <Link 
+                    href={`/admin/insights${selectedBranch ? `?branchId=${selectedBranch}` : ''}`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <BarChart3 className="mr-2 h-4 w-4" />
+                    Business Insights
+                    <span className="ml-auto rounded bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-800">
+                      AI
+                    </span>
+                  </Link>
+                </Button>
+                
                 {/* Home/Landing Page Link */}
                 <Button 
                   variant="ghost" 
@@ -318,7 +345,8 @@ export function AdminHeader({ currentUser }: AdminHeaderProps) {
                     Home
                   </Link>
                 </Button>
-                {/* ✅ FIXED: Use onClick with handleLogout for mobile too */}
+                
+                {/* Logout Button */}
                 <Button 
                   variant="outline" 
                   size="sm" 
