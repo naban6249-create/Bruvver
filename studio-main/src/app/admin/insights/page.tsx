@@ -392,21 +392,22 @@ export default function BusinessInsightsPage() {
         {/* Recommendations Tab */}
         <TabsContent value="recommendations" className="space-y-4">
           <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <Lightbulb className="h-5 w-5" />
-                    <CardTitle>Business Recommendations</CardTitle>
+                    <CardTitle className="text-lg sm:text-xl">Business Recommendations</CardTitle>
                   </div>
-                  <CardDescription className="mt-2">
+                  <CardDescription className="mt-2 text-sm">
                     Actionable insights to improve your business
                   </CardDescription>
                 </div>
                 <Button 
                   onClick={() => handleAnalyze('recommendations')}
                   disabled={isLoading}
-                  className="w-full sm:w-auto flex-shrink-0"
+                  className="w-full sm:w-auto sm:self-end"
+                  size="default"
                 >
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Get Recommendations
