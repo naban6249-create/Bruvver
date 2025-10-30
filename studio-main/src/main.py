@@ -222,7 +222,7 @@ async def startup_event():
     if os.getenv("RENDER") and KEEP_ALIVE_AVAILABLE:
         backend_url = os.getenv("RENDER_EXTERNAL_URL")
         # Make sure this frontend URL is correct for your Render service
-        frontend_url = "https://bruvver-3r1e.onrender.com"
+        frontend_url = "https://bruvver-frontend-2e4o.onrender.com"
         
         if backend_url and frontend_url:
             keep_alive_service = create_multi_service_keepalive(
