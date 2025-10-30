@@ -21,6 +21,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import uuid
 from cloudinary import uploader
 from zoneinfo import ZoneInfo
+from fastapi import Header
 # Conditionally import keep_alive only for Render deployment
 try:
     from keep_alive import create_multi_service_keepalive
