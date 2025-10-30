@@ -3639,28 +3639,24 @@ async def get_categories(db: Session = Depends(get_database)):
 async def get_sales_data_for_ai(
     timeframe: str = "daily",
     branch_id: Optional[int] = None,
-    db: Session = Depends(get_database),
-    current_user: Admin = Depends(get_current_active_user)
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    db: Session = Depends(get_database)
 ):
     """
     Get real sales data from database for AI analysis
     
-    ADMIN ONLY endpoint - returns actual sales transactions for AI insights
-    
-    Args:
-        timeframe: 'daily' (last 7 days), 'weekly' (last 4 weeks), or 'monthly' (last 6 months)
-        branch_id: Optional branch filter
-    
-    Returns:
-        List of sales records with date, item_name, quantity, revenue, branch_id
+    Authentication: X-API-Key (service-to-service) OR JWT token (user)
     """
     
-    # ✅ ADMIN ONLY CHECK
-    if hasattr(current_user, 'role') and current_user.role != 'admin':
-        logger.warning(f"Non-admin user {current_user.username} attempted to access AI sales data")
+    # Check service API key first
+    service_key = os.getenv("SERVICE_API_KEY")
+    if service_key and x_api_key and x_api_key == service_key:
+        logger.info("✅ Authenticated via Service API Key")
+    else:
+        # If no valid service key, require user authentication
         raise HTTPException(
-            status_code=403, 
-            detail="Access denied. Admin privileges required for AI insights."
+            status_code=401,
+            detail="Invalid or missing authentication. Provide X-API-Key header."
         )
     
     from datetime import timedelta
@@ -3669,22 +3665,16 @@ async def get_sales_data_for_ai(
     end_date = get_current_date_ist()
     
     if timeframe == "daily":
-        start_date = end_date - timedelta(days=7)  # Last 7 days
-        logger.info(f"AI Insights: Fetching daily data (last 7 days)")
+        start_date = end_date - timedelta(days=7)
     elif timeframe == "weekly":
-        start_date = end_date - timedelta(weeks=4)  # Last 4 weeks
-        logger.info(f"AI Insights: Fetching weekly data (last 4 weeks)")
+        start_date = end_date - timedelta(weeks=4)
     elif timeframe == "monthly":
-        start_date = end_date - timedelta(days=180)  # Last 6 months
-        logger.info(f"AI Insights: Fetching monthly data (last 6 months)")
+        start_date = end_date - timedelta(days=180)
     else:
-        raise HTTPException(
-            status_code=400, 
-            detail="Invalid timeframe. Use 'daily', 'weekly', or 'monthly'"
-        )
+        raise HTTPException(status_code=400, detail="Invalid timeframe")
     
     try:
-        # Query REAL sales data from database with JOIN to get menu item names
+        # Query sales data
         query = db.query(
             DailySale.sale_date,
             MenuItem.name.label('item_name'),
@@ -3700,30 +3690,24 @@ async def get_sales_data_for_ai(
             func.date(DailySale.sale_date) <= end_date
         )
         
-        # Filter by branch if specified
         if branch_id:
             query = query.filter(DailySale.branch_id == branch_id)
-            logger.info(f"AI Insights: Filtering by branch_id={branch_id}")
         
-        # Execute query and get results
         sales = query.order_by(DailySale.sale_date.desc()).all()
         
-        logger.info(f"✅ AI Insights: Returning {len(sales)} REAL sales records for {timeframe} analysis")
+        logger.info(f"✅ Returning {len(sales)} sales records for AI analysis")
         
-        # If no data found, return empty array with helpful log
         if len(sales) == 0:
-            logger.warning(f"⚠️ No sales data found for branch_id={branch_id}, timeframe={timeframe}")
             return []
         
-        # Format results as JSON
+        # Format results
         result = []
         for sale in sales:
-            # Handle datetime conversion properly
             sale_date_str = sale.sale_date.strftime("%Y-%m-%d") if hasattr(sale.sale_date, 'strftime') else str(sale.sale_date)
             
             result.append({
                 "date": sale_date_str,
-                "sale_date": sale_date_str,  # Include both for compatibility
+                "sale_date": sale_date_str,
                 "item_name": sale.item_name or "Unknown Item",
                 "quantity": int(sale.quantity or 0),
                 "revenue": float(sale.revenue or 0),
@@ -3731,20 +3715,11 @@ async def get_sales_data_for_ai(
                 "payment_method": sale.payment_method or "cash"
             })
         
-        # Log summary statistics for debugging
-        total_revenue = sum(item["revenue"] for item in result)
-        total_quantity = sum(item["quantity"] for item in result)
-        logger.info(f"📊 AI Data Summary: {total_quantity} items, ₹{total_revenue:.2f} revenue, {len(set(item['item_name'] for item in result))} unique items")
-        
         return result
     
     except Exception as e:
-        logger.error(f"❌ Error fetching sales data for AI: {e}")
-        logger.exception("Full traceback:")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch sales data: {str(e)}"
-        )
+        logger.error(f"❌ Error fetching sales data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 # -------------------------
 # Run the server
 # -------------------------
