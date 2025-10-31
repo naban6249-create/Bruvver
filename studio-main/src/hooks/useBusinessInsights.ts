@@ -29,11 +29,7 @@ interface InsightData {
 /**
  * Custom hook for fetching business insights
  * 
- * This hook calls the Next.js API route (/api/ai/business-insights)
- * which then calls the Python backend internally.
- * 
- * ✅ CORRECT: Frontend → Next.js API Route → Python Backend
- * ❌ WRONG: Frontend → Python Backend directly
+ * ✅ FIXED: Now includes X-API-Key header for authentication
  */
 export function useBusinessInsights() {
   const [isLoading, setIsLoading] = useState(false);
@@ -41,7 +37,6 @@ export function useBusinessInsights() {
 
   /**
    * Fetch quick insights from the AI API
-   * This calls /api/ai/business-insights (Next.js API route)
    */
   const fetchQuickInsights = useCallback(
     async (
@@ -59,38 +54,54 @@ export function useBusinessInsights() {
           ...(branchId && { branchId: branchId.toString() }),
         });
 
-        // ✅ Call Next.js API route (NOT the Python backend directly)
-        // This is correct because:
-        // 1. Next.js API route runs server-side and has access to SERVICE_API_KEY
-        // 2. Browser doesn't expose environment variables
-        // 3. API route handles authentication with Python backend
         const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://bruvver-backend-1s2p.onrender.com';
-        // 1. Create the headers object
+        
+        // ✅ FIXED: Create headers with X-API-Key
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
         };
         
-        // 2. Get the token from browser storage
+        // ✅ ADD SERVICE API KEY (required for AI endpoints)
+        const serviceApiKey = process.env.NEXT_PUBLIC_SERVICE_API_KEY;
+        if (serviceApiKey) {
+          headers['X-API-Key'] = serviceApiKey;
+        }
+        
+        // Optional: Add user auth token if available
         const token = localStorage.getItem('token');
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
-        const response = await fetch(`${backendUrl}/api/v1/generate-insights?${params.toString()}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+
+        console.log('🔑 Fetching insights with headers:', {
+          hasApiKey: !!serviceApiKey,
+          hasAuthToken: !!token,
+          url: `${backendUrl}/api/v1/generate-insights`
         });
 
+        const response = await fetch(
+          `${backendUrl}/api/v1/generate-insights?${params.toString()}`,
+          {
+            method: 'GET',
+            headers,
+          }
+        );
+
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch insights');
+          if (response.status === 401) {
+            throw new Error('Authentication failed. Please check your API key configuration.');
+          }
+          
+          const errorData = await response.json().catch(() => ({ error: 'Failed to fetch insights' }));
+          throw new Error(errorData.error || `Request failed with status ${response.status}`);
         }
 
         const data = await response.json();
+        console.log('✅ Successfully fetched insights:', data);
         return data;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to fetch insights';
+        console.error('❌ Analysis error:', errorMessage);
         setError(errorMessage);
         throw err;
       } finally {
