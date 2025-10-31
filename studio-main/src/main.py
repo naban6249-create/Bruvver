@@ -121,8 +121,7 @@ if not os.getenv("SMTP_USERNAME"):
     # If not found, try loading from src/.env (in case running from parent directory)
     load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+
 
 # App metadata
 app = FastAPI(
@@ -145,6 +144,7 @@ default_origins = [
     "https://bruvver.onrender.com"
     "https://bruvver.netlify.app"
     "https://bruvver-3r1e.onrender.com"
+    "https://bruvver-b2ti.onrender.com"
 ]
 
 allowed_origins = os.getenv("ALLOWED_ORIGINS")
@@ -172,6 +172,15 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def startup_event():
     """Initialize database and start automation"""
     global keep_alive_service
+
+    try:
+        logger.info("Creating database tables...")
+        Base.metadata.create_all(bind=engine)
+        logger.info("✅ Database tables created successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to create database tables: {e}")
+        # Don't crash the app - let it start anyway
+        # Tables might already exist, or DB might be temporarily unavailable
     
     # Configure Cloudinary - IMPROVED VERSION
     cloudinary_url = os.getenv("CLOUDINARY_URL")
@@ -236,14 +245,14 @@ async def startup_event():
         # Make sure this frontend URL is correct for your Render service
         frontend_url = "https://bruvver-frontend-2e4o.onrender.com"
         
-        if backend_url and frontend_url:
-            keep_alive_service = create_multi_service_keepalive(
+        if backend_url:
+            from keep_alive import create_backend_keepalive  # ✅ Use new function
+            keep_alive_service = create_backend_keepalive(
                 backend_url=backend_url,
-                frontend_url=frontend_url,
-                interval_minutes=10
+                interval_minutes=14
             )
             keep_alive_service.start()
-            logger.info(f"Keep-alive enabled for backend ({backend_url}) and frontend ({frontend_url})")
+            logger.info(f"Keep-alive enabled for backend ({backend_url})")
         else:
             logger.warning("Keep-alive URLs not found in environment variables.")
     else:
