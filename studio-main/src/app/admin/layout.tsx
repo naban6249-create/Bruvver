@@ -6,8 +6,7 @@ import { usePathname } from 'next/navigation';
 import { AdminHeader } from '../../components/admin/admin-header';
 import { Suspense } from 'react';
 
-// Force dynamic rendering
-export const dynamic = 'force-dynamic';
+
 
 export default function AdminLayout({
   children,
