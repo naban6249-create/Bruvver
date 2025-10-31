@@ -26,7 +26,7 @@ export default function Home() {
         // Fetch directly from backend API
         const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bruvver-backend-1s2p.onrender.com';
         const res = await fetch(
-          `${BACKEND_URL}/api/branches/${COIMBATORE_BRANCH_ID}/menu?available_only=true`,
+          `${BACKEND_URL}/api/v1/public/menu/${encodeURIComponent(COIMBATORE_BRANCH_ID)}`,
           { 
             cache: 'no-store',
             headers: {
