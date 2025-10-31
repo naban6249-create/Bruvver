@@ -25,7 +25,7 @@ from fastapi import Header
 import google.generativeai as genai
 # Conditionally import keep_alive only for Render deployment
 try:
-    from keep_alive import create_multi_service_keepalive
+    from keep_alive import create_backend_keepalive
     KEEP_ALIVE_AVAILABLE = True
 except ImportError:
     KEEP_ALIVE_AVAILABLE = False
@@ -242,8 +242,7 @@ async def startup_event():
     
     if os.getenv("RENDER") and KEEP_ALIVE_AVAILABLE:
         backend_url = os.getenv("RENDER_EXTERNAL_URL")
-        # Make sure this frontend URL is correct for your Render service
-        frontend_url = "https://bruvver-frontend-2e4o.onrender.com"
+        
         
         if backend_url:
             from keep_alive import create_backend_keepalive  # ✅ Use new function
