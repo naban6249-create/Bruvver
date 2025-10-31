@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { MenuCard } from '@/components/menu-card';
-import { Coffee, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import type { MenuItem } from '@/lib/types';
 import { useEffect, useState } from 'react';
 
@@ -23,13 +23,16 @@ export default function Home() {
         
         console.log('Fetching menu items for branch:', COIMBATORE_BRANCH_ID);
         
-        // Fetch via public proxy route to avoid requiring auth on the public home page
+        // Fetch directly from backend API
+        const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bruvver-backend-1s2p.onrender.com';
         const res = await fetch(
-          `/api/public/menu?branchId=${encodeURIComponent(COIMBATORE_BRANCH_ID)}`, 
+          `${BACKEND_URL}/api/branches/${COIMBATORE_BRANCH_ID}/menu?available_only=true`,
           { 
             cache: 'no-store',
             headers: {
               'Content-Type': 'application/json',
+              // Use service API key for public menu access
+              'X-API-Key': process.env.NEXT_PUBLIC_SERVICE_API_KEY || '',
             }
           }
         );
@@ -40,7 +43,7 @@ export default function Home() {
         }
         
         const items: MenuItem[] = await res.json();
-        console.log('Received menu items:', items);
+        console.log('Received menu items:', items.length);
         
         // Filter to show only available items on the public page
         const availableItems = Array.isArray(items) 
@@ -62,7 +65,7 @@ export default function Home() {
   const handleRetry = () => {
     setError(null);
     setLoading(true);
-    // Re-trigger the useEffect by changing the dependency array
+    // Re-trigger the useEffect by reloading
     window.location.reload();
   };
 
