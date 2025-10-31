@@ -28,6 +28,12 @@ interface InsightData {
 
 /**
  * Custom hook for fetching business insights
+ * 
+ * This hook calls the Next.js API route (/api/ai/business-insights)
+ * which then calls the Python backend internally.
+ * 
+ * ✅ CORRECT: Frontend → Next.js API Route → Python Backend
+ * ❌ WRONG: Frontend → Python Backend directly
  */
 export function useBusinessInsights() {
   const [isLoading, setIsLoading] = useState(false);
@@ -35,6 +41,7 @@ export function useBusinessInsights() {
 
   /**
    * Fetch quick insights from the AI API
+   * This calls /api/ai/business-insights (Next.js API route)
    */
   const fetchQuickInsights = useCallback(
     async (
@@ -52,6 +59,11 @@ export function useBusinessInsights() {
           ...(branchId && { branchId: branchId.toString() }),
         });
 
+        // ✅ Call Next.js API route (NOT the Python backend directly)
+        // This is correct because:
+        // 1. Next.js API route runs server-side and has access to SERVICE_API_KEY
+        // 2. Browser doesn't expose environment variables
+        // 3. API route handles authentication with Python backend
         const response = await fetch(`/api/ai/business-insights?${params.toString()}`, {
           method: 'GET',
           headers: {
