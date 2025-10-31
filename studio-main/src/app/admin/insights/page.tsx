@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -33,7 +33,7 @@ interface InsightData {
   };
 }
 
-export default function BusinessInsightsPage() {
+function BusinessInsightsPageInternal() {
   const searchParams = useSearchParams();
   const branchId = searchParams.get('branchId');
   
@@ -143,11 +143,11 @@ export default function BusinessInsightsPage() {
 
       {/* Analysis Tabs */}
       <Tabs defaultValue="trends" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4">
-          <TabsTrigger value="trends">Trends</TabsTrigger>
-          <TabsTrigger value="forecast">Forecast</TabsTrigger>
-          <TabsTrigger value="inventory">Inventory</TabsTrigger>
-          <TabsTrigger value="recommendations">Tips</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1">
+          <TabsTrigger value="trends" className="text-sm">Trends</TabsTrigger>
+          <TabsTrigger value="forecast" className="text-sm">Forecast</TabsTrigger>
+          <TabsTrigger value="inventory" className="text-sm">Inventory</TabsTrigger>
+          <TabsTrigger value="recommendations" className="text-sm">Tips</TabsTrigger>
         </TabsList>
 
         {/* Trend Analysis Tab */}
@@ -467,5 +467,23 @@ export default function BusinessInsightsPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// Main export component with Suspense wrapper
+export default function BusinessInsightsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+            <p className="text-sm text-muted-foreground">Loading insights...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <BusinessInsightsPageInternal />
+    </Suspense>
   );
 }
