@@ -1,3 +1,4 @@
+'use client';
 import { Suspense } from 'react';
 import { DashboardClient } from "../../../components/admin/dashboard-client";
 
