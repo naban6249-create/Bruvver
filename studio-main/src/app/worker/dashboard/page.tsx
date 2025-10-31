@@ -1,3 +1,4 @@
+'use client';
 import { Suspense } from 'react';
 import WorkerDashboardClientPage from './client-page'; // Import the new client component
 import { Skeleton } from "@/components/ui/skeleton";
