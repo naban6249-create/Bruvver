@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'export',
+  
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',
@@ -13,11 +16,10 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'bruvver-backend.onrender.com',
+        hostname: 'bruvver-backend-1s2p.onrender.com',
       },
     ],
   },
 };
 
 export default nextConfig;
-
