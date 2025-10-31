@@ -3827,7 +3827,66 @@ async def generate_business_insights(
                 "key_insights": ["Service temporarily down", "Please try again later"]
             }
         }
+    
+# -------------------------
+# PUBLIC MENU & AI INSIGHTS FOR STATIC FRONTEND
+# -------------------------
 
+@app.get("/api/v1/public/menu/{branch_id}")
+async def get_public_menu(
+    branch_id: int,
+    available_only: bool = True,
+    db: Session = Depends(get_database)
+):
+    """Public menu - no authentication required"""
+    query = db.query(MenuItem).filter(
+        MenuItem.branch_id == branch_id,
+        MenuItem.is_available == available_only
+    )
+    
+    items = query.all()
+    
+    # Transform image URLs
+    backend_url = os.getenv("BACKEND_URL", "https://bruvver-backend-1s2p.onrender.com")
+    
+    result = []
+    for item in items:
+        image_url = item.image_url
+        if image_url and not image_url.startswith('http'):
+            if image_url.startswith('/static/'):
+                image_url = f"{backend_url}{image_url}"
+            else:
+                image_url = f"{backend_url}/{image_url}"
+        
+        result.append({
+            "id": str(item.id),
+            "name": item.name,
+            "price": float(item.price or 0),
+            "description": item.description or "",
+            "imageUrl": image_url or "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600",
+            "category": item.category or "hot",
+            "is_available": bool(item.is_available),
+            "ingredients": [
+                {
+                    "name": ing.name,
+                    "quantity": ing.quantity,
+                    "unit": ing.unit
+                } for ing in item.ingredients
+            ],
+            "branchId": item.branch_id,
+        })
+    
+    return result
+
+
+# Note: The /api/v1/generate-insights endpoint is already in your code above!
+# Make sure it's there. If not, scroll up in your file to find it.
+
+# -------------------------
+# Run the server
+# -------------------------
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=os.getenv("ENVIRONMENT") == "development")
 # -------------------------
 # Run the server
 # -------------------------
