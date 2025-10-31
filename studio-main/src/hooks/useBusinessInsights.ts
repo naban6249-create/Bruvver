@@ -64,7 +64,18 @@ export function useBusinessInsights() {
         // 1. Next.js API route runs server-side and has access to SERVICE_API_KEY
         // 2. Browser doesn't expose environment variables
         // 3. API route handles authentication with Python backend
-        const response = await fetch(`/api/ai/business-insights?${params.toString()}`, {
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://bruvver-backend-1s2p.onrender.com';
+        // 1. Create the headers object
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        
+        // 2. Get the token from browser storage
+        const token = localStorage.getItem('token');
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        const response = await fetch(`${backendUrl}/api/v1/generate-insights?${params.toString()}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
