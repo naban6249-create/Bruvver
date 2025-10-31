@@ -22,6 +22,7 @@ import uuid
 from cloudinary import uploader
 from zoneinfo import ZoneInfo
 from fastapi import Header
+import google.generativeai as genai
 # Conditionally import keep_alive only for Render deployment
 try:
     from keep_alive import create_multi_service_keepalive
@@ -189,7 +190,18 @@ async def startup_event():
         except Exception as e:
             logger.error(f"Failed to configure Cloudinary: {e}")
     else:
-        logger.warning("CLOUDINARY_URL not found in environment variables") 
+        logger.warning("CLOUDINARY_URL not found in environment variables")
+    
+    # ✅ Configure Gemini AI
+    gemini_api_key = os.getenv("GOOGLE_AI_API_KEY")
+    if gemini_api_key:
+        try:
+            genai.configure(api_key=gemini_api_key)
+            logger.info("✅ Gemini AI configured successfully")
+        except Exception as e:
+            logger.error(f"Failed to configure Gemini AI: {e}")
+    else:
+        logger.warning("⚠️ GOOGLE_AI_API_KEY not set - AI insights will not be available")
     
     # Initialize data just once
     await initialize_sample_data()
@@ -213,7 +225,7 @@ async def startup_event():
         start_daily_export_scheduler()
     except Exception:
         logger.exception("Failed to start daily export scheduler")
-
+    
     try:
         export_yesterday_job()
     except Exception:
@@ -3721,6 +3733,101 @@ async def get_sales_data_for_ai(
     except Exception as e:
         logger.error(f"❌ Error fetching sales data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# AI INSIGHTS ENDPOINT (Service key auth)
+@app.get("/api/v1/generate-insights")
+async def generate_business_insights(
+    timeframe: str = "daily",
+    analysisType: str = "trend_analysis",
+    branchId: Optional[int] = None,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    db: Session = Depends(get_database)
+):
+    """Generate AI insights - requires service key"""
+    
+    # Verify service key
+    service_key = os.getenv("SERVICE_API_KEY")
+    if not (service_key and x_api_key and x_api_key == service_key):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    # Get sales data
+    from datetime import timedelta
+    end_date = get_current_date_ist()
+    
+    if timeframe == "daily":
+        start_date = end_date - timedelta(days=7)
+    elif timeframe == "weekly":
+        start_date = end_date - timedelta(weeks=4)
+    else:
+        start_date = end_date - timedelta(days=180)
+    
+    query = db.query(DailySale).filter(
+        func.date(DailySale.sale_date) >= start_date,
+        func.date(DailySale.sale_date) <= end_date
+    )
+    
+    if branchId:
+        query = query.filter(DailySale.branch_id == branchId)
+    
+    sales = query.all()
+    
+    if not sales:
+        return {
+            analysisType: {
+                "summary": "No sales data available for analysis.",
+                "key_insights": ["No data to analyze yet"]
+            }
+        }
+    
+    # Format data for AI
+    sales_data = [{
+        "date": str(sale.sale_date),
+        "revenue": float(sale.revenue),
+        "quantity": int(sale.quantity)
+    } for sale in sales]
+    
+    # Generate insights with Gemini
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = f"""
+        Analyze this coffee shop sales data for {timeframe} timeframe.
+        Analysis type: {analysisType}
+        
+        Sales Data (last {len(sales_data)} transactions):
+        {json.dumps(sales_data[:100], indent=2)}
+        
+        Provide:
+        1. A concise summary (2-3 sentences)
+        2. 3-5 actionable key insights
+        
+        Return ONLY valid JSON in this exact format:
+        {{"summary": "your summary here", "key_insights": ["insight 1", "insight 2", "insight 3"]}}
+        """
+        
+        response = model.generate_content(prompt)
+        
+        # Parse AI response
+        try:
+            insights = json.loads(response.text)
+        except:
+            # Fallback if AI doesn't return valid JSON
+            insights = {
+                "summary": response.text[:200],
+                "key_insights": ["AI analysis complete", "Check detailed data for more insights"]
+            }
+        
+        return {analysisType: insights}
+        
+    except Exception as e:
+        logger.error(f"AI generation failed: {e}")
+        return {
+            analysisType: {
+                "summary": "AI analysis temporarily unavailable.",
+                "key_insights": ["Service temporarily down", "Please try again later"]
+            }
+        }
+
 # -------------------------
 # Run the server
 # -------------------------
