@@ -1,5 +1,3 @@
-# studio-main/src/keep_alive.py
-
 import requests
 import time
 import threading
@@ -11,17 +9,17 @@ logger = logging.getLogger(__name__)
 
 class KeepAlive:
     """Self-ping to prevent Render.com services from sleeping"""
-
+    
     def __init__(self, services: List[Dict[str, str]], interval_minutes: int = 10):
         self.services = services
         self.interval = interval_minutes * 60
         self.running = False
         self.thread = None
-
+    
     def ping_service(self, name: str, url: str) -> bool:
         """Ping a single service"""
         try:
-            response = requests.get(url, timeout=30, allow_redirects=True)  # Increased timeout
+            response = requests.get(url, timeout=30, allow_redirects=True)
             
             # Accept 200, 201, and even 503 (service starting) as "alive"
             if response.status_code in [200, 201]:
@@ -37,9 +35,9 @@ class KeepAlive:
             logger.warning(f"⏰ {name} timeout (might be cold start)")
             return False
         except requests.exceptions.RequestException as e:
-            logger.debug(f"⚠ {name} ping error: {str(e)[:100]}")  # Reduced log spam
+            logger.debug(f"⚠ {name} ping error: {str(e)[:100]}")
             return False
-
+    
     def ping_all(self):
         """Ping all configured services"""
         for service in self.services:
@@ -47,7 +45,7 @@ class KeepAlive:
             url = service.get("url", "")
             if url:
                 self.ping_service(name, url)
-
+    
     def _ping_loop(self):
         """Background loop"""
         logger.info(f"Keep-alive thread started for {len(self.services)} services")
@@ -55,7 +53,7 @@ class KeepAlive:
             self.ping_all()
             time.sleep(self.interval)
         logger.info("Keep-alive thread stopped")
-
+    
     def start(self):
         """Start the keep-alive service"""
         if self.running:
@@ -71,7 +69,7 @@ class KeepAlive:
         
         logger.info(f"Keep-alive started (every {self.interval/60:.0f} min)")
         self.ping_all()  # Immediate first ping
-
+    
     def stop(self):
         """Stop the keep-alive service"""
         if not self.running:
@@ -81,16 +79,15 @@ class KeepAlive:
             self.thread.join(timeout=5)
         logger.info("Keep-alive service stopped")
 
-def create_multi_service_keepalive(
-    backend_url: str, 
-    frontend_url: str, 
-    interval_minutes: int = 14  # Changed from 10 to 14 minutes
+
+def create_backend_keepalive(
+    backend_url: str,
+    interval_minutes: int = 14
 ) -> KeepAlive:
-    """Create keep-alive for backend and frontend"""
+    """Create keep-alive for backend only (no frontend)"""
     return KeepAlive(
         services=[
-            {"name": "Backend", "url": f"{backend_url}/health"},
-            {"name": "Frontend", "url": frontend_url}
+            {"name": "Backend", "url": f"{backend_url}/health"}
         ],
         interval_minutes=interval_minutes
     )
