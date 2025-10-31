@@ -3796,7 +3796,7 @@ async def generate_business_insights(
     
     # Generate insights with Gemini
     try:
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
         
         prompt = f"""
         Analyze this coffee shop sales data for {timeframe} timeframe.
