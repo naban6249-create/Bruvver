@@ -3751,12 +3751,24 @@ async def generate_business_insights(
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     db: Session = Depends(get_database)
 ):
-    """Generate AI insights - requires service key"""
+    """
+    Generate AI-powered business insights
+    
+    Authentication: Service API Key required
+    
+    Parameters:
+    - timeframe: daily, weekly, or monthly
+    - analysisType: trend_analysis, sales_forecast, inventory_optimization, or recommendations
+    - branchId: Optional branch filter
+    """
     
     # Verify service key
     service_key = os.getenv("SERVICE_API_KEY")
     if not (service_key and x_api_key and x_api_key == service_key):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        logger.warning("❌ Unauthorized AI insights request - invalid service key")
+        raise HTTPException(status_code=401, detail="Unauthorized - Invalid service key")
+    
+    logger.info(f"🤖 AI Insights Request: {analysisType} | {timeframe} | Branch: {branchId}")
     
     # Get sales data
     from datetime import timedelta
@@ -3766,73 +3778,162 @@ async def generate_business_insights(
         start_date = end_date - timedelta(days=7)
     elif timeframe == "weekly":
         start_date = end_date - timedelta(weeks=4)
-    else:
+    elif timeframe == "monthly":
         start_date = end_date - timedelta(days=180)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid timeframe")
     
-    query = db.query(DailySale).filter(
-        func.date(DailySale.sale_date) >= start_date,
-        func.date(DailySale.sale_date) <= end_date
-    )
-    
-    if branchId:
-        query = query.filter(DailySale.branch_id == branchId)
-    
-    sales = query.all()
-    
-    if not sales:
-        return {
-            analysisType: {
-                "summary": "No sales data available for analysis.",
-                "key_insights": ["No data to analyze yet"]
-            }
-        }
-    
-    # Format data for AI
-    sales_data = [{
-        "date": str(sale.sale_date),
-        "revenue": float(sale.revenue),
-        "quantity": int(sale.quantity)
-    } for sale in sales]
-    
-    # Generate insights with Gemini
     try:
-        model = genai.GenerativeModel('models/gemini-2.5-flash')
+        # Query sales with menu item details
+        query = db.query(
+            DailySale.sale_date,
+            MenuItem.name.label('item_name'),
+            DailySale.quantity,
+            DailySale.revenue,
+            DailySale.payment_method
+        ).join(
+            MenuItem, 
+            DailySale.menu_item_id == MenuItem.id
+        ).filter(
+            func.date(DailySale.sale_date) >= start_date,
+            func.date(DailySale.sale_date) <= end_date
+        )
         
-        prompt = f"""
-        Analyze this coffee shop sales data for {timeframe} timeframe.
-        Analysis type: {analysisType}
+        if branchId:
+            query = query.filter(DailySale.branch_id == branchId)
         
-        Sales Data (last {len(sales_data)} transactions):
-        {json.dumps(sales_data[:100], indent=2)}
+        sales = query.all()
         
-        Provide:
-        1. A concise summary (2-3 sentences)
-        2. 3-5 actionable key insights
+        if not sales:
+            logger.warning(f"⚠️ No sales data found for {timeframe} timeframe")
+            return {
+                analysisType: {
+                    "summary": "No sales data available for analysis.",
+                    "key_insights": ["Start making sales to see AI-powered insights"]
+                }
+            }
         
-        Return ONLY valid JSON in this exact format:
-        {{"summary": "your summary here", "key_insights": ["insight 1", "insight 2", "insight 3"]}}
-        """
+        # Format data for AI
+        sales_data = []
+        for sale in sales:
+            sales_data.append({
+                "date": sale.sale_date.strftime("%Y-%m-%d"),
+                "item_name": sale.item_name or "Unknown",
+                "quantity": int(sale.quantity or 0),
+                "revenue": float(sale.revenue or 0),
+                "payment_method": sale.payment_method or "cash"
+            })
         
+        logger.info(f"📊 Processing {len(sales_data)} sales records for AI analysis")
+        
+        # Generate insights with Gemini
+        model = genai.GenerativeModel('models/gemini-2.0-flash-exp')
+        
+        # Build analysis-specific prompt
+        if analysisType == "trend_analysis":
+            prompt = f"""
+You are a coffee shop business analyst. Analyze this sales data from the last {timeframe}.
+
+Sales Data (₹ Indian Rupees):
+{json.dumps(sales_data[:50], indent=2)}
+
+Provide trend analysis in this EXACT JSON format (no markdown, no code blocks):
+{{"summary": "Brief overview of trends in 2-3 sentences", "key_insights": ["insight 1", "insight 2", "insight 3", "insight 4"]}}
+
+Focus on: sales patterns, best-selling items, revenue trends, and payment preferences.
+"""
+        
+        elif analysisType == "sales_forecast":
+            prompt = f"""
+You are a coffee shop business forecaster. Based on this {timeframe} sales data, predict future performance.
+
+Sales Data (₹ Indian Rupees):
+{json.dumps(sales_data[:50], indent=2)}
+
+Provide forecast in this EXACT JSON format (no markdown, no code blocks):
+{{"prediction": "Forecast for next {timeframe} in 1-2 sentences", "confidence": "High/Medium/Low", "recommendations": ["action 1", "action 2", "action 3"]}}
+
+Include: expected revenue change, confidence level, and actionable recommendations.
+"""
+        
+        elif analysisType == "inventory_optimization":
+            prompt = f"""
+You are a coffee shop inventory manager. Analyze this {timeframe} sales data for inventory recommendations.
+
+Sales Data (₹ Indian Rupees):
+{json.dumps(sales_data[:50], indent=2)}
+
+Provide inventory advice in this EXACT JSON format (no markdown, no code blocks):
+{{"suggestions": ["suggestion 1", "suggestion 2", "suggestion 3"], "priority_items": ["item1", "item2", "item3"]}}
+
+Focus on: fast-moving items, slow-moving items, and stock optimization.
+"""
+        
+        else:  # recommendations
+            prompt = f"""
+You are a coffee shop business consultant. Based on this {timeframe} sales data, provide actionable recommendations.
+
+Sales Data (₹ Indian Rupees):
+{json.dumps(sales_data[:50], indent=2)}
+
+Provide recommendations in this EXACT JSON format (no markdown, no code blocks):
+{{"actionable_items": ["action 1", "action 2", "action 3"], "quick_wins": ["quick win 1", "quick win 2"]}}
+
+Focus on: revenue opportunities, operational improvements, and customer experience.
+"""
+        
+        # Generate content
         response = model.generate_content(prompt)
+        raw_text = response.text.strip()
         
-        # Parse AI response
+        logger.info(f"🤖 Raw AI Response: {raw_text[:200]}...")
+        
+        # Clean and parse response
+        # Remove markdown code blocks if present
+        clean_text = raw_text.replace("```json", "").replace("```", "").strip()
+        
+        # Find JSON object boundaries
+        start_idx = clean_text.find('{')
+        end_idx = clean_text.rfind('}')
+        
+        if start_idx == -1 or end_idx == -1:
+            raise ValueError("No valid JSON found in AI response")
+        
+        json_text = clean_text[start_idx:end_idx+1]
+        
+        # Parse JSON
         try:
-            insights = json.loads(response.text)
-        except:
-            # Fallback if AI doesn't return valid JSON
+            insights = json.loads(json_text)
+            logger.info(f"✅ AI Insights parsed successfully: {list(insights.keys())}")
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ JSON parsing failed: {e}")
+            logger.error(f"Attempted to parse: {json_text[:200]}")
+            
+            # Fallback response
             insights = {
-                "summary": response.text[:200],
-                "key_insights": ["AI analysis complete", "Check detailed data for more insights"]
+                "summary": "AI analysis complete. Check detailed sales data for insights.",
+                "key_insights": [
+                    f"Total transactions: {len(sales_data)}",
+                    f"Analysis period: {timeframe}",
+                    "Detailed breakdown available in reports section"
+                ]
             }
         
         return {analysisType: insights}
         
     except Exception as e:
-        logger.error(f"AI generation failed: {e}")
+        logger.error(f"❌ AI Insights Error: {e}")
+        logger.exception("Full error trace:")
+        
+        # Return user-friendly error response
         return {
             analysisType: {
-                "summary": "AI analysis temporarily unavailable.",
-                "key_insights": ["Service temporarily down", "Please try again later"]
+                "summary": "AI analysis temporarily unavailable. Please try again.",
+                "key_insights": [
+                    "Service is experiencing high demand",
+                    "Your sales data is being recorded normally",
+                    "Try refreshing in a few moments"
+                ]
             }
         }
     
