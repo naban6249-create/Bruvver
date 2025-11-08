@@ -235,10 +235,7 @@ async def startup_event():
     except Exception:
         logger.exception("Failed to start daily export scheduler")
     
-    try:
-        export_yesterday_job()
-    except Exception:
-        logger.exception("Failed to perform catch-up export on startup")
+    
     
     if os.getenv("RENDER") and KEEP_ALIVE_AVAILABLE:
         backend_url = os.getenv("RENDER_EXTERNAL_URL")
